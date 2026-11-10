@@ -48,6 +48,9 @@ jobs:
       - name: Check the ARM programs can run on the thermostat
         run: scripts/dev.sh check-arm
 
+      - name: Run the device check's report script in busybox and in a POSIX shell
+        run: scripts/dev.sh check-report
+
       - name: Take screenshots against the demo room
         run: |
           scripts/dev.sh screens screenshots
@@ -79,4 +82,6 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: nesto-arm
-          path: dist/nesto
+          path: |
+            dist/nesto
+            dist/nesto-probe

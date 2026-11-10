@@ -11,10 +11,12 @@ add_executable(nesto_tests
   test_panel_session.cpp
   test_png.cpp
   test_press_gestures.cpp
+  test_probe.cpp
   test_room.cpp
   test_settings.cpp
 )
-target_link_libraries(nesto_tests PRIVATE nesto_core nesto_protocol nesto_net nesto_room nesto_fonts doctest::doctest)
+target_link_libraries(nesto_tests PRIVATE nesto_core nesto_protocol nesto_net nesto_room nesto_fonts nesto_probe_checks
+                                          doctest::doctest)
 target_compile_definitions(nesto_tests PRIVATE
   NESTO_VECTORS_FILE="${PROJECT_SOURCE_DIR}/tests/vectors/protocol-v1.json"
 )

@@ -111,6 +111,18 @@ if(NESTO_PLATFORM STREQUAL "sim" AND SDL2_FOUND)
   target_compile_definitions(nesto PRIVATE NESTO_HAVE_SDL)
 endif()
 
+# nesto-probe: checks on the thermostat what Nesto needs from its kernel,
+# read-only (docs/DEVICE.md). Built everywhere, so its checks also run here.
+add_library(nesto_probe_checks STATIC src/probe/SelfTest.cpp)
+target_include_directories(nesto_probe_checks PUBLIC src)
+target_link_libraries(nesto_probe_checks PUBLIC nesto_protocol)
+nesto_target_options(nesto_probe_checks)
+
+add_executable(nesto-probe src/probe/main.cpp)
+target_link_libraries(nesto-probe PRIVATE nesto_probe_checks)
+target_compile_definitions(nesto-probe PRIVATE NESTO_VERSION="${PROJECT_VERSION}")
+nesto_target_options(nesto-probe)
+
 if(NESTO_BUILD_TESTS)
   enable_testing()
   add_subdirectory(tests)
