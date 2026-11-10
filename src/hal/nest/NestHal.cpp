@@ -94,7 +94,8 @@ bool NestHal::init() {
   if (!open_framebuffer() || !open_inputs()) return false;
   open_backlight();
   const RingSteps::Config& ring = ring_steps_.config();
-  log::info("the ring: %d counts per step%s", ring.counts_per_step, ring.reverse ? ", reversed" : "");
+  log::info("the ring: %d counts per step, clockwise %s", ring.counts_per_step,
+            ring.reverse ? "negative" : "positive");
   return true;
 }
 
@@ -249,8 +250,8 @@ int NestHal::input_test() {
   std::printf(
       "Turn the ring and press the display; Ctrl-C stops.\n"
       "To measure the ring, turn it once round, clockwise, and read the total.\n"
-      "Steps at %d counts per step%s.\n",
-      ring.counts_per_step, ring.reverse ? ", reversed" : "");
+      "Steps at %d counts per step, clockwise %s.\n",
+      ring.counts_per_step, ring.reverse ? "negative" : "positive");
   std::fflush(stdout);
   std::vector<TimedInput> ignored;
   while (g_quit_signal == 0) {

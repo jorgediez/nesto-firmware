@@ -38,9 +38,9 @@ void print_usage(const char* program) {
 #elif defined(NESTO_PLATFORM_NEST)
   std::printf(
       "  --ring-counts N     the ring's sensor counts per step (default %d)\n"
-      "  --ring-reverse      the ring's sensor counts the other way round\n"
+      "  --ring-reverse      turn the ring's direction round\n"
       "  --input-test        print the ring's and the press's events, for measuring the ring\n",
-      nesto::RingSteps::Config{}.counts_per_step);
+      nesto::NestOptions{}.ring.counts_per_step);
 #endif
   std::printf(
       "  --port N            TCP port for Home Assistant (default 6170)\n"
@@ -124,7 +124,7 @@ int main(int argc, char** argv) {
       continue;
     }
     if (arg == "--ring-reverse") {
-      options.ring.reverse = true;
+      options.ring.reverse = !options.ring.reverse;
       continue;
     }
     if (arg == "--input-test") {

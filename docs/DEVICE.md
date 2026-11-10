@@ -253,20 +253,26 @@ scripts/dev.sh client --host <nest-ip> demo
 ```
 
 Options after `--` go to Nesto, for instance
-`scripts/dev.sh device-run <nest-ip> -- --ring-counts 8 --ring-reverse`;
-options before it go to `ssh`.
+`scripts/dev.sh device-run <nest-ip> -- --ring-counts 100`; options before it
+go to `ssh`.
 
 ### The ring
 
-The ring has no clicks: its optical sensor reports movement in counts, many
-per step on the screen. Nesto adds them up (`src/core/RingSteps.hpp`), by
-default 16 counts per step. To see what the sensor reports:
+The ring has no clicks or marks: its optical sensor reports movement in
+counts, many per step on the screen. Nesto adds them up
+(`src/core/RingSteps.hpp`). To see what the sensor reports:
 
 ```bash
 scripts/dev.sh device-run <nest-ip> input-test     # 2 minutes; Ctrl-C ends it earlier
 ```
 
-The screen stays as `nlclient` left it while every event is printed. Turn the
-ring once round clockwise and read the total: divided by the steps a turn
-should give, it is the right `--ring-counts`. If clockwise counts come out
-negative, add `--ring-reverse`.
+The screen stays as `nlclient` left it while every event is printed. On the
+thermostat above, a turn clockwise (roughly one: with no mark it's hard to
+tell) added up to about 7300 counts, in events of 1 to 25 counts, all
+negative. So by default Nesto takes negative counts as clockwise, and makes a
+step of 150 counts: about 49 steps a turn. `--ring-counts` makes steps finer
+or coarser, and `--ring-reverse` turns the direction round.
+
+The press is `KEY_POWER`, down and up, as expected. With `nlclient` stopped,
+the memory in use dropped from 24 MB to 15 MB, which leaves Nesto about
+26 MB under monit's limit.

@@ -10,7 +10,9 @@
 namespace nesto {
 
 struct NestOptions {
-  RingSteps::Config ring;
+  // Measured on a real thermostat: about 7300 counts a turn, clockwise
+  // negative. 150 counts make about 49 steps a turn, one every 7 degrees.
+  RingSteps::Config ring{150, true};
 };
 
 /// The thermostat (docs/DEVICE.md): the screen is /dev/fb0, the ring and the
