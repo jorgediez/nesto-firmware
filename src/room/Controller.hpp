@@ -44,7 +44,7 @@ struct Intent {
 
 /// Everything the screens need to draw, rebuilt after each change.
 struct RoomView {
-  enum class Screen { Empty, Home, Item };
+  enum class Screen { Empty, Home, Item, Settings, Confirm, About };
   struct Entry {
     std::string name;
     std::string summary;
@@ -59,7 +59,7 @@ struct RoomView {
   std::vector<Entry> entries;
   int selected = 0;
 
-  // Item
+  // Item; also the question on Confirm
   std::string item_name;
   std::string control;  // what the ring changes, e.g. "Brightness"
   std::string value;    // its value, e.g. "60%"
@@ -67,6 +67,17 @@ struct RoomView {
   int control_index = 0;
   int control_count = 0;
   bool available = true;
+
+  // Confirm: how to answer. About: the lines to show.
+  std::string prompt;
+  std::vector<std::string> lines;
+};
+
+/// What the Settings menu asks of the rest of the panel.
+struct SettingsActions {
+  std::function<void()> open_pairing;  // Pair with Home Assistant
+  std::function<void()> forget;        // Forget Home Assistant, once confirmed
+  std::function<std::vector<std::string>()> about;
 };
 
 /// The panel's controls for a room: which screen is shown, what the ring and
@@ -80,6 +91,10 @@ struct RoomView {
 ///
 /// Values change on screen straight away. Home Assistant's states take over
 /// again 2 seconds after the last turn, or at once if an intent fails.
+///
+/// The last entry on the home screen, and a press on the waiting screen, open
+/// Settings: pairing, forgetting Home Assistant (after a confirmation) and
+/// About. A long press goes back from any of them.
 class Controller {
  public:
   static constexpr Millis kLiveInterval = 300;
@@ -88,7 +103,7 @@ class Controller {
 
   using Send = std::function<void(const Intent&)>;
 
-  explicit Controller(Send send);
+  explicit Controller(Send send, SettingsActions actions = {});
 
   void set_connected(bool connected);
   bool apply_layout(const Json& message, std::string& error);
@@ -118,6 +133,9 @@ class Controller {
     bool ever_sent = false;
   };
 
+  void open_settings();
+  void leave_settings();
+  int home_count() const;
   const Item* open_item() const;
   const Item* selected_item() const;
   ItemState shown(const std::string& key) const;
@@ -132,6 +150,7 @@ class Controller {
   void changed() { ++version_; }
 
   Send send_;
+  SettingsActions actions_;
   Room room_;
   bool connected_ = false;
 
@@ -139,6 +158,7 @@ class Controller {
   int selected_ = 0;
   std::string open_key_;
   int control_ = 0;
+  int setting_ = 0;  // the selected Settings entry
 
   std::map<std::string, ItemState> shown_;  // values set on the panel, ahead of HA
   std::map<std::string, Millis> hold_until_;

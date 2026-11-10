@@ -187,6 +187,12 @@ void Server::close_others(const protocol::PanelSession& keep) {
   }
 }
 
+void Server::close_all(const std::string& reason) {
+  for (auto& c : connections_) {
+    if (c->fd >= 0) c->session->close(reason);
+  }
+}
+
 protocol::PanelSession* Server::active() const {
   for (const auto& c : connections_) {
     if (c->fd >= 0 && c->session->authenticated()) return c->session.get();

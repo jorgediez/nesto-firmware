@@ -123,15 +123,17 @@ void Ui::render(const room::RoomView& view) {
   view_ = view;
   const bool home = view.screen == Screen::Home;
   const bool item = view.screen == Screen::Item;
-  const bool listed = home && !view.entries.empty();
+  const bool menu = view.screen == Screen::Settings;
+  const bool listed = (home || menu) && !view.entries.empty();
 
   // Title
   std::string title = "Nesto";
   if (home) title = view.title.empty() ? "Home Assistant" : view.title;
   if (item) title = view.item_name;
+  if (menu || view.screen == Screen::Confirm || view.screen == Screen::About) title = view.title;
   lv_label_set_text(title_, for_font(title).c_str());
 
-  // Home: the list
+  // Home and Settings: the list
   lv_obj_set_hidden(roller_, !listed);
   if (listed) {
     std::vector<std::string> names;
@@ -149,11 +151,18 @@ void Ui::render(const room::RoomView& view) {
                                 LV_PART_SELECTED);
   }
 
-  // Nothing to list
-  const bool empty = view.screen == Screen::Empty || (home && view.entries.empty());
-  lv_obj_set_hidden(centre_, !empty);
-  lv_label_set_text(centre_, view.screen == Screen::Empty ? "Waiting for\nHome Assistant"
-                                                          : "Nothing in\nthis room yet");
+  // A message in the middle: waiting, a question, or About's lines.
+  std::string centre;
+  if (view.screen == Screen::Empty) centre = "Waiting for\nHome Assistant";
+  if (view.screen == Screen::Confirm) centre = view.item_name;
+  if (view.screen == Screen::About) {
+    for (const auto& line : view.lines) centre += (centre.empty() ? "" : "\n") + line;
+  }
+  lv_obj_set_hidden(centre_, centre.empty());
+  lv_obj_set_style_text_font(centre_, view.screen == Screen::About ? &lv_font_montserrat_14
+                                                                    : &lv_font_montserrat_20,
+                             0);
+  lv_label_set_text(centre_, for_font(centre).c_str());
 
   // Item: control and value
   lv_obj_set_hidden(control_, !item);
@@ -184,7 +193,13 @@ void Ui::render(const room::RoomView& view) {
 void Ui::update_footer() {
   using Screen = room::RoomView::Screen;
   std::string text = status_text_;
-  if (!view_.offline && view_.screen == Screen::Home && !view_.entries.empty()) {
+  if (view_.screen == Screen::Settings && !view_.entries.empty()) {
+    text = view_.entries[static_cast<std::size_t>(view_.selected)].summary;
+  } else if (view_.screen == Screen::About) {
+    text = "Hold to go back";
+  } else if (view_.screen == Screen::Confirm) {
+    text = view_.prompt;
+  } else if (!view_.offline && view_.screen == Screen::Home && !view_.entries.empty()) {
     text = view_.entries[static_cast<std::size_t>(view_.selected)].summary;
   } else if (!view_.offline && view_.screen == Screen::Item && view_.control_count > 1) {
     text = std::to_string(view_.control_index + 1) + " / " + std::to_string(view_.control_count);

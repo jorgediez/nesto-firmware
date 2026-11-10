@@ -53,6 +53,9 @@ class App : private protocol::SessionEvents {
   PressContext press_context() const;
   void update_status();
   void send_intent(const room::Intent& intent);
+  void open_pairing();
+  void forget_home_assistant();
+  std::vector<std::string> about() const;
 
   // protocol::SessionEvents
   void on_pairing_code(const std::string& code) override;

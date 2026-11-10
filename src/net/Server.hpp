@@ -37,6 +37,9 @@ class Server {
   /// Closes every session except `keep`.
   void close_others(const protocol::PanelSession& keep);
 
+  /// Closes every session.
+  void close_all(const std::string& reason);
+
   /// The authenticated session, if there is one.
   protocol::PanelSession* active() const;
 
