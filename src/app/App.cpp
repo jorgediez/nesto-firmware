@@ -1,11 +1,16 @@
 #include "app/App.hpp"
 
 #include <algorithm>
+#include <fstream>
+#include <sstream>
 #include <type_traits>
+#include <utility>
 #include <variant>
 
 #include "app/Ui.hpp"
 #include "core/Log.hpp"
+#include "net/NetInfo.hpp"
+#include "net/Server.hpp"
 
 namespace nesto {
 namespace {
@@ -40,11 +45,33 @@ void log_lvgl(lv_log_level_t level, const char* message) {
   (level >= LV_LOG_LEVEL_ERROR ? log::error : log::warn)("lvgl: %s", message);
 }
 
+// How often the status line is recomputed, which includes looking up the IP.
+constexpr Millis kStatusInterval = 500;
+
+/// Free memory in KiB from /proc/meminfo. Linux 2.6.37 has no MemAvailable, so
+/// this adds free memory and the caches the kernel can drop.
+long free_ram_kb() {
+  std::ifstream file("/proc/meminfo");
+  std::string line;
+  long available = -1;
+  long free_plus_caches = 0;
+  while (std::getline(file, line)) {
+    std::istringstream fields(line);
+    std::string name;
+    long kb = 0;
+    fields >> name >> kb;
+    if (name == "MemAvailable:") available = kb;
+    if (name == "MemFree:" || name == "Buffers:" || name == "Cached:") free_plus_caches += kb;
+  }
+  return available >= 0 ? available : free_plus_caches;
+}
+
 }  // namespace
 
-App::App(Hal& hal) : hal_(hal) {}
+App::App(Hal& hal, AppOptions options) : hal_(hal), options_(std::move(options)) {}
 
 App::~App() {
+  server_.reset();
   ui_.reset();
   if (display_) {
     lv_display_delete(display_);
@@ -74,7 +101,33 @@ bool App::init() {
 
   ui_ = std::make_unique<Ui>(NESTO_VERSION);
   hal_.set_backlight(100);
-  log::info("Nesto %s started", NESTO_VERSION);
+
+  info_.panel_id = options_.panel_id.empty() ? net::panel_id_from_mac() : options_.panel_id;
+  if (info_.panel_id.empty()) {
+    log::error("no network interface with a MAC address to use as the panel ID");
+    return false;
+  }
+  info_.firmware = NESTO_VERSION;
+  info_.model = "nest-gen2";
+  // The base's sensors and firmware updates come later; until then the panel
+  // reports none (PROTOCOL.md section 5).
+  info_.caps = {{"display", {{"width", kScreenSize}, {"height", kScreenSize}, {"shape", "round"}}},
+                {"input", {"ring", "press"}},
+                {"sensors", protocol::Json::array()},
+                {"beeper", false},
+                {"image_formats", protocol::Json::array()},
+                {"ota", false}};
+
+  pairing_ = std::make_unique<protocol::PairingState>(
+      std::make_unique<protocol::FileKeyStore>(options_.state_dir));
+  protocol::SessionEvents& events = *this;  // a private base, so convert here
+  server_ = std::make_unique<net::Server>(options_.port, info_, *pairing_, events,
+                                          [this] { return hal_.now(); });
+  if (!server_->start()) return false;
+
+  log::info("Nesto %s started: panel %s, %s, state in %s", NESTO_VERSION, info_.panel_id.c_str(),
+            pairing_->paired() ? "paired" : "not paired", options_.state_dir.c_str());
+  update_status();
   return true;
 }
 
@@ -84,10 +137,14 @@ int App::run() {
     const std::uint32_t next_timer = lv_timer_handler();
     const Millis wait = std::min<Millis>(next_timer, kMaxWait);
 
+    // The network waits; the hardware is only checked, so neither delays
+    // the other by more than one loop.
+    server_->poll(wait);
     inputs.clear();
-    hal_.poll(inputs, wait);
+    hal_.poll(inputs, 0);
     for (const TimedInput& input : inputs) handle(input);
     handle(gestures_.tick(hal_.now()));
+    if (hal_.now() - status_checked_ >= kStatusInterval) update_status();
   }
   log::info("stopping");
   return exit_code_;
@@ -128,6 +185,83 @@ void App::handle(const std::vector<GestureEvent>& gestures) {
     if (g.gesture == Gesture::Single) ui_->select();
     if (g.gesture == Gesture::Long) ui_->back();
   }
+}
+
+void App::update_status() {
+  status_checked_ = hal_.now();
+  std::string text;
+  const protocol::PanelSession* session = server_->active();
+  if (session && session->ready()) {
+    text = "Connected";
+  } else if (session) {
+    text = "Connecting";
+  } else if (pairing_->paired()) {
+    text = "Waiting for Home Assistant";
+  } else {
+    const std::string ip = net::primary_ipv4();
+    text = ip.empty() ? "Not paired - no network" : "Not paired - " + ip;
+  }
+  if (text != status_) {
+    status_ = text;
+    ui_->set_status(text);
+  }
+}
+
+void App::on_pairing_code(const std::string& code) {
+  // Logged too, so automated tests can check both sides agree. The log stays
+  // on the device; the code only matters for the two minutes it's shown.
+  log::info("pairing code %s", code.c_str());
+  ui_->show_pairing_code(code);
+}
+
+void App::on_pairing_finished(bool paired) {
+  ui_->hide_pairing_code();
+  if (paired) ui_->show_toast("Paired with Home Assistant");
+  update_status();
+}
+
+void App::on_authenticated(protocol::PanelSession& session) {
+  log::info("Home Assistant authenticated");
+  server_->close_others(session);
+  update_status();
+}
+
+void App::on_ready(protocol::PanelSession& /*session*/) {
+  log::info("synchronised with Home Assistant");
+  update_status();
+}
+
+void App::on_unpaired() {
+  ui_->show_toast("Removed from Home Assistant");
+  update_status();
+}
+
+bool App::on_message(protocol::PanelSession& session, const protocol::Message& m) {
+  if (m.type == "info" && m.is_request()) {
+    protocol::Json result = protocol::result_ok(*m.id);
+    result["uptime_s"] = hal_.now() / 1000;
+    result["free_ram_kb"] = free_ram_kb();
+    result["wifi_rssi"] = nullptr;
+    result["ip"] = net::primary_ipv4();
+    result["fw"] = NESTO_VERSION;
+    result["base_connected"] = false;
+    result["base_fw"] = nullptr;
+    session.send(result);
+    return true;
+  }
+  if (m.type == "identify" && m.is_request()) {
+    ui_->show_toast("Hello from Home Assistant");
+    session.send(protocol::result_ok(*m.id));
+    return true;
+  }
+  if (m.type == "reboot" && m.is_request()) {
+    session.send(protocol::result_error(*m.id, protocol::ErrorCode::Unsupported,
+                                       "rebooting comes with the device support"));
+    return true;
+  }
+  // Synchronisation messages are accepted; the screens built from them come
+  // in a later version.
+  return m.type == "time" || m.type == "config" || m.type == "layout" || m.type == "states";
 }
 
 PressContext App::press_context() const {

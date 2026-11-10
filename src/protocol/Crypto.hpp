@@ -49,6 +49,9 @@ struct SessionKeys {
 
 SessionKeys session_keys(const Key& pairing_key, const Nonce& panel_nonce, const Nonce& ha_nonce);
 
+/// Fills `out` from the system's random source. False if it can't be read.
+bool random_bytes(std::uint8_t* out, std::size_t size);
+
 /// Compares MACs in constant time.
 bool macs_equal(const Mac& a, const Mac& b);
 

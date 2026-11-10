@@ -52,15 +52,19 @@ add_library(nesto_protocol STATIC
   src/protocol/Crypto.cpp
   src/protocol/Frame.cpp
   src/protocol/Message.cpp
+  src/protocol/PairingState.cpp
+  src/protocol/PanelSession.cpp
 )
 target_include_directories(nesto_protocol PUBLIC src)
-target_link_libraries(nesto_protocol PUBLIC monocypher nlohmann_json::nlohmann_json)
+target_link_libraries(nesto_protocol PUBLIC nesto_core monocypher nlohmann_json::nlohmann_json)
 nesto_target_options(nesto_protocol)
 
 set(NESTO_SOURCES
   src/main.cpp
   src/app/App.cpp
   src/app/Ui.cpp
+  src/net/NetInfo.cpp
+  src/net/Server.cpp
 )
 if(NESTO_PLATFORM STREQUAL "sim")
   list(APPEND NESTO_SOURCES src/hal/sim/SimHal.cpp)
@@ -69,7 +73,7 @@ else()
 endif()
 
 add_executable(nesto ${NESTO_SOURCES})
-target_link_libraries(nesto PRIVATE nesto_core lvgl::lvgl)
+target_link_libraries(nesto PRIVATE nesto_core nesto_protocol lvgl::lvgl)
 nesto_target_options(nesto)
 target_compile_definitions(nesto PRIVATE
   NESTO_VERSION="${PROJECT_VERSION}"

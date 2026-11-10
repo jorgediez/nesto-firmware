@@ -23,10 +23,10 @@ jobs:
       - name: Build the dev image
         run: scripts/dev.sh image
 
-      - name: Lint the Python reference implementation
+      - name: Lint the Python reference implementation and tests
         run: |
-          pipx run ruff check tools/
-          pipx run ruff format --check tools/
+          pipx run ruff check tools/ tests/e2e/
+          pipx run ruff format --check tools/ tests/e2e/
 
       - name: Check the protocol test vectors match the Python reference
         run: |
@@ -41,6 +41,9 @@ jobs:
 
       - name: Run the unit tests, natively and on emulated ARM
         run: scripts/dev.sh test
+
+      - name: Run the real panel against the Python client, natively and on emulated ARM
+        run: scripts/dev.sh e2e
 
       - name: Check the ARM programs can run on the thermostat
         run: scripts/dev.sh check-arm

@@ -9,8 +9,9 @@ Nesto ("nest" in Esperanto) is the software that runs on the thermostat. It
 works with the [ha-nesto](https://github.com/jorgediez/ha-nesto) Home Assistant
 integration, which discovers the panel, pairs with it and decides what it shows.
 
-> **Status: early development.** The desktop simulator runs a demo screen; the
-> thermostat itself and the link to Home Assistant come next. The wire protocol
+> **Status: early development.** The simulator runs a demo screen and pairs and
+> talks with Home Assistant over the protocol; the screens built from Home
+> Assistant's layout, and the thermostat itself, come next. The wire protocol
 > between the panel and Home Assistant is in [PROTOCOL.md](PROTOCOL.md).
 
 ## Development
@@ -23,11 +24,23 @@ simulator's window on the Windows desktop.
 scripts/dev.sh image   # once, and after changing docker/Dockerfile
 scripts/dev.sh build   # simulator, the thermostat's program, and the tests
 scripts/dev.sh test    # unit tests, natively and on emulated ARM
+scripts/dev.sh e2e     # the real panel against the Python client, natively and on emulated ARM
 scripts/dev.sh sim     # open the simulator
 ```
 
 In the simulator, the mouse wheel or arrow keys turn the ring, and the left
 mouse button, Space or Enter press the display. Escape quits.
+
+The simulator listens for Home Assistant on port 6170. Until the integration
+exists, `tools/nesto_client.py` stands in for it. With the simulator running:
+
+```bash
+scripts/dev.sh client pair      # type the code the simulator shows
+scripts/dev.sh client connect   # authenticate, synchronise, print what the panel sends
+```
+
+The pairing is kept in the build volume, so it survives restarts. To start
+over, delete `/build/sim-state` from a `scripts/dev.sh shell`.
 
 Screens can also be captured without a window, which is what CI does:
 
@@ -47,7 +60,8 @@ The steps are `r+N`/`r-N` (turn the ring), `p` (press), `h` (long press) and
 | `src/hal/` | The hardware interface, with the simulator (`sim/`) and the thermostat (`nest/`) |
 | `src/app/` | The main loop and the screens, built with [LVGL](https://lvgl.io) |
 | `tests/` | Unit tests ([doctest](https://github.com/doctest/doctest)) |
-| `tools/` | The protocol's Python reference implementation and the test vector generator |
+| `tests/e2e/` | End-to-end tests: the real panel program against the Python client, over TCP |
+| `tools/` | The protocol's Python reference implementation, a client that stands in for Home Assistant, and the test vector generator |
 
 ### Protocol test vectors
 

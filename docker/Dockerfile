@@ -14,6 +14,7 @@ RUN apt-get update \
         pkg-config \
         python3 \
         python3-cryptography \
+        python3-pytest \
         qemu-user \
         xz-utils \
     && rm -rf /var/lib/apt/lists/*

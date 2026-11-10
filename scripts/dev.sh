@@ -5,10 +5,12 @@
 #   scripts/dev.sh image                  build the dev image
 #   scripts/dev.sh build                  build everything (see below)
 #   scripts/dev.sh test                   run the unit tests, natively and on emulated ARM
+#   scripts/dev.sh e2e                    run the real panel against the Python client, both builds
 #   scripts/dev.sh check-arm              check the ARM programs can run on the thermostat
 #   scripts/dev.sh dist                   copy the thermostat's program, stripped, to dist/nesto
 #   scripts/dev.sh vectors                regenerate the protocol test vectors from tools/
-#   scripts/dev.sh sim [options]          open the simulator window (WSLg or X11)
+#   scripts/dev.sh sim [options]          open the simulator window (WSLg or X11), port 6170
+#   scripts/dev.sh client pair|connect    talk to the running simulator as Home Assistant would
 #   scripts/dev.sh shot FILE "STEPS"      play STEPS headless, save the screen to FILE
 #   scripts/dev.sh shot-arm FILE "STEPS"  the same with the ARM build, under QEMU
 #   scripts/dev.sh shell                  a shell in the container
@@ -63,6 +65,15 @@ case "${1:-}" in
       ctest --test-dir /build/sim --output-on-failure
       ctest --test-dir /build/sim-arm --output-on-failure'
     ;;
+  e2e)
+    run bash -c '
+      set -e
+      cd /src/tests/e2e
+      for panel in "/build/sim/nesto --headless" "qemu-arm -cpu cortex-a8 /build/sim-arm/nesto --headless"; do
+        echo "== end-to-end tests with: $panel"
+        NESTO_PANEL_CMD="$panel" python3 -m pytest -q -p no:cacheprovider .
+      done'
+    ;;
   check-arm)
     run bash -c '/src/scripts/check-arm.sh /build/nest/nesto && /src/scripts/check-arm.sh /build/sim-arm/nesto'
     ;;
@@ -86,7 +97,16 @@ case "${1:-}" in
       # Plain Linux with X11. The X server may need `xhost +local:` first.
       EXTRA_ARGS=(-e DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix)
     fi
-    run /build/sim/nesto "$@"
+    # Publish the port for `client` (or a real Home Assistant), and keep the
+    # pairing in the build volume so it survives restarts.
+    EXTRA_ARGS+=(-p 6170:6170)
+    run /build/sim/nesto --state-dir /build/sim-state "$@"
+    ;;
+  client)
+    shift
+    # The simulator's port is published on the Docker host; reach it from here.
+    EXTRA_ARGS=(--add-host=host.docker.internal:host-gateway)
+    run python3 /src/tools/nesto_client.py host.docker.internal --key-file /build/client.key "$@"
     ;;
   shot)
     if [ $# -lt 3 ]; then
@@ -106,7 +126,7 @@ case "${1:-}" in
     run bash
     ;;
   *)
-    sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac

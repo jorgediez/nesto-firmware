@@ -2,26 +2,39 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "core/PressGestures.hpp"
 #include "hal/Hal.hpp"
 #include "lvgl.h"
+#include "protocol/PanelSession.hpp"
 
 namespace nesto {
 
+namespace net {
+class Server;
+}
+
 class Ui;
 
-/// Ties the hardware, LVGL and the screens together and runs the main loop.
-class App {
+struct AppOptions {
+  std::uint16_t port = 6170;  // PROTOCOL.md section 2
+  std::string state_dir;      // where the pairing key is kept
+  std::string panel_id;       // empty: the network interface's MAC address
+};
+
+/// Ties the hardware, LVGL, the screens and the connection to Home Assistant
+/// together, and runs the main loop.
+class App : private protocol::SessionEvents {
  public:
-  explicit App(Hal& hal);
-  ~App();
+  App(Hal& hal, AppOptions options);
+  ~App() override;
 
   App(const App&) = delete;
   App& operator=(const App&) = delete;
 
-  /// Starts the hardware and LVGL. Returns false if the hardware can't start.
+  /// Starts the hardware, LVGL and the server. Returns false if any can't start.
   bool init();
 
   /// Runs until asked to quit. Returns the process exit code.
@@ -34,12 +47,29 @@ class App {
   void handle(const TimedInput& input);
   void handle(const std::vector<GestureEvent>& gestures);
   PressContext press_context() const;
+  void update_status();
+
+  // protocol::SessionEvents
+  void on_pairing_code(const std::string& code) override;
+  void on_pairing_finished(bool paired) override;
+  void on_authenticated(protocol::PanelSession& session) override;
+  void on_ready(protocol::PanelSession& session) override;
+  void on_unpaired() override;
+  bool on_message(protocol::PanelSession& session, const protocol::Message& message) override;
 
   Hal& hal_;
+  AppOptions options_;
   std::vector<std::uint32_t> framebuffer_;
   lv_display_t* display_ = nullptr;
   PressGestures gestures_;
   std::unique_ptr<Ui> ui_;
+
+  protocol::PanelInfo info_;
+  std::unique_ptr<protocol::PairingState> pairing_;
+  std::unique_ptr<net::Server> server_;
+  std::string status_;
+  Millis status_checked_ = 0;
+
   bool quit_ = false;
   int exit_code_ = 0;
 };
