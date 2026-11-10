@@ -21,8 +21,8 @@ simulator's window on the Windows desktop.
 
 ```bash
 scripts/dev.sh image   # once, and after changing docker/Dockerfile
-scripts/dev.sh build   # simulator (with sanitizers), Nest target and tests
-scripts/dev.sh test    # unit tests
+scripts/dev.sh build   # simulator, the thermostat's program, and the tests
+scripts/dev.sh test    # unit tests, natively and on emulated ARM
 scripts/dev.sh sim     # open the simulator
 ```
 
@@ -47,8 +47,25 @@ The steps are `r+N`/`r-N` (turn the ring), `p` (press), `h` (long press) and
 | `src/app/` | The main loop and the screens, built with [LVGL](https://lvgl.io) |
 | `tests/` | Unit tests ([doctest](https://github.com/doctest/doctest)) |
 
-The `nest` build is compiled for x86 for now, to keep it building; compiling it
-for the thermostat's ARM processor comes next.
+### The thermostat's program
+
+The thermostat has an ARM Cortex-A8 and a C library from 2011, so its program is
+cross-compiled with a [Bootlin](https://toolchains.bootlin.com) toolchain (GCC
+and musl) and linked fully statically: it needs nothing from the device. The
+toolchain comes with the dev image; `cmake/toolchain-nest.cmake` sets it up.
+
+```bash
+scripts/dev.sh check-arm   # static, 32-bit ARM, no instructions the Cortex-A8 lacks
+scripts/dev.sh dist        # the stripped program, in dist/nesto
+```
+
+The simulator and the tests are also built for ARM and run under QEMU emulating
+a Cortex-A8, so the code runs on the thermostat's instruction set before it gets
+there. `scripts/dev.sh shot-arm` takes screenshots with that build; CI checks
+they match the native ones pixel for pixel.
+
+The statically linked program includes musl (MIT) and GCC's runtime libraries
+(GPL with the GCC Runtime Library Exception), which allow this.
 
 ## Not affiliated
 
