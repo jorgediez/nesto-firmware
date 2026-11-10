@@ -79,7 +79,7 @@ bool write_int(const std::string& path, int value) {
 
 }  // namespace
 
-NestHal::NestHal(NestOptions options) : options_(options), ring_steps_(options.ring) {}
+NestHal::NestHal(NestOptions options) : options_(options), ring_ticks_(options.ring) {}
 
 NestHal::~NestHal() {
   if (!backlight_.empty() && backlight_before_ >= 0) write_int(backlight_, backlight_before_);
@@ -93,8 +93,8 @@ bool NestHal::init() {
   catch_quit_signals();
   if (!open_framebuffer() || !open_inputs()) return false;
   open_backlight();
-  const RingSteps::Config& ring = ring_steps_.config();
-  log::info("the ring: %d counts per step, clockwise %s", ring.counts_per_step,
+  const RingTicks::Config& ring = ring_ticks_.config();
+  log::info("the ring: %d counts per tick, clockwise %s", ring.counts_per_tick,
             ring.reverse ? "negative" : "positive");
   return true;
 }
@@ -184,13 +184,13 @@ void NestHal::read_inputs(std::vector<TimedInput>& out, bool verbose) {
       for (std::size_t i = 0; i < static_cast<std::size_t>(n) / sizeof events[0]; ++i) {
         const input_event& e = events[i];
         if (fd == ring_fd_ && e.type == EV_REL && e.code == REL_X) {
-          const int steps = ring_steps_.add(t, e.value);
+          const int ticks = ring_ticks_.add(t, e.value);
           ring_total_ += e.value;
           if (verbose) {
-            std::printf("ring  %+5d counts   total %+7ld   steps %+d\n", e.value, ring_total_,
-                        steps);
+            std::printf("ring  %+5d counts   total %+7ld   ticks %+d\n", e.value, ring_total_,
+                        ticks);
           }
-          if (steps != 0) out.push_back({t, RingTurn{steps}});
+          if (ticks != 0) out.push_back({t, RingTurn{ticks}});
         } else if (fd == press_fd_ && e.type == EV_KEY && e.code == KEY_POWER) {
           // 1 down, 0 up, 2 a key repeat, which a press doesn't need.
           if (verbose) std::printf("press %s\n", e.value == 1 ? "down" : e.value == 0 ? "up" : "repeat");
@@ -246,12 +246,12 @@ void NestHal::set_backlight(int percent) {
 int NestHal::input_test() {
   catch_quit_signals();
   if (!open_inputs()) return 1;
-  const RingSteps::Config& ring = ring_steps_.config();
+  const RingTicks::Config& ring = ring_ticks_.config();
   std::printf(
       "Turn the ring and press the display; Ctrl-C stops.\n"
       "To measure the ring, turn it once round, clockwise, and read the total.\n"
-      "Steps at %d counts per step, clockwise %s.\n",
-      ring.counts_per_step, ring.reverse ? "negative" : "positive");
+      "Ticks at %d counts per tick, clockwise %s.\n",
+      ring.counts_per_tick, ring.reverse ? "negative" : "positive");
   std::fflush(stdout);
   std::vector<TimedInput> ignored;
   while (g_quit_signal == 0) {

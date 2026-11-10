@@ -58,7 +58,10 @@ struct Fixture {
     now += ms;
     controller.tick(now);
   }
-  void rotate(int steps) { controller.rotate(steps, now); }
+  // Whole clicks, as the simulator and scripts send them.
+  void rotate(int clicks) { controller.rotate(clicks * kTicksPerClick, now); }
+  // Ticks, as the thermostat's ring sends them.
+  void turn(int ticks) { controller.rotate(ticks, now); }
   void press() { controller.press(now); }
   void hold() { controller.long_press(now); }
   void select(int index) {
@@ -454,4 +457,79 @@ TEST_CASE("entries carry Home Assistant's icon, or the kind's") {
       error));
   CHECK(f.view().entries[0].icon == "lamp");
   CHECK(f.view().entries[0].default_icon == "lightbulb");
+}
+
+TEST_CASE("on the home screen ticks add up to clicks, one item each") {
+  Fixture f;
+  f.turn(4);
+  CHECK(f.view().selected == 0);
+  f.turn(1);
+  CHECK(f.view().selected == 1);
+  f.turn(2 * kTicksPerClick + 3);
+  CHECK(f.view().selected == 3);
+  f.turn(2);  // with the 3 left over
+  CHECK(f.view().selected == 4);
+}
+
+TEST_CASE("turning back, or resting, drops the ticks short of a click") {
+  Fixture f;
+  f.turn(4);
+  f.turn(-4);
+  f.turn(4);
+  CHECK(f.view().selected == 0);  // a wobble never moves
+
+  f.turn(4);  // 8: one click and 3 left
+  CHECK(f.view().selected == 1);
+  f.after(Controller::kClickRest);
+  f.turn(2);  // the 3 are gone
+  CHECK(f.view().selected == 1);
+}
+
+TEST_CASE("a press drops the ticks short of a click") {
+  Fixture f;
+  f.select(4);  // the switch: a press toggles it and stays on the home screen
+  f.turn(4);
+  f.press();
+  f.turn(1);
+  CHECK(f.view().selected == 4);
+}
+
+TEST_CASE("brightness, colour and a cover's position change with every tick") {
+  Fixture f;
+  f.press();
+  f.turn(1);
+  CHECK(f.view().value == "51%");
+  f.turn(3);
+  CHECK(f.view().value == "54%");
+
+  f.after(400);
+  f.press();  // colour temperature
+  f.turn(1);
+  CHECK(f.view().value == "3020 K");
+
+  f.after(400);
+  f.hold();
+  f.select(2);  // the blind
+  f.press();
+  CHECK(f.view().control == "Position");
+  f.turn(-1);
+  CHECK(f.view().value == "39%");
+}
+
+TEST_CASE("climate targets and lists of choices move per click") {
+  Fixture f;
+  f.select(1);
+  f.press();
+  f.turn(4);
+  CHECK(f.view().value == "21.0C");
+  f.turn(1);
+  CHECK(f.view().value == "21.5C");
+
+  f.after(400);
+  f.press();  // mode
+  f.turn(kTicksPerClick - 1);
+  CHECK(f.view().value == "Heat");
+  f.turn(-1);  // turned back: still nothing
+  f.turn(-kTicksPerClick);
+  CHECK(f.view().value == "Off");
 }

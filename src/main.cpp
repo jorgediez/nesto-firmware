@@ -37,10 +37,10 @@ void print_usage(const char* program) {
       "  --screenshot FILE   save the screen as PNG after the script, then quit\n");
 #elif defined(NESTO_PLATFORM_NEST)
   std::printf(
-      "  --ring-counts N     the ring's sensor counts per step (default %d)\n"
+      "  --ring-counts N     the ring's sensor counts per tick (default %d)\n"
       "  --ring-reverse      turn the ring's direction round\n"
       "  --input-test        print the ring's and the press's events, for measuring the ring\n",
-      nesto::NestOptions{}.ring.counts_per_step);
+      nesto::NestOptions{}.ring.counts_per_tick);
 #endif
   std::printf(
       "  --port N            TCP port for Home Assistant (default 6170)\n"
@@ -120,7 +120,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "--ring-counts must be between 1 and 10000\n");
         return EXIT_FAILURE;
       }
-      options.ring.counts_per_step = static_cast<int>(counts);
+      options.ring.counts_per_tick = static_cast<int>(counts);
       continue;
     }
     if (arg == "--ring-reverse") {

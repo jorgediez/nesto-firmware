@@ -121,6 +121,7 @@ class Controller {
   static constexpr Millis kLiveInterval = 300;
   static constexpr Millis kSettleDelay = 1500;
   static constexpr Millis kHold = 2000;
+  static constexpr Millis kClickRest = 800;
 
   using Send = std::function<void(const Intent&)>;
 
@@ -132,7 +133,13 @@ class Controller {
   /// Home Assistant couldn't carry out an intent: show its state again.
   void intent_failed(const std::string& key);
 
-  void rotate(int steps, Millis now);
+  /// The ring turned by `ticks` (core/Input.hpp). Smooth values, brightness,
+  /// colour, and a cover's position and tilt, change with every tick. The
+  /// rest moves a place per click: the home screen, Settings, lists of
+  /// choices, switching, and climate targets. Ticks short of a click wait for
+  /// the next turn; they are dropped when the ring turns back, rests for
+  /// kClickRest, or a press changes what it controls.
+  void rotate(int ticks, Millis now);
   void press(Millis now);
   void long_press(Millis now);
   /// Sends due intents and ends expired holds. Call regularly.
@@ -167,6 +174,9 @@ class Controller {
                  Json args, bool settle, Millis now);
   void show(const std::string& key, const ItemState& state, Millis now);
   void toggle(const Item& item, Millis now);
+  /// Adds ticks towards whole clicks; returns the clicks they complete.
+  int clicks(int ticks, Millis now);
+  /// `steps` are ticks for smooth controls, clicks for the rest.
   void adjust(const Item& item, Control control, int steps, Millis now);
   void changed() { ++version_; }
 
@@ -180,6 +190,8 @@ class Controller {
   std::string open_key_;
   int control_ = 0;
   int setting_ = 0;  // the selected Settings entry
+  int click_ticks_ = 0;  // ticks towards the next click, with their sign
+  Millis last_turn_ = 0;
 
   std::map<std::string, ItemState> shown_;  // values set on the panel, ahead of HA
   std::map<std::string, Millis> hold_until_;

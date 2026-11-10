@@ -73,7 +73,8 @@ scripts/dev.sh screens screenshots              # every screen, into screenshots
 scripts/dev.sh shot screenshots/x.png "r+2 p"   # one screen, without Home Assistant
 ```
 
-The steps are `r+N`/`r-N` (turn the ring), `p` (press), `h` (long press) and
+The steps are `r+N`/`r-N` (turn the ring N clicks, as many wheel notches),
+`p` (press), `h` (long press) and
 `wN` (wait N ms). See `src/core/InputScript.hpp`.
 
 ### Layout

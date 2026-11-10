@@ -43,6 +43,20 @@ std::optional<std::string> step_choice(const std::vector<std::string>& list,
   return list[static_cast<std::size_t>(to)];
 }
 
+/// Controls that change with every tick of the ring, rather than per click.
+bool is_smooth(Control control) {
+  switch (control) {
+    case Control::Brightness:
+    case Control::ColorTemp:
+    case Control::Hue:
+    case Control::Position:
+    case Control::Tilt:
+      return true;
+    default:
+      return false;
+  }
+}
+
 /// Time since `since`, never negative (see PanelSession).
 Millis elapsed(Millis now, Millis since) {
   return now > since ? now - since : 0;
@@ -212,6 +226,7 @@ void Controller::set_connected(bool connected) {
 
 bool Controller::apply_layout(const Json& message, std::string& error) {
   if (!room_.apply_layout(message, error)) return false;
+  click_ticks_ = 0;
   const auto& items = room_.layout().items;
   if (screen_ == RoomView::Screen::Empty) screen_ = RoomView::Screen::Home;
   if (screen_ == RoomView::Screen::Item && !room_.find(open_key_)) {
@@ -289,7 +304,35 @@ bool Controller::can_act(const Item& item) const {
   return connected_ && shown(item.key).available;
 }
 
-void Controller::rotate(int steps, Millis now) {
+int Controller::clicks(int ticks, Millis now) {
+  if (elapsed(now, last_turn_) >= kClickRest || (click_ticks_ > 0 && ticks < 0) ||
+      (click_ticks_ < 0 && ticks > 0)) {
+    click_ticks_ = 0;
+  }
+  last_turn_ = now;
+  click_ticks_ += ticks;
+  // Division truncates towards zero, which keeps the leftover's sign.
+  const int whole = click_ticks_ / kTicksPerClick;
+  click_ticks_ -= whole * kTicksPerClick;
+  return whole;
+}
+
+void Controller::rotate(int ticks, Millis now) {
+  if (ticks == 0) return;
+  if (screen_ == RoomView::Screen::Item) {
+    const Item* item = open_item();
+    if (!item) return;
+    const auto controls = controls_for(*item);
+    if (!can_act(*item) || controls.empty()) return;
+    const Control control = controls[static_cast<std::size_t>(control_)];
+    if (is_smooth(control)) {
+      adjust(*item, control, ticks, now);
+    } else if (const int n = clicks(ticks, now)) {
+      adjust(*item, control, n, now);
+    }
+    return;
+  }
+  const int steps = clicks(ticks, now);
   if (steps == 0) return;
   if (screen_ == RoomView::Screen::Home) {
     const int next = std::clamp(selected_ + steps, 0, home_count() - 1);
@@ -303,15 +346,11 @@ void Controller::rotate(int steps, Millis now) {
       setting_ = next;
       changed();
     }
-  } else if (const Item* item = open_item()) {
-    const auto controls = controls_for(*item);
-    if (can_act(*item) && !controls.empty()) {
-      adjust(*item, controls[static_cast<std::size_t>(control_)], steps, now);
-    }
   }
 }
 
 void Controller::press(Millis now) {
+  click_ticks_ = 0;  // what the ring controls may change
   switch (screen_) {
     case RoomView::Screen::Empty:
       open_settings();
@@ -385,6 +424,7 @@ void Controller::press(Millis now) {
 }
 
 void Controller::long_press(Millis now) {
+  click_ticks_ = 0;
   switch (screen_) {
     case RoomView::Screen::Item:
       screen_ = RoomView::Screen::Home;
@@ -471,6 +511,8 @@ void Controller::toggle(const Item& item, Millis now) {
 }
 
 void Controller::adjust(const Item& item, Control control, int steps, Millis now) {
+  // Smooth controls get ticks: a click (kTicksPerClick of them) moves 5%,
+  // 100 K or 10 degrees. The rest get clicks.
   ItemState s = shown(item.key);
   const auto& c = item.climate;
 
@@ -485,7 +527,7 @@ void Controller::adjust(const Item& item, Control control, int steps, Millis now
     }
     case Control::Brightness: {
       const int current = s.on ? s.brightness : 0;
-      const int next = std::clamp(current + 5 * steps, 0, 100);
+      const int next = std::clamp(current + steps, 0, 100);
       if (next == current) return;
       s.on = next > 0;
       if (s.on) s.brightness = next;
@@ -497,7 +539,7 @@ void Controller::adjust(const Item& item, Control control, int steps, Millis now
     case Control::ColorTemp: {
       const auto [lo, hi] = *item.light.color_temp;
       const int current = s.color_temp_k.value_or((lo + hi) / 2);
-      const int next = std::clamp(current + 100 * steps, lo, hi);
+      const int next = std::clamp(current + 20 * steps, lo, hi);
       if (next == current && s.color_temp_k) return;
       s.on = true;
       s.color_temp_k = next;
@@ -508,7 +550,7 @@ void Controller::adjust(const Item& item, Control control, int steps, Millis now
     case Control::Hue: {
       const double hue = s.hs ? s.hs->first : 0;
       const double saturation = s.hs && s.hs->second >= 1 ? s.hs->second : 100;
-      const double next = std::fmod(std::fmod(hue + 10.0 * steps, 360.0) + 360.0, 360.0);
+      const double next = std::fmod(std::fmod(hue + 2.0 * steps, 360.0) + 360.0, 360.0);
       s.on = true;
       s.hs = std::make_pair(next, saturation);
       show(item.key, s, now);
@@ -577,7 +619,7 @@ void Controller::adjust(const Item& item, Control control, int steps, Millis now
       const bool tilt = control == Control::Tilt;
       std::optional<int>& value = tilt ? s.tilt : s.position;
       const int current = value.value_or(!tilt && s.cover_state == "open" ? 100 : 0);
-      const int next = std::clamp(current + 5 * steps, 0, 100);
+      const int next = std::clamp(current + steps, 0, 100);
       if (next == current && value) return;
       value = next;
       show(item.key, s, now);

@@ -11,7 +11,7 @@ add_executable(nesto_tests
   test_panel_session.cpp
   test_png.cpp
   test_press_gestures.cpp
-  test_ring_steps.cpp
+  test_ring_ticks.cpp
   test_probe.cpp
   test_room.cpp
   test_settings.cpp
