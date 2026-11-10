@@ -52,6 +52,16 @@ double fraction_of(double value, double lo, double hi) {
   return hi > lo ? std::clamp((value - lo) / (hi - lo), 0.0, 1.0) : -1;
 }
 
+// The Settings menu, in order: short names for the list, and what each does,
+// shown below it.
+const char* const kSettings[] = {"Pair", "Forget", "About"};
+const char* const kSettingsSummaries[] = {"Pair with Home Assistant", "Forget Home Assistant",
+                                          "Version and address"};
+constexpr int kSettingsCount = 3;
+constexpr int kPair = 0;
+constexpr int kForget = 1;
+constexpr int kAbout = 2;
+
 const char* label(Control control) {
   switch (control) {
     case Control::Power: return "Power";
@@ -147,7 +157,8 @@ std::string summary(const Item& item, const ItemState& s) {
   return "";
 }
 
-Controller::Controller(Send send) : send_(std::move(send)) {}
+Controller::Controller(Send send, SettingsActions actions)
+    : send_(std::move(send)), actions_(std::move(actions)) {}
 
 void Controller::set_connected(bool connected) {
   if (connected == connected_) return;
@@ -168,7 +179,7 @@ bool Controller::apply_layout(const Json& message, std::string& error) {
   if (screen_ == RoomView::Screen::Item && !room_.find(open_key_)) {
     screen_ = RoomView::Screen::Home;
   }
-  selected_ = items.empty() ? 0 : std::clamp(selected_, 0, static_cast<int>(items.size()) - 1);
+  selected_ = std::clamp(selected_, 0, static_cast<int>(items.size()));  // the last is Settings
   if (const Item* item = open_item()) {
     control_ = std::clamp(control_, 0, std::max(0, static_cast<int>(controls_for(*item).size()) - 1));
   }
@@ -212,8 +223,23 @@ const Item* Controller::open_item() const {
 
 const Item* Controller::selected_item() const {
   const auto& items = room_.layout().items;
-  if (items.empty()) return nullptr;
+  if (selected_ >= static_cast<int>(items.size())) return nullptr;  // Settings
   return &items[static_cast<std::size_t>(selected_)];
+}
+
+int Controller::home_count() const {
+  return static_cast<int>(room_.layout().items.size()) + 1;  // the items, then Settings
+}
+
+void Controller::open_settings() {
+  screen_ = RoomView::Screen::Settings;
+  setting_ = 0;
+  changed();
+}
+
+void Controller::leave_settings() {
+  screen_ = room_.has_layout() ? RoomView::Screen::Home : RoomView::Screen::Empty;
+  changed();
 }
 
 ItemState Controller::shown(const std::string& key) const {
@@ -228,11 +254,15 @@ bool Controller::can_act(const Item& item) const {
 void Controller::rotate(int steps, Millis now) {
   if (steps == 0) return;
   if (screen_ == RoomView::Screen::Home) {
-    const int count = static_cast<int>(room_.layout().items.size());
-    if (count == 0) return;
-    const int next = std::clamp(selected_ + steps, 0, count - 1);
+    const int next = std::clamp(selected_ + steps, 0, home_count() - 1);
     if (next != selected_) {
       selected_ = next;
+      changed();
+    }
+  } else if (screen_ == RoomView::Screen::Settings) {
+    const int next = std::clamp(setting_ + steps, 0, kSettingsCount - 1);
+    if (next != setting_) {
+      setting_ = next;
       changed();
     }
   } else if (const Item* item = open_item()) {
@@ -244,9 +274,47 @@ void Controller::rotate(int steps, Millis now) {
 }
 
 void Controller::press(Millis now) {
+  switch (screen_) {
+    case RoomView::Screen::Empty:
+      open_settings();
+      return;
+    case RoomView::Screen::Settings:
+      if (setting_ == kPair && actions_.open_pairing) actions_.open_pairing();
+      if (setting_ == kForget) {
+        screen_ = RoomView::Screen::Confirm;
+        changed();
+      }
+      if (setting_ == kAbout) {
+        screen_ = RoomView::Screen::About;
+        changed();
+      }
+      return;
+    case RoomView::Screen::Confirm:
+      if (actions_.forget) actions_.forget();
+      // Without Home Assistant there's no room any more.
+      room_ = Room();
+      shown_.clear();
+      hold_until_.clear();
+      pending_.clear();
+      selected_ = 0;
+      screen_ = RoomView::Screen::Empty;
+      changed();
+      return;
+    case RoomView::Screen::About:
+      screen_ = RoomView::Screen::Settings;
+      changed();
+      return;
+    case RoomView::Screen::Home:
+    case RoomView::Screen::Item:
+      break;
+  }
+
   if (screen_ == RoomView::Screen::Home) {
     const Item* item = selected_item();
-    if (!item) return;
+    if (!item) {
+      open_settings();
+      return;
+    }
     switch (item->kind) {
       case Kind::Light:
       case Kind::Climate:
@@ -279,10 +347,22 @@ void Controller::press(Millis now) {
 }
 
 void Controller::long_press(Millis now) {
-  if (screen_ == RoomView::Screen::Item) {
-    screen_ = RoomView::Screen::Home;
-    changed();
-    return;
+  switch (screen_) {
+    case RoomView::Screen::Item:
+      screen_ = RoomView::Screen::Home;
+      changed();
+      return;
+    case RoomView::Screen::Settings:
+      leave_settings();
+      return;
+    case RoomView::Screen::Confirm:
+    case RoomView::Screen::About:
+      screen_ = RoomView::Screen::Settings;
+      changed();
+      return;
+    case RoomView::Screen::Empty:
+    case RoomView::Screen::Home:
+      break;
   }
   const Item* item = selected_item();
   if (!item || screen_ != RoomView::Screen::Home || !can_act(*item)) return;
@@ -481,14 +561,39 @@ void Controller::adjust(const Item& item, Control control, int steps, Millis now
 RoomView Controller::view() const {
   RoomView v;
   v.offline = !connected_;
+  v.screen = screen_;
+
+  switch (screen_) {
+    case RoomView::Screen::Settings:
+      v.title = "Settings";
+      for (int i = 0; i < kSettingsCount; ++i) {
+        v.entries.push_back({kSettings[i], kSettingsSummaries[i], true});
+      }
+      v.selected = setting_;
+      return v;
+    case RoomView::Screen::Confirm:
+      v.title = "Settings";
+      v.item_name = "Forget Home Assistant?";
+      v.prompt = "Press to forget it,\nhold to keep it";
+      return v;
+    case RoomView::Screen::About:
+      v.title = "About";
+      if (actions_.about) v.lines = actions_.about();
+      return v;
+    case RoomView::Screen::Empty:
+    case RoomView::Screen::Home:
+    case RoomView::Screen::Item:
+      break;
+  }
+
   if (!room_.has_layout()) return v;
   v.title = room_.layout().title;
-  v.screen = screen_;
   v.selected = selected_;
   for (const Item& item : room_.layout().items) {
     const ItemState s = shown(item.key);
     v.entries.push_back({item.name, summary(item, s), s.available});
   }
+  v.entries.push_back({"Settings", "Pairing and about", true});
 
   const Item* item = open_item();
   if (!item) return v;

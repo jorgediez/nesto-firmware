@@ -197,7 +197,7 @@ The panel accepts `pair_begin` only when `pairing_open` is true:
 
 - always, while the panel has no key;
 - when it has a key, only for 5 minutes after the user chooses
-  **Settings → Pair with Home Assistant** on the panel itself.
+  **Settings → Pair** ("Pair with Home Assistant") on the panel itself.
 
 Otherwise it answers `pair_begin` with error `pairing_closed`. This stops another
 device on the network from silently re-pairing a panel that's already in use.
@@ -262,7 +262,8 @@ device on the network from silently re-pairing a panel that's already in use.
 - **H→P `unpair`** (request, encrypted session only): the panel deletes its
   key, answers, and closes. HA sends this when the user deletes the config
   entry, if the panel is reachable.
-- On the panel, **Settings → Forget Home Assistant** deletes the key. HA will
+- On the panel, **Settings → Forget**, once confirmed, deletes the key and
+  closes the connection. HA will
   then fail to authenticate and SHOULD start a re-pair flow (a repair issue).
 
 ## 7. Authentication and encryption

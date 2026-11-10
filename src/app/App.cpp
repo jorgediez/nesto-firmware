@@ -75,7 +75,10 @@ long free_ram_kb() {
 App::App(Hal& hal, AppOptions options)
     : hal_(hal),
       options_(std::move(options)),
-      controller_([this](const room::Intent& intent) { send_intent(intent); }) {}
+      controller_([this](const room::Intent& intent) { send_intent(intent); },
+                  room::SettingsActions{[this] { open_pairing(); },
+                                        [this] { forget_home_assistant(); },
+                                        [this] { return about(); }}) {}
 
 App::~App() {
   mdns_.reset();  // says goodbye on the network
@@ -224,6 +227,8 @@ void App::update_status() {
     text = "Connected";
   } else if (session) {
     text = "Connecting";
+  } else if (pairing_->paired() && pairing_->pairing_open(hal_.now())) {
+    text = "Pairing open";
   } else if (pairing_->paired()) {
     text = "Waiting for Home Assistant";
   } else {
@@ -249,6 +254,33 @@ void App::send_intent(const room::Intent& intent) {
                                {"key", intent.key},
                                {"action", intent.action},
                                {"args", intent.args}});
+}
+
+void App::open_pairing() {
+  if (!pairing_->paired()) {
+    ui_->show_toast("Ready to pair");
+    return;
+  }
+  pairing_->open_pairing_window(hal_.now());
+  log::info("pairing opened for five minutes");
+  ui_->show_toast("Pairing open for 5 minutes");
+  update_status();
+}
+
+void App::forget_home_assistant() {
+  pairing_->forget();
+  server_->close_all("the panel forgot Home Assistant");
+  log::info("forgot Home Assistant");
+  ui_->show_toast("Home Assistant forgotten");
+  update_status();
+}
+
+std::vector<std::string> App::about() const {
+  const std::string ip = net::primary_ipv4();
+  return {std::string("Nesto ") + NESTO_VERSION,
+          "Panel " + info_.panel_id,
+          ip.empty() ? "No network" : ip + ":" + std::to_string(options_.port),
+          pairing_->paired() ? "Paired" : "Not paired"};
 }
 
 void App::on_pairing_code(const std::string& code) {

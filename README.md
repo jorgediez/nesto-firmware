@@ -11,8 +11,9 @@ integration, which discovers the panel, pairs with it and decides what it shows.
 
 > **Status: early development.** In the simulator, the panel pairs with Home
 > Assistant and controls a room's lights, climate, covers, switches and scenes
-> from the layout Home Assistant sends, on plain screens for now. The finished
-> look, the Settings menu and the thermostat itself come next. The wire protocol
+> from the layout Home Assistant sends, on plain screens for now, with a
+> Settings menu to pair again or forget Home Assistant. The finished look and the
+> thermostat itself come next. The wire protocol
 > between the panel and Home Assistant is in [PROTOCOL.md](PROTOCOL.md).
 
 ## Development
@@ -51,8 +52,16 @@ controls (brightness, colour, effect...), and hold to go back. On the home
 screen, a press switches a switch or runs a scene, and holding switches a light.
 The demo carries out each change as Home Assistant would and prints it.
 
-The pairing is kept in the build volume, so it survives restarts. To start
-over, delete `/build/sim-state` from a `scripts/dev.sh shell`.
+The pairing is kept in the build volume, so it survives restarts. **Settings**,
+the last entry on the home screen (or a press on the waiting screen), has:
+
+- **Pair**: lets Home Assistant pair again for 5 minutes, for instance after
+  `client.key` is lost or to move to another Home Assistant;
+- **Forget**: after a confirming press, forgets Home Assistant and drops the
+  connection (holding cancels);
+- **About**: version, panel ID, address and whether it's paired.
+
+Hold to go back from any of them.
 
 Screens can also be captured without a window. CI does this against the demo
 room, and keeps the screenshots:

@@ -32,6 +32,9 @@ SCREENS = {
     "climate": f"{SETTLE} r+2 p r+2 w2500",
     "climate-mode": f"{SETTLE} r+2 p p w300",
     "cover": f"{SETTLE} r+3 p r-2 w2500",
+    "settings": f"{SETTLE} r+7 p w300",
+    "settings-forget": f"{SETTLE} r+7 p r+1 p w300",
+    "settings-about": f"{SETTLE} r+7 p r+2 p w300",
 }
 
 

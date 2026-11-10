@@ -11,6 +11,7 @@ add_executable(nesto_tests
   test_png.cpp
   test_press_gestures.cpp
   test_room.cpp
+  test_settings.cpp
 )
 target_link_libraries(nesto_tests PRIVATE nesto_core nesto_protocol nesto_net nesto_room doctest::doctest)
 target_compile_definitions(nesto_tests PRIVATE

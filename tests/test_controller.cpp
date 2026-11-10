@@ -75,7 +75,7 @@ TEST_CASE("the home screen lists every item with its state") {
   const RoomView v = f.view();
   CHECK(v.screen == RoomView::Screen::Home);
   CHECK(v.title == "Living room");
-  REQUIRE(v.entries.size() == 7);
+  REQUIRE(v.entries.size() == 8);  // the items, then Settings
   CHECK(v.entries[0].summary == "On - 50%");
   CHECK(v.entries[1].summary == "20.5C - set to 21.0C");
   CHECK(v.entries[2].summary == "Open - 40%");
@@ -95,7 +95,7 @@ TEST_CASE("turning the ring on the home screen moves the selection, within the l
   f.rotate(2);
   CHECK(f.view().selected == 2);
   f.rotate(20);
-  CHECK(f.view().selected == 6);
+  CHECK(f.view().selected == 7);  // Settings, after the items
   f.rotate(-20);
   CHECK(f.view().selected == 0);
   CHECK(f.sent.empty());
