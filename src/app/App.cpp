@@ -49,6 +49,9 @@ void log_lvgl(lv_log_level_t level, const char* message) {
 // How often the status line is recomputed, which includes looking up the IP.
 constexpr Millis kStatusInterval = 500;
 
+// Intents whose results are still awaited; older ones are forgotten.
+constexpr std::size_t kMaxOpenIntents = 64;
+
 /// Free memory in KiB from /proc/meminfo. Linux 2.6.37 has no MemAvailable, so
 /// this adds free memory and the caches the kernel can drop.
 long free_ram_kb() {
@@ -69,7 +72,10 @@ long free_ram_kb() {
 
 }  // namespace
 
-App::App(Hal& hal, AppOptions options) : hal_(hal), options_(std::move(options)) {}
+App::App(Hal& hal, AppOptions options)
+    : hal_(hal),
+      options_(std::move(options)),
+      controller_([this](const room::Intent& intent) { send_intent(intent); }) {}
 
 App::~App() {
   mdns_.reset();  // says goodbye on the network
@@ -101,7 +107,7 @@ bool App::init() {
   lv_display_set_user_data(display_, this);
   lv_display_set_flush_cb(display_, &App::flush);
 
-  ui_ = std::make_unique<Ui>(NESTO_VERSION);
+  ui_ = std::make_unique<Ui>();
   hal_.set_backlight(100);
 
   info_.panel_id = options_.panel_id.empty() ? net::panel_id_from_mac() : options_.panel_id;
@@ -154,6 +160,13 @@ int App::run() {
     for (const TimedInput& input : inputs) handle(input);
     handle(gestures_.tick(hal_.now()));
     if (hal_.now() - status_checked_ >= kStatusInterval) update_status();
+
+    controller_.tick(hal_.now());
+    if (controller_.version() != rendered_version_) {
+      rendered_version_ = controller_.version();
+      ui_->render(controller_.view());
+    }
+    if (auto message = controller_.take_message()) ui_->show_toast(*message);
   }
   log::info("stopping");
   return exit_code_;
@@ -174,7 +187,7 @@ void App::handle(const TimedInput& input) {
       [&](const auto& event) {
         using T = std::decay_t<decltype(event)>;
         if constexpr (std::is_same_v<T, RingTurn>) {
-          ui_->rotate(event.steps);
+          controller_.rotate(event.steps, input.at);
         } else if constexpr (std::is_same_v<T, ButtonEdge>) {
           handle(event.down ? gestures_.on_down(input.at, press_context())
                             : gestures_.on_up(input.at));
@@ -191,8 +204,8 @@ void App::handle(const std::vector<GestureEvent>& gestures) {
     // Reported to Home Assistant as an `input` event once the connection exists.
     log::info("gesture %s (%s)", name(g.gesture), name(g.context));
     if (g.context != PressContext::Ui) continue;
-    if (g.gesture == Gesture::Single) ui_->select();
-    if (g.gesture == Gesture::Long) ui_->back();
+    if (g.gesture == Gesture::Single) controller_.press(hal_.now());
+    if (g.gesture == Gesture::Long) controller_.long_press(hal_.now());
   }
 }
 
@@ -220,6 +233,22 @@ void App::update_status() {
     status_ = text;
     ui_->set_status(text);
   }
+  controller_.set_connected(session && session->ready());
+}
+
+void App::send_intent(const room::Intent& intent) {
+  protocol::PanelSession* session = server_ ? server_->active() : nullptr;
+  if (!session || !session->ready()) return;
+  // Results come back with this id; only failures matter (section 11).
+  const std::uint32_t id = next_request_id_++;
+  if (next_request_id_ == 0) next_request_id_ = 1;
+  intent_requests_[id] = intent.key;
+  if (intent_requests_.size() > kMaxOpenIntents) intent_requests_.erase(intent_requests_.begin());
+  session->send(protocol::Json{{"t", "intent"},
+                               {"id", id},
+                               {"key", intent.key},
+                               {"action", intent.action},
+                               {"args", intent.args}});
 }
 
 void App::on_pairing_code(const std::string& code) {
@@ -274,9 +303,31 @@ bool App::on_message(protocol::PanelSession& session, const protocol::Message& m
                                        "rebooting comes with the device support"));
     return true;
   }
-  // Synchronisation messages are accepted; the screens built from them come
-  // in a later version.
-  return m.type == "time" || m.type == "config" || m.type == "layout" || m.type == "states";
+  if (m.type == "layout") {
+    std::string error;
+    if (!controller_.apply_layout(m.body, error)) log::warn("ignoring a bad layout: %s", error.c_str());
+    return true;
+  }
+  if (m.type == "states") {
+    controller_.apply_states(m.body);
+    return true;
+  }
+  if (m.type == "result") {
+    const auto it = intent_requests_.find(m.body.value("re", 0u));
+    if (it != intent_requests_.end()) {
+      if (!m.body.value("ok", false)) {
+        const auto& error = m.body.value("error", protocol::Json::object());
+        log::warn("intent for %s failed: %s", it->second.c_str(),
+                  error.value("message", std::string("unknown error")).c_str());
+        controller_.intent_failed(it->second);
+      }
+      intent_requests_.erase(it);
+    }
+    return true;
+  }
+  // Time and config are accepted; the clock and display settings that use
+  // them come in a later version.
+  return m.type == "time" || m.type == "config";
 }
 
 PressContext App::press_context() const {

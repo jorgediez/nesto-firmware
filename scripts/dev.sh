@@ -11,6 +11,8 @@
 #   scripts/dev.sh vectors                regenerate the protocol test vectors from tools/
 #   scripts/dev.sh sim [options]          open the simulator window (WSLg or X11), port 6170
 #   scripts/dev.sh client pair|connect    talk to the running simulator as Home Assistant would
+#   scripts/dev.sh client demo            serve a made-up room to the running simulator
+#   scripts/dev.sh screens DIR [options]  screenshots of every screen against the demo room
 #   scripts/dev.sh shot FILE "STEPS"      play STEPS headless, save the screen to FILE
 #   scripts/dev.sh shot-arm FILE "STEPS"  the same with the ARM build, under QEMU
 #   scripts/dev.sh shell                  a shell in the container
@@ -108,6 +110,10 @@ case "${1:-}" in
     EXTRA_ARGS=(--add-host=host.docker.internal:host-gateway)
     run python3 /src/tools/nesto_client.py host.docker.internal --key-file /build/client.key "$@"
     ;;
+  screens)
+    shift
+    run python3 /src/tools/screens.py "$@"
+    ;;
   shot)
     if [ $# -lt 3 ]; then
       echo "usage: scripts/dev.sh shot FILE \"STEPS\"" >&2
@@ -126,7 +132,7 @@ case "${1:-}" in
     run bash
     ;;
   *)
-    sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac

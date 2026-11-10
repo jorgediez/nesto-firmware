@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -9,6 +10,7 @@
 #include "hal/Hal.hpp"
 #include "lvgl.h"
 #include "protocol/PanelSession.hpp"
+#include "room/Controller.hpp"
 
 namespace nesto {
 
@@ -50,6 +52,7 @@ class App : private protocol::SessionEvents {
   void handle(const std::vector<GestureEvent>& gestures);
   PressContext press_context() const;
   void update_status();
+  void send_intent(const room::Intent& intent);
 
   // protocol::SessionEvents
   void on_pairing_code(const std::string& code) override;
@@ -72,6 +75,11 @@ class App : private protocol::SessionEvents {
   std::unique_ptr<net::MdnsResponder> mdns_;
   std::string status_;
   Millis status_checked_ = 0;
+
+  room::Controller controller_;
+  unsigned rendered_version_ = 0;
+  std::map<std::uint32_t, std::string> intent_requests_;  // request id to item key
+  std::uint32_t next_request_id_ = 1;
 
   bool quit_ = false;
   int exit_code_ = 0;
