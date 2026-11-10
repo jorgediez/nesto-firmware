@@ -128,12 +128,14 @@ backplate, and whether its 2.6.37 kernel runs our programs. Root it with
 unfr0zen and run the check, as [docs/DEVICE.md](docs/DEVICE.md) explains:
 
 ```bash
-scripts/dev.sh device-check <nest-ip>   # the report goes to device-reports/
-scripts/dev.sh check-report             # run the report script in busybox, as CI does
+scripts/dev.sh device-check <nest-ip>          # the report goes to device-reports/
+scripts/dev.sh device-screen <nest-ip> trial   # stop the stock software for 5 minutes, watch, restart it
+scripts/dev.sh check-report                    # run the device scripts in busybox, as CI does
 ```
 
 `nesto-probe` (`src/probe/`), the check's program, is built with the rest and
-tested natively and under QEMU.
+tested natively and under QEMU. What a real thermostat showed is in
+[docs/DEVICE.md](docs/DEVICE.md).
 
 ### Fonts and icons
 
