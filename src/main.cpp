@@ -36,8 +36,13 @@ void print_usage(const char* program) {
       "  --screenshot FILE   save the screen as PNG after the script, then quit\n");
 #endif
   std::printf(
+      "  --port N            TCP port for Home Assistant (default 6170)\n"
+      "  --state-dir DIR     where the pairing key is kept (default %s)\n"
+      "  --panel-id ID       panel ID instead of the network interface's MAC address\n"
+      "  --no-mdns           don't announce the panel on the network\n"
       "  --version           print the version and exit\n"
-      "  --help              print this and exit\n");
+      "  --help              print this and exit\n",
+      default_state_dir().c_str());
 }
 
 }  // namespace
@@ -71,6 +76,10 @@ int main(int argc, char** argv) {
     }
     if (arg == "--state-dir" && has_value) {
       app_options.state_dir = argv[++i];
+      continue;
+    }
+    if (arg == "--no-mdns") {
+      app_options.mdns = false;
       continue;
     }
     if (arg == "--panel-id" && has_value) {

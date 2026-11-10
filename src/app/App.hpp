@@ -13,6 +13,7 @@
 namespace nesto {
 
 namespace net {
+class MdnsResponder;
 class Server;
 }
 
@@ -22,6 +23,7 @@ struct AppOptions {
   std::uint16_t port = 6170;  // PROTOCOL.md section 2
   std::string state_dir;      // where the pairing key is kept
   std::string panel_id;       // empty: the network interface's MAC address
+  bool mdns = true;           // announce the panel for Home Assistant's discovery
 };
 
 /// Ties the hardware, LVGL, the screens and the connection to Home Assistant
@@ -67,6 +69,7 @@ class App : private protocol::SessionEvents {
   protocol::PanelInfo info_;
   std::unique_ptr<protocol::PairingState> pairing_;
   std::unique_ptr<net::Server> server_;
+  std::unique_ptr<net::MdnsResponder> mdns_;
   std::string status_;
   Millis status_checked_ = 0;
 

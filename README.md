@@ -31,8 +31,12 @@ scripts/dev.sh sim     # open the simulator
 In the simulator, the mouse wheel or arrow keys turn the ring, and the left
 mouse button, Space or Enter press the display. Escape quits.
 
-The simulator listens for Home Assistant on port 6170. Until the integration
-exists, `tools/nesto_client.py` stands in for it. With the simulator running:
+The simulator listens for Home Assistant on port 6170 and announces itself over
+mDNS as a `_nesto._tcp` service, which is how Home Assistant discovers it
+(`--no-mdns` turns that off). In Docker, the announcements stay inside Docker's
+network, so from outside the panel is reached by address. Until the
+integration exists, `tools/nesto_client.py` stands in for it. With the
+simulator running:
 
 ```bash
 scripts/dev.sh client pair      # type the code the simulator shows
@@ -60,7 +64,7 @@ The steps are `r+N`/`r-N` (turn the ring), `p` (press), `h` (long press) and
 | `src/hal/` | The hardware interface, with the simulator (`sim/`) and the thermostat (`nest/`) |
 | `src/app/` | The main loop and the screens, built with [LVGL](https://lvgl.io) |
 | `tests/` | Unit tests ([doctest](https://github.com/doctest/doctest)) |
-| `tests/e2e/` | End-to-end tests: the real panel program against the Python client, over TCP |
+| `tests/e2e/` | End-to-end tests: the real panel program against the Python client over TCP, and against python-zeroconf for discovery |
 | `tools/` | The protocol's Python reference implementation, a client that stands in for Home Assistant, and the test vector generator |
 
 ### Protocol test vectors
@@ -94,8 +98,8 @@ they match the native ones pixel for pixel.
 
 The statically linked program includes musl (MIT) and GCC's runtime libraries
 (GPL with the GCC Runtime Library Exception), which allow this. The other
-libraries built into it are LVGL (MIT), Monocypher (BSD-2-Clause or CC0) and
-nlohmann/json (MIT).
+libraries built into it are LVGL (MIT), Monocypher (BSD-2-Clause or CC0),
+nlohmann/json (MIT) and mdns (public domain).
 
 ## Not affiliated
 
