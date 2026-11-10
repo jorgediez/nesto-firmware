@@ -25,13 +25,16 @@
 #define LV_LOG_LEVEL LV_LOG_LEVEL_WARN
 #define LV_LOG_PRINTF 0
 
-/* Built-in fonts cover ASCII only. Spanish and Esperanto letters need a
- * generated font, added with the localised texts. */
+/* Text and icons are TrueType fonts drawn at runtime (see app/Fonts.cpp), so
+ * any size and every letter the embedded fonts carry are available. Each size
+ * caches the glyphs it has drawn. */
+#define LV_USE_TINY_TTF 1
+#define LV_TINY_TTF_FILE_SUPPORT 0
+#define LV_TINY_TTF_CACHE_GLYPH_CNT 256
+
+/* One small built-in font, only as a last resort if the embedded ones fail. */
 #define LV_FONT_MONTSERRAT_14 1
-#define LV_FONT_MONTSERRAT_20 1
-#define LV_FONT_MONTSERRAT_28 1
-#define LV_FONT_MONTSERRAT_48 1
-#define LV_FONT_DEFAULT &lv_font_montserrat_20
+#define LV_FONT_DEFAULT &lv_font_montserrat_14
 
 /* No drivers from LVGL: Nesto's own hardware layer feeds LVGL. */
 #define LV_USE_SDL 0

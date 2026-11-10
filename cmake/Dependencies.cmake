@@ -59,6 +59,41 @@ endif()
 add_library(mdns INTERFACE)
 target_include_directories(mdns SYSTEM INTERFACE ${mdns_SOURCE_DIR})
 
+# Fonts, cut down and embedded by tools/make_fonts.py, which needs Python with
+# fontTools (in the dev image):
+# - Montserrat (SIL Open Font License 1.1), for text;
+# - Material Design Icons (Apache License 2.0), the icons Home Assistant uses.
+FetchContent_Declare(montserrat
+  URL https://raw.githubusercontent.com/JulietaUla/Montserrat/v9.000/fonts/ttf/Montserrat-Medium.ttf
+  URL_HASH SHA256=c888ea70fdceef0d05752266472a940aeb86692a7bdf8f2211380587418ca223
+  DOWNLOAD_NO_EXTRACT TRUE
+)
+FetchContent_MakeAvailable(montserrat)
+FetchContent_Declare(mdi
+  URL https://registry.npmjs.org/@mdi/font/-/font-7.4.47.tgz
+  URL_HASH SHA256=66131558352dc8df724feac30f3b7bf7ee7311a79e4f8436f3637c0993edb773
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_GetProperties(mdi)
+if(NOT mdi_POPULATED)
+  FetchContent_Populate(mdi)  # only two of its files are used
+endif()
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(NESTO_FONT_SOURCE ${CMAKE_BINARY_DIR}/generated/FontData.cpp)
+add_custom_command(
+  OUTPUT ${NESTO_FONT_SOURCE}
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/generated
+  COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/make_fonts.py
+          ${montserrat_SOURCE_DIR}/Montserrat-Medium.ttf
+          ${mdi_SOURCE_DIR}/fonts/materialdesignicons-webfont.ttf
+          ${mdi_SOURCE_DIR}/scss/_variables.scss
+          ${NESTO_FONT_SOURCE}
+  DEPENDS ${PROJECT_SOURCE_DIR}/tools/make_fonts.py
+  COMMENT "Cutting down and embedding the fonts"
+  VERBATIM
+)
+
 # SDL2 (zlib licence): only for the simulator's window, and optional there.
 if(NESTO_PLATFORM STREQUAL "sim")
   find_package(PkgConfig QUIET)

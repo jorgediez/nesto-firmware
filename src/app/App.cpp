@@ -84,6 +84,7 @@ App::~App() {
   mdns_.reset();  // says goodbye on the network
   server_.reset();
   ui_.reset();
+  fonts_.destroy();
   if (display_) {
     lv_display_delete(display_);
     lv_deinit();
@@ -110,7 +111,8 @@ bool App::init() {
   lv_display_set_user_data(display_, this);
   lv_display_set_flush_cb(display_, &App::flush);
 
-  ui_ = std::make_unique<Ui>();
+  fonts_ = Fonts::load();
+  ui_ = std::make_unique<Ui>(fonts_);
   hal_.set_backlight(100);
 
   info_.panel_id = options_.panel_id.empty() ? net::panel_id_from_mac() : options_.panel_id;
