@@ -45,6 +45,18 @@ add_library(nesto_core STATIC
 target_include_directories(nesto_core PUBLIC src)
 nesto_target_options(nesto_core)
 
+# The wire protocol with Home Assistant (PROTOCOL.md): framing, messages,
+# pairing and encryption. Also free of hardware and LVGL.
+add_library(nesto_protocol STATIC
+  src/protocol/Bytes.cpp
+  src/protocol/Crypto.cpp
+  src/protocol/Frame.cpp
+  src/protocol/Message.cpp
+)
+target_include_directories(nesto_protocol PUBLIC src)
+target_link_libraries(nesto_protocol PUBLIC monocypher nlohmann_json::nlohmann_json)
+nesto_target_options(nesto_protocol)
+
 set(NESTO_SOURCES
   src/main.cpp
   src/app/App.cpp

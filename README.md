@@ -43,9 +43,23 @@ The steps are `r+N`/`r-N` (turn the ring), `p` (press), `h` (long press) and
 | Path | What's there |
 |---|---|
 | `src/core/` | Logic with no hardware or LVGL dependency, covered by unit tests |
+| `src/protocol/` | The link to Home Assistant: framing, messages, pairing and encryption ([PROTOCOL.md](PROTOCOL.md)) |
 | `src/hal/` | The hardware interface, with the simulator (`sim/`) and the thermostat (`nest/`) |
 | `src/app/` | The main loop and the screens, built with [LVGL](https://lvgl.io) |
 | `tests/` | Unit tests ([doctest](https://github.com/doctest/doctest)) |
+| `tools/` | The protocol's Python reference implementation and the test vector generator |
+
+### Protocol test vectors
+
+`tests/vectors/protocol-v1.json` holds pairing codes, keys, MACs and encrypted
+frames computed by the Python reference in `tools/`. The panel's tests check
+its own results against them, and the Home Assistant integration does the same,
+so both sides agree byte for byte. After changing the protocol's cryptography,
+regenerate the file and commit it; CI fails if it's stale.
+
+```bash
+scripts/dev.sh vectors
+```
 
 ### The thermostat's program
 
@@ -65,7 +79,9 @@ there. `scripts/dev.sh shot-arm` takes screenshots with that build; CI checks
 they match the native ones pixel for pixel.
 
 The statically linked program includes musl (MIT) and GCC's runtime libraries
-(GPL with the GCC Runtime Library Exception), which allow this.
+(GPL with the GCC Runtime Library Exception), which allow this. The other
+libraries built into it are LVGL (MIT), Monocypher (BSD-2-Clause or CC0) and
+nlohmann/json (MIT).
 
 ## Not affiliated
 

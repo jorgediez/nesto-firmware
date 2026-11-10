@@ -223,6 +223,10 @@ device on the network from silently re-pairing a panel that's already in use.
    {"t": "result", "re": 1, "ok": true, "pub": "<panel's ephemeral public key, base64>"}
    ```
 
+   If `S` is all zeros, the other side sent a low-order point: the panel
+   answers with error `bad_request` and closes, and HA likewise aborts if it
+   computes an all-zero `S` from the panel's key.
+
 3. HA computes the same `S` and `code`. Its config flow asks the user to type
    the code shown on the panel. If it doesn't match, HA sends `pair_cancel`
    (event) and closes the connection. The panel keeps the code on screen for up
@@ -327,6 +331,21 @@ hardware MUST NOT include this mode.
 | Randomness | `/dev/urandom` | `secrets` |
 
 SHA-512 is used throughout because Monocypher provides it but not SHA-256.
+
+Monocypher's incremental AEAD interface re-keys itself after each message, so
+only the first message after `crypto_aead_init_ietf` matches RFC 8439. The
+panel therefore initialises a fresh context for every frame, with that frame's
+nonce.
+
+### 7.6 Reference implementation and test vectors
+
+`tools/nesto_protocol.py` implements sections 3, 6 and 7 in Python, and
+`tools/make_vectors.py` generates `tests/vectors/protocol-v1.json` from it:
+fixed keys and nonces with the resulting pairing code, keys, MACs and encrypted
+frames, plus RFC 8439's own example. The panel's tests check against that file,
+and Home Assistant's side checks against the same file, so the two agree byte
+for byte. CI regenerates the file and fails if it differs from the committed
+one.
 
 ## 8. Synchronisation
 

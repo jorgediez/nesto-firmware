@@ -23,6 +23,19 @@ jobs:
       - name: Build the dev image
         run: scripts/dev.sh image
 
+      - name: Lint the Python reference implementation
+        run: |
+          pipx run ruff check tools/
+          pipx run ruff format --check tools/
+
+      - name: Check the protocol test vectors match the Python reference
+        run: |
+          scripts/dev.sh vectors
+          if ! git diff --exit-code -- tests/vectors; then
+            echo "::error::tests/vectors is out of date: run scripts/dev.sh vectors and commit the result"
+            exit 1
+          fi
+
       - name: Build the simulator, the thermostat's program and the tests
         run: scripts/dev.sh build
 
