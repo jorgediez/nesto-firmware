@@ -7,6 +7,7 @@
 #   scripts/dev.sh test                   run the unit tests, natively and on emulated ARM
 #   scripts/dev.sh check-arm              check the ARM programs can run on the thermostat
 #   scripts/dev.sh dist                   copy the thermostat's program, stripped, to dist/nesto
+#   scripts/dev.sh vectors                regenerate the protocol test vectors from tools/
 #   scripts/dev.sh sim [options]          open the simulator window (WSLg or X11)
 #   scripts/dev.sh shot FILE "STEPS"      play STEPS headless, save the screen to FILE
 #   scripts/dev.sh shot-arm FILE "STEPS"  the same with the ARM build, under QEMU
@@ -72,6 +73,9 @@ case "${1:-}" in
       "$NESTO_ARM_TOOLCHAIN/bin/arm-buildroot-linux-musleabihf-strip" -o /src/dist/nesto /build/nest/nesto
       echo "dist/nesto: $(( $(stat -c %s /src/dist/nesto) / 1024 )) KiB"'
     ;;
+  vectors)
+    run python3 /src/tools/make_vectors.py /src/tests/vectors/protocol-v1.json
+    ;;
   sim)
     shift
     if [ -d /mnt/wslg ]; then
@@ -102,7 +106,7 @@ case "${1:-}" in
     run bash
     ;;
   *)
-    sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac

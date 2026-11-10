@@ -18,6 +18,32 @@ FetchContent_Declare(lvgl
 )
 FetchContent_MakeAvailable(lvgl)
 
+# Monocypher (BSD-2-Clause or CC0): X25519, ChaCha20-Poly1305 and, from its
+# optional part, SHA-512, HMAC and HKDF. It has no CMake build of its own.
+FetchContent_Declare(monocypher
+  URL https://github.com/LoupVaillant/Monocypher/archive/refs/tags/4.0.3.tar.gz
+  URL_HASH SHA256=a7cbae546fbdc489bca632c3747e1ceb8ca3d4bd39e2706a0916f28ccd280e50
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_MakeAvailable(monocypher)
+add_library(monocypher STATIC
+  ${monocypher_SOURCE_DIR}/src/monocypher.c
+  ${monocypher_SOURCE_DIR}/src/optional/monocypher-ed25519.c
+)
+target_include_directories(monocypher SYSTEM PUBLIC
+  ${monocypher_SOURCE_DIR}/src
+  ${monocypher_SOURCE_DIR}/src/optional
+)
+
+# nlohmann/json (MIT): the protocol's messages.
+FetchContent_Declare(nlohmann_json
+  URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+  URL_HASH SHA256=42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+set(JSON_Install OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(nlohmann_json)
+
 # SDL2 (zlib licence): only for the simulator's window, and optional there.
 if(NESTO_PLATFORM STREQUAL "sim")
   find_package(PkgConfig QUIET)

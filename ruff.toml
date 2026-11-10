@@ -1,0 +1,6 @@
+# The Python in tools/: the protocol's reference implementation and vector generator.
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B"]

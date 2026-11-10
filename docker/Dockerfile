@@ -12,6 +12,8 @@ RUN apt-get update \
         libsdl2-dev \
         ninja-build \
         pkg-config \
+        python3 \
+        python3-cryptography \
         qemu-user \
         xz-utils \
     && rm -rf /var/lib/apt/lists/*
