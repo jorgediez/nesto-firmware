@@ -83,6 +83,7 @@ The steps are `r+N`/`r-N` (turn the ring), `p` (press), `h` (long press) and
 | `src/room/` | The room: Home Assistant's layout and states, and what the ring and press do with them |
 | `src/hal/` | The hardware interface, with the simulator (`sim/`) and the thermostat (`nest/`) |
 | `src/app/` | The main loop and the screens, built with [LVGL](https://lvgl.io) |
+| `src/probe/` | `nesto-probe`, the read-only check of a real thermostat ([docs/DEVICE.md](docs/DEVICE.md)) |
 | `tests/` | Unit tests ([doctest](https://github.com/doctest/doctest)) |
 | `tests/e2e/` | End-to-end tests: the real panel program against the Python client over TCP, and against python-zeroconf for discovery |
 | `tools/` | The protocol's Python reference implementation, a client that stands in for Home Assistant, and the test vector generator |
@@ -101,14 +102,14 @@ scripts/dev.sh vectors
 
 ### The thermostat's program
 
-The thermostat has an ARM Cortex-A8 and a C library from 2011, so its program is
+The thermostat has an ARM Cortex-A8 and glibc 2.19, from 2014, so its program is
 cross-compiled with a [Bootlin](https://toolchains.bootlin.com) toolchain (GCC
 and musl) and linked fully statically: it needs nothing from the device. The
 toolchain comes with the dev image; `cmake/toolchain-nest.cmake` sets it up.
 
 ```bash
 scripts/dev.sh check-arm   # static, 32-bit ARM, no instructions the Cortex-A8 lacks
-scripts/dev.sh dist        # the stripped program, in dist/nesto
+scripts/dev.sh dist        # the stripped programs, in dist/nesto and dist/nesto-probe
 ```
 
 The simulator and the tests are also built for ARM and run under QEMU emulating
@@ -118,6 +119,21 @@ they match the native ones pixel for pixel.
 
 Everything built into the program, its version and licence, is listed in
 [THIRD_PARTY.md](THIRD_PARTY.md).
+
+### Checking a real thermostat
+
+Before Nesto runs on a thermostat, a read-only check describes it: what runs
+the stock software, the watchdog, Wi-Fi, the screen, the ring and the
+backplate, and whether its 2.6.37 kernel runs our programs. Root it with
+unfr0zen and run the check, as [docs/DEVICE.md](docs/DEVICE.md) explains:
+
+```bash
+scripts/dev.sh device-check <nest-ip>   # the report goes to device-reports/
+scripts/dev.sh check-report             # run the report script in busybox, as CI does
+```
+
+`nesto-probe` (`src/probe/`), the check's program, is built with the rest and
+tested natively and under QEMU.
 
 ### Fonts and icons
 

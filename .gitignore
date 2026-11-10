@@ -7,3 +7,4 @@ build-*/
 screenshots/
 dist/
 __pycache__/
+device-reports/
