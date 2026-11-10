@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "app/Fonts.hpp"
 #include "core/PressGestures.hpp"
 #include "hal/Hal.hpp"
 #include "lvgl.h"
@@ -70,6 +71,7 @@ class App : private protocol::SessionEvents {
   std::vector<std::uint32_t> framebuffer_;
   lv_display_t* display_ = nullptr;
   PressGestures gestures_;
+  Fonts fonts_;
   std::unique_ptr<Ui> ui_;
 
   protocol::PanelInfo info_;

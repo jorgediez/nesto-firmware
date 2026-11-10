@@ -52,9 +52,10 @@ double fraction_of(double value, double lo, double hi) {
   return hi > lo ? std::clamp((value - lo) / (hi - lo), 0.0, 1.0) : -1;
 }
 
-// The Settings menu, in order: short names for the list, and what each does,
-// shown below it.
+// The Settings menu, in order: short names for the list, what each does
+// (shown below it), and icons.
 const char* const kSettings[] = {"Pair", "Forget", "About"};
+const char* const kSettingsIcons[] = {"pair", "forget", "info"};
 const char* const kSettingsSummaries[] = {"Pair with Home Assistant", "Forget Home Assistant",
                                           "Version and address"};
 constexpr int kSettingsCount = 3;
@@ -155,6 +156,43 @@ std::string summary(const Item& item, const ItemState& s) {
       return item.unit.empty() ? s.value : s.value + " " + item.unit;
   }
   return "";
+}
+
+Tone tone_for(const Item& item, const ItemState& s) {
+  if (!s.available) return Tone::Off;
+  switch (item.kind) {
+    case Kind::Light:
+      return s.on ? Tone::Light : Tone::Off;
+    case Kind::Switch:
+      return s.on ? Tone::Active : Tone::Off;
+    case Kind::Climate: {
+      const std::string action = s.hvac_action.value_or("");
+      if (action == "heating" || action == "preheating") return Tone::Heat;
+      if (action == "cooling") return Tone::Cool;
+      if (s.hvac_mode == "off" || action == "off") return Tone::Off;
+      if (s.hvac_mode == "heat") return Tone::Heat;
+      if (s.hvac_mode == "cool") return Tone::Cool;
+      return Tone::Neutral;
+    }
+    case Kind::Cover:
+      return s.cover_state == "closed" ? Tone::Off : Tone::Active;
+    case Kind::Scene:
+    case Kind::Sensor:
+      return Tone::Neutral;
+  }
+  return Tone::Neutral;
+}
+
+const char* default_icon(Kind kind) {
+  switch (kind) {
+    case Kind::Light: return "lightbulb";
+    case Kind::Switch: return "switch";
+    case Kind::Scene: return "scene";
+    case Kind::Climate: return "thermostat";
+    case Kind::Cover: return "blind";
+    case Kind::Sensor: return "sensor";
+  }
+  return "unknown";
 }
 
 Controller::Controller(Send send, SettingsActions actions)
@@ -567,7 +605,8 @@ RoomView Controller::view() const {
     case RoomView::Screen::Settings:
       v.title = "Settings";
       for (int i = 0; i < kSettingsCount; ++i) {
-        v.entries.push_back({kSettings[i], kSettingsSummaries[i], true});
+        v.entries.push_back({kSettings[i], kSettingsSummaries[i], true, kSettingsIcons[i],
+                             "settings", Tone::Neutral});
       }
       v.selected = setting_;
       return v;
@@ -591,15 +630,21 @@ RoomView Controller::view() const {
   v.selected = selected_;
   for (const Item& item : room_.layout().items) {
     const ItemState s = shown(item.key);
-    v.entries.push_back({item.name, summary(item, s), s.available});
+    const char* fallback = default_icon(item.kind);
+    v.entries.push_back({item.name, summary(item, s), s.available,
+                         item.icon.empty() ? fallback : item.icon, fallback, tone_for(item, s)});
   }
-  v.entries.push_back({"Settings", "Pairing and about", true});
+  v.entries.push_back({"Settings", "Pairing and about", true, "settings", "settings",
+                       Tone::Neutral});
 
   const Item* item = open_item();
   if (!item) return v;
   const ItemState s = shown(item->key);
   const auto controls = controls_for(*item);
   v.item_name = item->name;
+  v.default_icon = default_icon(item->kind);
+  v.icon = item->icon.empty() ? v.default_icon : item->icon;
+  v.tone = tone_for(*item, s);
   v.available = s.available;
   v.control_count = static_cast<int>(controls.size());
   v.control_index = control_;

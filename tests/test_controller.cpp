@@ -400,3 +400,58 @@ TEST_CASE("controls follow the features") {
   CHECK(controls_for(*room.find("c1")) ==
         std::vector<Control>{Control::Target, Control::HvacMode, Control::Preset});
 }
+
+TEST_CASE("tones follow what an item is doing") {
+  std::string error;
+  Room room;
+  REQUIRE(room.apply_layout(layout(), error));
+  const Item& light = *room.find("l1");
+  const Item& climate = *room.find("c1");
+  const Item& cover = *room.find("v1");
+
+  ItemState s;
+  s.on = true;
+  CHECK(tone_for(light, s) == Tone::Light);
+  s.on = false;
+  CHECK(tone_for(light, s) == Tone::Off);
+  s.available = false;
+  s.on = true;
+  CHECK(tone_for(light, s) == Tone::Off);
+
+  ItemState c;
+  c.hvac_mode = "heat";
+  c.hvac_action = "idle";
+  CHECK(tone_for(climate, c) == Tone::Heat);
+  c.hvac_action = "cooling";
+  CHECK(tone_for(climate, c) == Tone::Cool);
+  c.hvac_mode = "off";
+  c.hvac_action = "off";
+  CHECK(tone_for(climate, c) == Tone::Off);
+  c.hvac_mode = "auto";
+  c.hvac_action.reset();
+  CHECK(tone_for(climate, c) == Tone::Neutral);
+
+  ItemState v;
+  v.cover_state = "closed";
+  CHECK(tone_for(cover, v) == Tone::Off);
+  v.cover_state = "opening";
+  CHECK(tone_for(cover, v) == Tone::Active);
+}
+
+TEST_CASE("entries carry Home Assistant's icon, or the kind's") {
+  Fixture f;
+  const RoomView v = f.view();
+  CHECK(v.entries[0].icon == "lightbulb");  // none in the layout: the kind's default
+  CHECK(v.entries[0].default_icon == "lightbulb");
+  CHECK(v.entries[1].icon == "thermostat");
+  CHECK(v.entries.back().icon == "settings");
+  CHECK(v.entries[0].tone == Tone::Light);
+  CHECK(v.entries[4].tone == Tone::Off);  // the fan is off
+
+  std::string error;
+  REQUIRE(f.controller.apply_layout(
+      Json::parse(R"({"rev":2,"items":[{"key":"l1","kind":"light","name":"Lamp","icon":"lamp"}]})"),
+      error));
+  CHECK(f.view().entries[0].icon == "lamp");
+  CHECK(f.view().entries[0].default_icon == "lightbulb");
+}

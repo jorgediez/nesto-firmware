@@ -11,10 +11,10 @@ integration, which discovers the panel, pairs with it and decides what it shows.
 
 > **Status: early development.** In the simulator, the panel pairs with Home
 > Assistant and controls a room's lights, climate, covers, switches and scenes
-> from the layout Home Assistant sends, on plain screens for now, with a
-> Settings menu to pair again or forget Home Assistant. The finished look and the
-> thermostat itself come next. The wire protocol
-> between the panel and Home Assistant is in [PROTOCOL.md](PROTOCOL.md).
+> from the layout Home Assistant sends, with icons and colours for what each is
+> doing, and a Settings menu to pair again or forget Home Assistant. Running on
+> the thermostat itself comes next. The wire protocol between the panel and Home
+> Assistant is in [PROTOCOL.md](PROTOCOL.md).
 
 ## Development
 
@@ -116,10 +116,17 @@ a Cortex-A8, so the code runs on the thermostat's instruction set before it gets
 there. `scripts/dev.sh shot-arm` takes screenshots with that build; CI checks
 they match the native ones pixel for pixel.
 
-The statically linked program includes musl (MIT) and GCC's runtime libraries
-(GPL with the GCC Runtime Library Exception), which allow this. The other
-libraries built into it are LVGL (MIT), Monocypher (BSD-2-Clause or CC0),
-nlohmann/json (MIT) and mdns (public domain).
+Everything built into the program, its version and licence, is listed in
+[THIRD_PARTY.md](THIRD_PARTY.md).
+
+### Fonts and icons
+
+Text is Montserrat and icons are Material Design Icons, the set Home Assistant
+uses, so an icon name from Home Assistant needs no translation. At build time
+`tools/make_fonts.py` cuts both down to what the panel draws (Latin-1 and Latin
+Extended-A for text, which cover Spanish and Esperanto, and about 30 icons) and
+embeds them; LVGL draws them at runtime at any size. To add an icon, add it to
+`ICONS` in that script and to PROTOCOL.md appendix C.
 
 ## Not affiliated
 

@@ -35,6 +35,21 @@ std::vector<Control> controls_for(const Item& item);
 /// A short description of an item's state, for the home screen.
 std::string summary(const Item& item, const ItemState& state);
 
+/// What colour an item's state is drawn in.
+enum class Tone {
+  Off,      // off, closed, unavailable
+  Neutral,  // nothing to signal: scenes, sensors, idle climate, menus
+  Light,    // a light that's on
+  Heat,     // climate heating, or set to heat
+  Cool,     // climate cooling, or set to cool
+  Active,   // a switch that's on, an open cover
+};
+
+Tone tone_for(const Item& item, const ItemState& state);
+
+/// The icon an item gets when Home Assistant sends none (PROTOCOL.md appendix C).
+const char* default_icon(Kind kind);
+
 /// An `intent` for Home Assistant (PROTOCOL.md section 11), without its id.
 struct Intent {
   std::string key;
@@ -49,6 +64,9 @@ struct RoomView {
     std::string name;
     std::string summary;
     bool available = true;
+    std::string icon;          // as Home Assistant named it, or the kind's default
+    std::string default_icon;  // if the panel has no icon by that name
+    Tone tone = Tone::Neutral;
   };
 
   Screen screen = Screen::Empty;
@@ -61,6 +79,9 @@ struct RoomView {
 
   // Item; also the question on Confirm
   std::string item_name;
+  std::string icon;
+  std::string default_icon;
+  Tone tone = Tone::Neutral;
   std::string control;  // what the ring changes, e.g. "Brightness"
   std::string value;    // its value, e.g. "60%"
   double fraction = -1;  // 0 to 1 for a gauge; negative for none

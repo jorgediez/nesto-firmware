@@ -1,19 +1,23 @@
 #pragma once
 
 #include <string>
-#include <vector>
 
+#include "app/Fonts.hpp"
 #include "lvgl.h"
 #include "room/Controller.hpp"
 
 namespace nesto {
 
-/// The screens, drawn from the room controller's view. This first version is
-/// plain: the home list with each item's state, and an item's control with its
-/// value on the arc. Icons, colours and the Settings menu come next.
+/// The screens, drawn from the room controller's view.
+///
+/// Home and Settings show one entry at a time, in the middle: its icon, name
+/// and state, coloured by what it's doing, with the entries before and after it
+/// dimmed above and below, and the arc showing where it is in the list. An
+/// item's screen shows what the ring changes and its value, with the arc as a
+/// gauge.
 class Ui {
  public:
-  Ui();
+  explicit Ui(const Fonts& fonts);
   ~Ui();
 
   Ui(const Ui&) = delete;
@@ -33,20 +37,28 @@ class Ui {
   void hide_pairing_code();
 
  private:
+  void render_list(const room::RoomView& view);
   void update_footer();
   static void hide_toast(lv_timer_t* timer);
 
+  const Fonts& fonts_;
   room::RoomView view_;
   std::string status_text_;
-  std::vector<std::string> roller_names_;
 
   lv_obj_t* arc_ = nullptr;
   lv_obj_t* title_ = nullptr;
-  lv_obj_t* roller_ = nullptr;
-  lv_obj_t* centre_ = nullptr;   // a message when there's nothing to list
-  lv_obj_t* control_ = nullptr;  // item screen: what the ring changes
-  lv_obj_t* value_ = nullptr;    // item screen: its value
-  lv_obj_t* footer_ = nullptr;   // status, the selected item's state, or the page
+  // Home and Settings
+  lv_obj_t* previous_ = nullptr;
+  lv_obj_t* icon_ = nullptr;
+  lv_obj_t* name_ = nullptr;
+  lv_obj_t* summary_ = nullptr;
+  lv_obj_t* next_ = nullptr;
+  // An item
+  lv_obj_t* control_ = nullptr;
+  lv_obj_t* value_ = nullptr;
+  // Waiting, a question, About
+  lv_obj_t* centre_ = nullptr;
+  lv_obj_t* footer_ = nullptr;
   lv_obj_t* toast_ = nullptr;
   lv_timer_t* toast_timer_ = nullptr;
   lv_obj_t* pairing_ = nullptr;

@@ -35,7 +35,26 @@ SCREENS = {
     "settings": f"{SETTLE} r+7 p w300",
     "settings-forget": f"{SETTLE} r+7 p r+1 p w300",
     "settings-about": f"{SETTLE} r+7 p r+2 p w300",
+    "accents": f"{SETTLE} r+1 w300",
 }
+
+# The "accents" screen gets a room of its own, named with letters beyond ASCII,
+# so the fonts' coverage shows: Spanish, Esperanto, the degree sign.
+ACCENTS = (
+    "Salón comedor",
+    [
+        {
+            "key": "a",
+            "kind": "light",
+            "name": "Lámpara del salón",
+            "icon": "lamp",
+            "features": {"brightness": True},
+        },
+        {"key": "b", "kind": "switch", "name": "Ĉambro ĝardeno"},
+        {"key": "c", "kind": "sensor", "name": "Ŝranko ŭ", "features": {"unit": "°C"}},
+    ],
+    {"a": {"on": True, "brightness": 35}, "b": {"on": True}, "c": {"value": "21,5"}},
+)
 
 
 def free_port() -> int:
@@ -44,7 +63,7 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
-async def serve_demo(port: int, process: subprocess.Popen) -> None:
+async def serve_demo(port: int, process: subprocess.Popen, accents: bool) -> None:
     """Pairs with the panel and serves the demo room until the panel exits."""
     for _ in range(100):
         try:
@@ -63,6 +82,10 @@ async def serve_demo(port: int, process: subprocess.Popen) -> None:
     client = await NestoClient.connect("127.0.0.1", port)
     await client.authenticate(key)
     try:
+        if accents:
+            await client.synchronise(*ACCENTS)
+            while True:
+                await client.receive()
         await DemoRoom().serve(client)
     except (asyncio.IncompleteReadError, ConnectionError):
         pass  # the panel saved its screenshot and quit
@@ -76,7 +99,7 @@ def take(name: str, script: str | None, out: Path, panel: list[str]) -> None:
         command += ["--script", script or "w1500", "--screenshot", str(out / f"{name}.png")]
         process = subprocess.Popen(command, stderr=subprocess.PIPE, text=True)
         if script:
-            asyncio.run(serve_demo(port, process))
+            asyncio.run(serve_demo(port, process, accents=name == "accents"))
         _, log = process.communicate(timeout=60)
     if process.returncode != 0:
         sys.exit(f"{name}: the panel failed:\n{log}")

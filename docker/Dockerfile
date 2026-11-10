@@ -14,6 +14,7 @@ RUN apt-get update \
         pkg-config \
         python3 \
         python3-cryptography \
+        python3-fonttools \
         python3-pytest \
         python3-zeroconf \
         qemu-user \
