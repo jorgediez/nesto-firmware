@@ -59,6 +59,16 @@ target_include_directories(nesto_protocol PUBLIC src)
 target_link_libraries(nesto_protocol PUBLIC nesto_core monocypher nlohmann_json::nlohmann_json)
 nesto_target_options(nesto_protocol)
 
+# The room: Home Assistant's layout and states, and what the ring and press do
+# with them (PROTOCOL.md sections 9 to 11 and 23). No LVGL, so fully testable.
+add_library(nesto_room STATIC
+  src/room/Controller.cpp
+  src/room/Room.cpp
+)
+target_include_directories(nesto_room PUBLIC src)
+target_link_libraries(nesto_room PUBLIC nesto_core nesto_protocol)
+nesto_target_options(nesto_room)
+
 # The network side: the server for Home Assistant and mDNS discovery. Linux
 # sockets, shared by the simulator and the thermostat.
 add_library(nesto_net STATIC
@@ -82,7 +92,7 @@ else()
 endif()
 
 add_executable(nesto ${NESTO_SOURCES})
-target_link_libraries(nesto PRIVATE nesto_core nesto_protocol nesto_net lvgl::lvgl)
+target_link_libraries(nesto PRIVATE nesto_core nesto_protocol nesto_net nesto_room lvgl::lvgl)
 nesto_target_options(nesto)
 target_compile_definitions(nesto PRIVATE
   NESTO_VERSION="${PROJECT_VERSION}"

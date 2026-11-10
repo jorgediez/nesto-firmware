@@ -42,6 +42,7 @@ class Panel:
         self._process: subprocess.Popen[str] | None = None
 
     def start(self) -> None:
+        """Starts the panel and waits until it listens."""
         command = shlex.split(os.environ.get("NESTO_PANEL_CMD", "/build/sim/nesto --headless"))
         command += ["--port", str(self.port), "--state-dir", str(self.state_dir)]
         command += ["--panel-id", PANEL_ID, *self.extra_args]

@@ -48,12 +48,9 @@ jobs:
       - name: Check the ARM programs can run on the thermostat
         run: scripts/dev.sh check-arm
 
-      - name: Take screenshots with the simulator
+      - name: Take screenshots against the demo room
         run: |
-          mkdir -p screenshots
-          scripts/dev.sh shot screenshots/home.png ""
-          scripts/dev.sh shot screenshots/turned.png "r+2"
-          scripts/dev.sh shot screenshots/pressed.png "r+2 p w100"
+          scripts/dev.sh screens screenshots
           for f in screenshots/*.png; do
             size="$(stat -c %s "$f")"
             if [ "$size" -lt 300000 ]; then
@@ -64,9 +61,10 @@ jobs:
 
       - name: Check the ARM build draws the same screen
         run: |
-          scripts/dev.sh shot-arm screenshots/pressed-arm.png "r+2 p w100"
-          if ! cmp -s screenshots/pressed.png screenshots/pressed-arm.png; then
-            echo "::error::The ARM build drew a different screen from the native one; compare pressed.png and pressed-arm.png"
+          scripts/dev.sh screens screenshots/arm --only light \
+            --panel "qemu-arm -cpu cortex-a8 /build/sim-arm/nesto"
+          if ! cmp -s screenshots/light.png screenshots/arm/light.png; then
+            echo "::error::The ARM build drew a different screen from the native one; compare light.png and arm/light.png"
             exit 1
           fi
 

@@ -9,9 +9,10 @@ Nesto ("nest" in Esperanto) is the software that runs on the thermostat. It
 works with the [ha-nesto](https://github.com/jorgediez/ha-nesto) Home Assistant
 integration, which discovers the panel, pairs with it and decides what it shows.
 
-> **Status: early development.** The simulator runs a demo screen and pairs and
-> talks with Home Assistant over the protocol; the screens built from Home
-> Assistant's layout, and the thermostat itself, come next. The wire protocol
+> **Status: early development.** In the simulator, the panel pairs with Home
+> Assistant and controls a room's lights, climate, covers, switches and scenes
+> from the layout Home Assistant sends, on plain screens for now. The finished
+> look, the Settings menu and the thermostat itself come next. The wire protocol
 > between the panel and Home Assistant is in [PROTOCOL.md](PROTOCOL.md).
 
 ## Development
@@ -40,16 +41,25 @@ simulator running:
 
 ```bash
 scripts/dev.sh client pair      # type the code the simulator shows
-scripts/dev.sh client connect   # authenticate, synchronise, print what the panel sends
+scripts/dev.sh client demo      # serve a made-up living room to the simulator
+scripts/dev.sh client connect   # or: authenticate, synchronise, print what the panel sends
 ```
+
+With `client demo` running, the simulator shows the room: turn the ring to
+choose an item, press to open it, turn to change it, press to step through its
+controls (brightness, colour, effect...), and hold to go back. On the home
+screen, a press switches a switch or runs a scene, and holding switches a light.
+The demo carries out each change as Home Assistant would and prints it.
 
 The pairing is kept in the build volume, so it survives restarts. To start
 over, delete `/build/sim-state` from a `scripts/dev.sh shell`.
 
-Screens can also be captured without a window, which is what CI does:
+Screens can also be captured without a window. CI does this against the demo
+room, and keeps the screenshots:
 
 ```bash
-scripts/dev.sh shot screenshots/home.png "r+2 p w100"
+scripts/dev.sh screens screenshots              # every screen, into screenshots/
+scripts/dev.sh shot screenshots/x.png "r+2 p"   # one screen, without Home Assistant
 ```
 
 The steps are `r+N`/`r-N` (turn the ring), `p` (press), `h` (long press) and
@@ -61,6 +71,7 @@ The steps are `r+N`/`r-N` (turn the ring), `p` (press), `h` (long press) and
 |---|---|
 | `src/core/` | Logic with no hardware or LVGL dependency, covered by unit tests |
 | `src/protocol/` | The link to Home Assistant: framing, messages, pairing and encryption ([PROTOCOL.md](PROTOCOL.md)) |
+| `src/room/` | The room: Home Assistant's layout and states, and what the ring and press do with them |
 | `src/hal/` | The hardware interface, with the simulator (`sim/`) and the thermostat (`nest/`) |
 | `src/app/` | The main loop and the screens, built with [LVGL](https://lvgl.io) |
 | `tests/` | Unit tests ([doctest](https://github.com/doctest/doctest)) |

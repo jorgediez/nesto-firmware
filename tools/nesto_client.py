@@ -9,7 +9,8 @@ end-to-end tests use it, and it is handy by hand against the simulator:
 
 `pair` asks for the code the panel shows and saves the key to a file
 (nesto.key by default); `connect` uses that key, synchronises, and prints what
-the panel sends until interrupted.
+the panel sends until interrupted; `demo` serves a made-up room, carrying out
+the panel's intents the way Home Assistant would, so the screens can be tried.
 """
 
 from __future__ import annotations
@@ -161,7 +162,12 @@ class NestoClient:
         self._to_panel = (to_panel, 0)
         self._from_panel = (from_panel, 0)
 
-    async def synchronise(self, title: str = "Test room") -> None:
+    async def synchronise(
+        self,
+        title: str = "Test room",
+        items: list[dict] | None = None,
+        states: dict[str, dict] | None = None,
+    ) -> None:
         """Sends the four synchronisation messages (section 8) and waits for ready."""
         now = datetime.now().astimezone()
         offset = now.utcoffset() or timedelta()
@@ -173,9 +179,140 @@ class NestoClient:
             }
         )
         await self.send({"t": "config"})
-        await self.send({"t": "layout", "rev": 1, "title": title, "items": []})
-        await self.send({"t": "states", "full": True, "items": {}})
+        await self.send({"t": "layout", "rev": 1, "title": title, "items": items or []})
+        await self.send({"t": "states", "full": True, "items": states or {}})
         await self.wait_for("ready")
+
+
+# A demo room ------------------------------------------------------------------
+
+DEMO_TITLE = "Living room"
+
+DEMO_ITEMS = [
+    {
+        "key": "l1",
+        "kind": "light",
+        "name": "Ceiling",
+        "features": {
+            "brightness": True,
+            "color_temp": {"min_k": 2200, "max_k": 6500},
+            "color": True,
+            "effects": ["Candle", "Fireplace", "Sunrise"],
+        },
+    },
+    {"key": "l2", "kind": "light", "name": "Floor lamp", "features": {"brightness": True}},
+    {
+        "key": "c1",
+        "kind": "climate",
+        "name": "Radiator",
+        "features": {
+            "target": "single",
+            "min": 5,
+            "max": 30,
+            "step": 0.5,
+            "unit": "\u00b0C",
+            "hvac_modes": ["off", "heat", "auto"],
+            "presets": ["eco", "comfort"],
+        },
+    },
+    {
+        "key": "v1",
+        "kind": "cover",
+        "name": "Window blind",
+        "features": {"open": True, "close": True, "stop": True, "position": True},
+    },
+    {"key": "s1", "kind": "scene", "name": "Film night"},
+    {"key": "w1", "kind": "switch", "name": "Fan"},
+    {"key": "t1", "kind": "sensor", "name": "CO2", "features": {"unit": "ppm"}},
+]
+
+DEMO_STATES = {
+    "l1": {"on": True, "brightness": 60, "color_temp_k": 2700, "hs": None, "effect": None},
+    "l2": {"on": False, "brightness": 0},
+    "c1": {"hvac_mode": "heat", "current": 20.5, "target": 21, "preset": "comfort"},
+    "v1": {"state": "open", "position": 40},
+    "s1": {},
+    "w1": {"on": False},
+    "t1": {"value": "612"},
+}
+
+
+class DemoRoom:
+    """Plays Home Assistant for a made-up room: carries out intents on its own
+    states and reports the changes, as the integration will."""
+
+    def __init__(self) -> None:
+        self.states = json.loads(json.dumps(DEMO_STATES))
+        self.intents: list[dict] = []
+        self.fail_actions: set[str] = set()  # actions to answer with an error, for tests
+        self.log = False
+
+    def apply(self, intent: dict) -> dict:
+        """Carries out an intent; returns the item's changed fields."""
+        key, action = intent["key"], intent["action"]
+        args = intent.get("args", {})
+        s = self.states[key]
+        before = dict(s)
+        if action == "turn_on":
+            s["on"] = True
+            s.update(args)
+            if not s.get("brightness"):
+                s["brightness"] = 100
+        elif action == "turn_off":
+            s["on"] = False
+        elif action == "toggle":
+            s["on"] = not s.get("on")
+        elif action == "set_target":
+            s["target"] = args["value"]
+        elif action == "set_range":
+            s["target_low"], s["target_high"] = args["low"], args["high"]
+        elif action == "set_hvac_mode":
+            s["hvac_mode"] = args["mode"]
+        elif action == "set_preset":
+            s["preset"] = args["preset"]
+        elif action == "set_fan_mode":
+            s["fan_mode"] = args["fan_mode"]
+        elif action in ("open", "close"):
+            s["state"] = "open" if action == "open" else "closed"
+            s["position"] = 100 if action == "open" else 0
+        elif action == "set_position":
+            s["position"] = args["position"]
+            s["state"] = "open" if args["position"] > 0 else "closed"
+        elif action == "set_tilt":
+            s["tilt"] = args["tilt"]
+        return {k: v for k, v in s.items() if before.get(k) != v}
+
+    async def serve(self, client: NestoClient, title: str = DEMO_TITLE) -> None:
+        """Synchronises the room, then answers intents until the connection ends."""
+        await client.synchronise(title, DEMO_ITEMS, self.states)
+
+        async def keep_alive() -> None:
+            while True:
+                await asyncio.sleep(20)
+                await client.send({"t": "ping", "seq": 0})
+
+        pinger = asyncio.create_task(keep_alive())
+        try:
+            while True:
+                message = await client.receive()
+                if message.get("t") != "intent":
+                    continue
+                self.intents.append(message)
+                if self.log:
+                    args = json.dumps(message.get("args", {}))
+                    print(f"{message['key']}: {message['action']} {args}", flush=True)
+                if message["action"] in self.fail_actions:
+                    error = {"code": "service_failed", "message": "the demo refused"}
+                    await client.send(
+                        {"t": "result", "re": message["id"], "ok": False, "error": error}
+                    )
+                    continue
+                changes = self.apply(message)
+                await client.send({"t": "result", "re": message["id"], "ok": True})
+                if changes:
+                    await client.send({"t": "states", "items": {message["key"]: changes}})
+        finally:
+            pinger.cancel()
 
 
 # Command line ---------------------------------------------------------------
@@ -201,8 +338,18 @@ async def _pair(args: argparse.Namespace) -> None:
     print(f"Paired. Key saved to {args.key_file}")
 
 
+def read_key(path: str) -> bytes:
+    try:
+        key = Path(path).read_bytes()
+    except FileNotFoundError:
+        raise PanelError(f"no key in {path}: pair first") from None
+    if len(key) != 32:
+        raise PanelError(f"{path} doesn't hold a pairing key: pair again")
+    return key
+
+
 async def _connect(args: argparse.Namespace) -> None:
-    key = Path(args.key_file).read_bytes()
+    key = read_key(args.key_file)
     client = await NestoClient.connect(args.host, args.port)
     await client.authenticate(key)
     await client.synchronise()
@@ -225,6 +372,19 @@ async def _connect(args: argparse.Namespace) -> None:
         await client.close()
 
 
+async def _demo(args: argparse.Namespace) -> None:
+    key = read_key(args.key_file)
+    client = await NestoClient.connect(args.host, args.port)
+    await client.authenticate(key)
+    room = DemoRoom()
+    room.log = True
+    print(f"Serving the demo room '{DEMO_TITLE}' to panel {client.hello['panel_id']}")
+    try:
+        await room.serve(client)
+    finally:
+        await client.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("host")
@@ -234,10 +394,14 @@ def main() -> None:
     pair = commands.add_parser("pair", help="pair and save the key")
     pair.add_argument("--yes", action="store_true", help="accept the code without asking")
     commands.add_parser("connect", help="authenticate, synchronise and print messages")
+    commands.add_parser("demo", help="serve a made-up room that answers the panel's intents")
     args = parser.parse_args()
+    run = {"pair": _pair, "connect": _connect, "demo": _demo}[args.command]
     try:
-        asyncio.run(_pair(args) if args.command == "pair" else _connect(args))
-    except (PanelError, ConnectionError, asyncio.IncompleteReadError) as error:
+        asyncio.run(run(args))
+    except asyncio.IncompleteReadError:
+        sys.exit("The panel closed the connection")
+    except (PanelError, ConnectionError) as error:
         sys.exit(f"Error: {error}")
     except KeyboardInterrupt:
         pass
