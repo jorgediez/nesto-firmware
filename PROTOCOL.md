@@ -523,7 +523,8 @@ The panel's display is always in one of three states:
 | `off` | Backlight off | HA's `display` command, or timeout when `standby.mode` is `"off"` | Ring or press if `wake_on_input_when_off`; HA's command; high-priority notification |
 
 In `off` and `standby`, the ring or press that wakes the panel only wakes it and
-is not passed on to the controls.
+is not passed on to the controls. A double press doesn't wake it; it is only
+reported to HA (section 17).
 
 **H→P `display`** (request) sets the state:
 
@@ -685,11 +686,19 @@ keeps going while HA is offline. That needs no protocol change.
 
 - `gesture` is `"single"`, `"double"` or `"long"`.
 - `context` is where it happened: `"ui"` (it also acted on the controls),
-  `"standby"` or `"off"` (it only woke the panel).
+  `"standby"` or `"off"`.
+- A double press is two presses within 350 ms. It is only recognised in
+  `standby` and `off`, never in `ui`, so `"double"` always comes with one of
+  those two contexts. It is purely an automation trigger: it doesn't wake the
+  panel, so an automation can, for example, turn off the room while the panel
+  stays asleep. A single or long press in `standby` or `off` wakes the panel as
+  section 13 describes.
+- In `ui`, presses are reported as `"single"` or `"long"` only, because
+  recognising a double press there would delay every single press (section 23).
 
 Ring turns are not reported; they would be too frequent and have no use as
 automation triggers. HA exposes gestures on an `event` entity so users can bind
-them to anything, for example a double press in standby to turn off the room.
+them to anything.
 
 ## 18. Maintenance messages
 
@@ -775,12 +784,12 @@ experience depend on them.
   turn, to stop the value jumping back while the user is still turning.
 - **Ring and press.** Turning moves the selection or changes the value. A single
   press opens an item or steps to its next control. A long press (over 800 ms)
-  goes back, or toggles on the home screen. A double press (two presses within
-  350 ms) toggles the selected item. Telling a single press from a double one
-  means a single press acts 350 ms late; if that feels slow on the device, the
-  double press may be dropped from the controls and kept only as an `input`
-  event. The exact controls are the firmware's choice; only gestures in
-  section 17 are visible to HA.
+  goes back, or toggles on the home screen. A single press acts as soon as it is
+  released: the controls don't use double presses, because telling one apart
+  would make every single press wait 350 ms. In `standby` and `off`, the panel
+  does wait those 350 ms, which costs nothing there, and reports a double
+  press to HA without waking (section 17). The exact controls are the
+  firmware's choice; only gestures in section 17 are visible to HA.
 - **Disconnected.** If HA disconnects, the panel shows a small "offline" mark,
   greys out all items and keeps the display-power logic and clock running from
   its stored `config`. It doesn't queue intents for later.
