@@ -122,9 +122,107 @@ the computer, and see unfr0zen's Advanced section for opening it.
 To put the thermostat back exactly as it was, restore the backup: in the app,
 Backups → Restore to unit, or `unfr0zen restore <the backup file>`.
 
-## What happens next
+## What a real thermostat showed
 
-The report decides how Nesto takes over the screen: probably by asking monit
-to stop watching `nlclient`, as unfr0zen's own Doom mode does, and what must
-keep running for Wi-Fi and the watchdog. Those findings go into this document
-and into the thermostat's hardware layer (`src/hal/nest/`).
+From the reports of a 2nd-generation Nest (model `Display-2.14`) rooted with
+unfr0zen, without integrations, with the cloud blocked:
+
+**System.** Linux 2.6.37 (rebuilt by unfr0zen), glibc 2.19, busybox 1.19.3,
+58 MB of RAM. `nesto-probe` passes every check: Nesto's static musl programs
+run, with NEON, the clocks, `/dev/urandom` and the protocol's cryptography
+all as on any other machine. `SO_REUSEPORT` doesn't exist, as expected;
+`SO_REUSEADDR` is enough.
+
+**Screen.** `/dev/fb0` (`omapfb`): 320×320 visible, 320×640 virtual (two
+pages, the second one showing), 32 bits per pixel, XRGB8888, 1280 bytes per
+line. The backlight is `/sys/class/backlight/3-0036`, from 0 to 120.
+
+**Input.**
+
+| Device | Name | What it is |
+|---|---|---|
+| `/dev/input/event0` | `pwm-beeper` | The beeper: sound events, so Nesto could click |
+| `/dev/input/event1` | `avago-adbs-a330` | The ring: an optical sensor, relative `REL_X` |
+| `/dev/input/event2` | `twl4030_pwrbutton` | The press: `KEY_POWER` (116) |
+
+The backplate is `/dev/ttyO2`.
+
+**Who holds them.** The stock program `nlclient` holds the screen, the ring,
+the press and the backplate, and uses about 20 MB of memory: roughly the
+budget Nesto gets in its place. It's started and stopped by
+`/etc/init.d/nestlabs` on monit's behalf.
+
+**What watches what.**
+
+- **monit** (5 s cycles) restarts `nlclient`, the Wi-Fi services and the
+  Nest daemons. For the whole system it reboots the thermostat when memory in
+  use stays over 41 MB for 25 s, or the 15-minute load average goes over 4.
+- **watchdogd** alone holds the hardware watchdog (`/dev/watchdog`, 60 s;
+  the kernel won't let it stop once started). It doesn't depend on
+  `nlclient`.
+- **nlheartbeatd** expects a heartbeat over D-Bus from `nlclient` and from
+  `connman` every 5 s, starting 10 s after they start. After 8 missed ones it
+  runs `/etc/init.d/nestlabs kill` (or `connman kill`). With `nlclient`
+  stopped on purpose, nothing follows: see the trial below.
+- **nlsleepd** turns on the processor's idle power saving; nothing suggests
+  it suspends the system.
+
+**Network.** `connmand` and `wpa_supplicant` keep Wi-Fi up, under monit,
+independently of `nlclient`. connman also answers DNS on `127.0.0.1:53`. UDP
+port 5353 is free (the stock mDNS daemon isn't running), and so is 6170.
+
+**Storage.** Every RAM file system, and `/media/data`, `/media/log`,
+`/media/system-config` and `/media/user-config`, are mounted `noexec`.
+Programs can run only from `/` (18 MB free) and `/media/scratch`, and every
+time `nlclient` starts, its init script empties `/media/scratch` of
+everything not named with a leading dot. So Nesto is installed on `/`.
+
+## Taking the screen over: the trial
+
+Before Nesto replaces `nlclient`, a supervised trial stops `nlclient` for a
+few minutes, watches what the rest of the system does, and starts it again:
+
+```bash
+scripts/dev.sh device-screen <nest-ip> trial      # 5 minutes; or: trial 600
+```
+
+It saves what it saw to `device-reports/screen-trial-*.txt`. While
+`nlclient` is stopped, the screen shows what `nlclient` drew as it stopped
+(white, with "the thermostat is restarting" in the thermostat's language),
+the ring and press do nothing, and the thermostat doesn't control the
+heating.
+
+Before stopping anything, the trial arms a timer on the thermostat that
+starts `nlclient` again two minutes after the trial should have ended, so
+the stock software comes back even if SSH drops. A reboot brings it back
+too: nothing is saved. The same script can be driven by hand:
+
+```bash
+scripts/dev.sh device-screen <nest-ip> status       # what runs, who holds the screen
+scripts/dev.sh device-screen <nest-ip> take 600      # stop nlclient for at most 600 s
+scripts/dev.sh device-screen <nest-ip> watch 120     # report every 15 s
+scripts/dev.sh device-screen <nest-ip> give          # start it again now
+```
+
+### What the trial showed
+
+Five minutes with `nlclient` stopped, on the thermostat above:
+
+- **No reboot, nothing escalated.** The uptime ran on throughout. monit kept
+  `nlclient` unwatched, `nlheartbeatd` kept running and logged nothing, and
+  `watchdogd` fed the hardware watchdog every 30 s as before.
+- **Wi-Fi and SSH stayed up** the whole time.
+- **The screen** stayed white with `nlclient`'s "restarting" message: it's
+  left in the framebuffer, and Nesto draws over it.
+- **Giving back works.** `monit monitor` and `monit start` brought
+  `nlclient` back within two seconds, and the thermostat's own screen with it.
+- **To keep an eye on:** `nlshutdownd`'s shutdown manager logs the battery
+  every 15 s (3.86 to 3.90 V, steady over the five minutes). With `nlclient`
+  stopped, nothing talks to the backplate, which is what charges the battery
+  from the base. Before Nesto runs for hours, check the battery holds up, or
+  have Nesto talk to the backplate.
+
+So Nesto can take the screen over the same way: monit stops watching
+`nlclient`, `nlclient` stops, and Nesto starts; giving back is the reverse.
+The ring, press and backlight above go into the thermostat's hardware layer
+(`src/hal/nest/`) next.

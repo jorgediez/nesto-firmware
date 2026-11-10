@@ -18,7 +18,9 @@
 #   scripts/dev.sh shell                  a shell in the container
 #   scripts/dev.sh device-check HOST [SSH OPTIONS]
 #                                         describe a rooted thermostat, read-only (docs/DEVICE.md)
-#   scripts/dev.sh check-report           run the device check's report script in busybox and dash
+#   scripts/dev.sh check-report           run the device scripts in busybox and dash
+#   scripts/dev.sh device-screen HOST status|take|give|watch|trial [SECONDS] [SSH OPTIONS]
+#                                         take the screen from the stock software, or give it back
 #
 # `build` makes three builds:
 #   /build/sim      the simulator for this machine, with sanitizers, and the tests
@@ -162,7 +164,40 @@ case "${1:-}" in
         exit 1
       fi
       echo "ok:   $sections sections, $(wc -l <<< "$out") lines"
+      # shellcheck disable=SC2086
+      if ! docker run --rm -v "$ROOT/scripts":/scripts:ro $shell -n /scripts/nest-screen.sh; then
+        echo "FAIL: nest-screen.sh doesn't parse in $shell" >&2
+        exit 1
+      fi
+      echo "ok:   nest-screen.sh parses"
     done
+    ;;
+  device-screen)
+    if [ $# -lt 3 ] || ! [[ "$3" =~ ^(status|take|give|watch|trial)$ ]]; then
+      echo "usage: scripts/dev.sh device-screen HOST status|take|give|watch|trial [SECONDS] [SSH OPTIONS]" >&2
+      exit 2
+    fi
+    host="$2"
+    action="$3"
+    shift 3
+    seconds=""
+    if [ $# -gt 0 ] && [[ "$1" =~ ^[0-9]+$ ]]; then
+      seconds="$1"
+      shift
+    fi
+    # The script goes into RAM first, so its give-back timer can run it after
+    # the session ends (scripts/nest-screen.sh).
+    remote="cat > /tmp/nesto-screen.sh && sh /tmp/nesto-screen.sh $action $seconds"
+    if [ "$action" = trial ]; then
+      mkdir -p "$ROOT/device-reports"
+      log="$ROOT/device-reports/screen-trial-$(date +%Y%m%d-%H%M%S).txt"
+      ssh -o ConnectTimeout=10 -o ServerAliveInterval=15 "$@" "root@$host" "$remote" \
+        < "$ROOT/scripts/nest-screen.sh" | tee "$log"
+      echo
+      echo "Saved to device-reports/$(basename "$log")."
+    else
+      ssh -o ConnectTimeout=10 "$@" "root@$host" "$remote" < "$ROOT/scripts/nest-screen.sh"
+    fi
     ;;
   device-check)
     if [ $# -lt 2 ]; then
@@ -198,7 +233,7 @@ case "${1:-}" in
     echo "read it before sharing it."
     ;;
   *)
-    sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac
