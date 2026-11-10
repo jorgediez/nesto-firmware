@@ -14,6 +14,16 @@
 
 namespace {
 
+std::string default_state_dir() {
+#if defined(NESTO_PLATFORM_SIM)
+  const char* home = std::getenv("HOME");
+  return std::string(home && *home ? home : ".") + "/.nesto";
+#else
+  // Where persistent storage lives on the thermostat is checked in Phase 2.
+  return "/var/lib/nesto";
+#endif
+}
+
 void print_usage(const char* program) {
   std::printf("Usage: %s [options]\n\n", program);
   std::printf("Nesto Panel %s: Home Assistant room panel for the Nest Learning Thermostat (2nd gen)\n\n",
@@ -33,6 +43,8 @@ void print_usage(const char* program) {
 }  // namespace
 
 int main(int argc, char** argv) {
+  nesto::AppOptions app_options;
+  app_options.state_dir = default_state_dir();
 #if defined(NESTO_PLATFORM_SIM)
   nesto::SimOptions options;
 #endif
@@ -47,6 +59,23 @@ int main(int argc, char** argv) {
     if (arg == "--version") {
       std::printf("%s\n", NESTO_VERSION);
       return EXIT_SUCCESS;
+    }
+    if (arg == "--port" && has_value) {
+      const long port = std::strtol(argv[++i], nullptr, 10);
+      if (port < 1 || port > 65535) {
+        std::fprintf(stderr, "--port must be between 1 and 65535\n");
+        return EXIT_FAILURE;
+      }
+      app_options.port = static_cast<std::uint16_t>(port);
+      continue;
+    }
+    if (arg == "--state-dir" && has_value) {
+      app_options.state_dir = argv[++i];
+      continue;
+    }
+    if (arg == "--panel-id" && has_value) {
+      app_options.panel_id = argv[++i];
+      continue;
     }
 #if defined(NESTO_PLATFORM_SIM)
     if (arg == "--headless") {
@@ -78,7 +107,7 @@ int main(int argc, char** argv) {
   auto hal = std::make_unique<nesto::NestHal>();
 #endif
 
-  nesto::App app(*hal);
+  nesto::App app(*hal, app_options);
   if (!app.init()) return EXIT_FAILURE;
   return app.run();
 }

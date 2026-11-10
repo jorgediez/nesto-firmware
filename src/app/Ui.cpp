@@ -58,7 +58,7 @@ Ui::Ui(std::string version)
   lv_obj_set_clickable(roller_, false);
 
   status_ = lv_label_create(screen);
-  lv_label_set_text(status_, ("Not paired - v" + version).c_str());
+  lv_label_set_text(status_, ("v" + version).c_str());
   lv_obj_set_style_text_font(status_, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(status_, kMuted, 0);
   lv_obj_align(status_, LV_ALIGN_BOTTOM_MID, 0, -58);
@@ -74,6 +74,31 @@ Ui::Ui(std::string version)
   // In the status line's place, which is hidden while the message shows.
   lv_obj_align(toast_, LV_ALIGN_BOTTOM_MID, 0, -52);
   lv_obj_set_hidden(toast_, true);
+
+  // The pairing screen covers everything while it's shown.
+  pairing_ = lv_obj_create(screen);
+  lv_obj_remove_style_all(pairing_);
+  lv_obj_set_size(pairing_, LV_PCT(100), LV_PCT(100));
+  lv_obj_set_style_bg_color(pairing_, kBackground, 0);
+  lv_obj_set_style_bg_opa(pairing_, LV_OPA_COVER, 0);
+
+  lv_obj_t* heading = lv_label_create(pairing_);
+  lv_label_set_text(heading, "Pairing code");
+  lv_obj_set_style_text_color(heading, kMuted, 0);
+  lv_obj_align(heading, LV_ALIGN_CENTER, 0, -58);
+
+  pairing_code_ = lv_label_create(pairing_);
+  lv_obj_set_style_text_font(pairing_code_, &lv_font_montserrat_48, 0);
+  lv_obj_set_style_text_color(pairing_code_, kAccent, 0);
+  lv_obj_align(pairing_code_, LV_ALIGN_CENTER, 0, 0);
+
+  lv_obj_t* hint = lv_label_create(pairing_);
+  lv_label_set_text(hint, "Enter it in\nHome Assistant");
+  lv_obj_set_style_text_font(hint, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_color(hint, kMuted, 0);
+  lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(hint, LV_ALIGN_CENTER, 0, 62);
+  lv_obj_set_hidden(pairing_, true);
 
   rotate(0);
 }
@@ -95,6 +120,21 @@ void Ui::select() {
 
 void Ui::back() {
   show_toast("Back");
+}
+
+void Ui::set_status(const std::string& text) {
+  lv_label_set_text(status_, text.c_str());
+}
+
+void Ui::show_pairing_code(const std::string& code) {
+  // Two groups of three digits read more easily than six in a row.
+  const std::string spaced = code.size() == 6 ? code.substr(0, 3) + " " + code.substr(3) : code;
+  lv_label_set_text(pairing_code_, spaced.c_str());
+  lv_obj_set_hidden(pairing_, false);
+}
+
+void Ui::hide_pairing_code() {
+  lv_obj_set_hidden(pairing_, true);
 }
 
 void Ui::show_toast(const std::string& text) {

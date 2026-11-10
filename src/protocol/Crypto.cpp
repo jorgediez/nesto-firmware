@@ -61,13 +61,17 @@ KeyPair key_pair_from_secret(const Key& secret) {
   return pair;
 }
 
+bool random_bytes(std::uint8_t* out, std::size_t size) {
+  std::FILE* f = std::fopen("/dev/urandom", "rb");
+  if (!f) return false;
+  const bool ok = std::fread(out, 1, size, f) == size;
+  std::fclose(f);
+  return ok;
+}
+
 std::optional<KeyPair> generate_key_pair() {
   Key secret{};
-  std::FILE* f = std::fopen("/dev/urandom", "rb");
-  if (!f) return std::nullopt;
-  const bool ok = std::fread(secret.data(), 1, secret.size(), f) == secret.size();
-  std::fclose(f);
-  if (!ok) return std::nullopt;
+  if (!random_bytes(secret.data(), secret.size())) return std::nullopt;
   KeyPair pair = key_pair_from_secret(secret);
   wipe(secret.data(), secret.size());
   return pair;

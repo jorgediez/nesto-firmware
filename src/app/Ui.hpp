@@ -22,8 +22,17 @@ class Ui {
   void select();  // single press
   void back();    // long press
 
- private:
+  /// The bottom line: connection state, address, version.
+  void set_status(const std::string& text);
+
+  /// A short message in place of the status line, for a moment.
   void show_toast(const std::string& text);
+
+  /// Full screen, over everything else, while Home Assistant pairs.
+  void show_pairing_code(const std::string& code);
+  void hide_pairing_code();
+
+ private:
   static void hide_toast(lv_timer_t* timer);
 
   std::vector<std::string> items_;
@@ -33,6 +42,8 @@ class Ui {
   lv_obj_t* status_ = nullptr;
   lv_obj_t* toast_ = nullptr;
   lv_timer_t* toast_timer_ = nullptr;
+  lv_obj_t* pairing_ = nullptr;
+  lv_obj_t* pairing_code_ = nullptr;
 };
 
 }  // namespace nesto
