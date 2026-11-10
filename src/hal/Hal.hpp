@@ -1,0 +1,36 @@
+#pragma once
+
+#include <cstdint>
+#include <vector>
+
+#include "core/Input.hpp"
+
+namespace nesto {
+
+/// The Nest's screen: 320x320 pixels, of which only the inscribed circle shows.
+constexpr int kScreenSize = 320;
+
+/// Everything Nesto needs from the hardware. The simulator and the thermostat
+/// each implement it; the rest of the program doesn't know which one it runs on.
+class Hal {
+ public:
+  virtual ~Hal() = default;
+
+  /// Opens the screen and inputs. Logs the reason and returns false on failure.
+  virtual bool init() = 0;
+
+  /// Milliseconds on a monotonic clock.
+  virtual Millis now() const = 0;
+
+  /// Waits up to `timeout` ms for input and appends what arrived to `out`.
+  /// Returns earlier as soon as there is something.
+  virtual void poll(std::vector<TimedInput>& out, Millis timeout) = 0;
+
+  /// Shows a full frame: kScreenSize x kScreenSize pixels in XRGB8888.
+  virtual void present(const std::uint32_t* pixels) = 0;
+
+  /// Sets the backlight, 0 (off) to 100.
+  virtual void set_backlight(int percent) = 0;
+};
+
+}  // namespace nesto

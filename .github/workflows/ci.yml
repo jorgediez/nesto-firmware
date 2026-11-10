@@ -1,0 +1,47 @@
+name: CI
+
+# Builds and tests in the same container scripts/dev.sh uses locally, then
+# drives the simulator headless and keeps its screenshots, so a pull request
+# shows what the screens look like.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the dev image
+        run: scripts/dev.sh image
+
+      - name: Build the simulator, the Nest target and the tests
+        run: scripts/dev.sh build
+
+      - name: Run the unit tests
+        run: scripts/dev.sh test
+
+      - name: Take screenshots with the simulator
+        run: |
+          mkdir -p screenshots
+          scripts/dev.sh shot screenshots/home.png ""
+          scripts/dev.sh shot screenshots/turned.png "r+2"
+          scripts/dev.sh shot screenshots/pressed.png "r+2 p w100"
+          for f in screenshots/*.png; do
+            size="$(stat -c %s "$f")"
+            if [ "$size" -lt 300000 ]; then
+              echo "::error::$f is only $size bytes"
+              exit 1
+            fi
+          done
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: screenshots
+          path: screenshots/
