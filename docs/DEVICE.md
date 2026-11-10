@@ -239,7 +239,8 @@ It builds Nesto for the thermostat, copies it to `/nesto/nesto` (`/` is
 where programs may run from and stay), takes the screen as the trial does,
 and runs Nesto with its log in your terminal, saved to
 `device-reports/run-*.txt`. Every 30 s it reports the memory in use, which
-monit holds under 41 MB, and Nesto's own share. Ctrl-C, the time running
+monit holds under 41 MB, Nesto's own share, and the battery (see
+[Long runs](#long-runs-and-the-battery)). Ctrl-C, the time running
 out, or SSH dropping stops Nesto and gives the screen back; the give-back
 timer, a minute longer, is there in case even that fails.
 
@@ -305,3 +306,39 @@ Nesto ran on the thermostat above in `nlclient`'s place:
 - **The ring's feel:** one step of 150 counts for everything (49 a turn)
   felt right overall; a little fine for moving between items, a little coarse
   for values such as brightness. Hence the ticks and clicks above.
+
+### Long runs and the battery
+
+The thermostat runs on its battery, which the base charges through the
+backplate, and the backplate is `nlclient`'s: with `nlclient` stopped,
+nothing may be charging it. There's no `/sys/class/power_supply` to ask, but
+`nlshutdownd`, which keeps running, logs the voltage every 15 s
+("shutdown-manager: batteryLevel @ 3.891" in `/var/log/messages`). So every
+run reports it, and gives the screen back as soon as it's under 3.70 V,
+letting `nlclient` charge again; a run doesn't start under it. The 3.70 V is
+a cautious guess, not a measured limit, and `nlshutdownd`'s own shutdown is
+still there below it.
+
+```bash
+scripts/dev.sh device-screen <nest-ip> battery     # the latest voltage
+```
+
+A run of hours shouldn't hang on an SSH session, so it can go on by itself:
+
+```bash
+scripts/dev.sh device-run <nest-ip> detach         # 4 hours; or: detach 28800
+scripts/dev.sh device-log <nest-ip> follow         # watch it (Ctrl-C stops watching only)
+scripts/dev.sh device-log <nest-ip>                # copy it to device-reports/
+scripts/dev.sh device-screen <nest-ip> give        # end it early
+```
+
+A detached run writes to `/media/data/nesto/run.log`, on the flash, so the
+log survives even a reboot (the uptime starting again shows one); the run
+before it is kept as `run.log.1`. It ends, like any run, with what it adds up
+to: the most memory in use, and the battery at the start, at its lowest and
+at the end.
+
+For the answer to mean something, the thermostat should be on its base, as
+it would hang; on USB it may charge whatever the backplate does. Nesto keeps
+the screen lit throughout, as it doesn't dim yet, so this is the heaviest
+drain to expect.
