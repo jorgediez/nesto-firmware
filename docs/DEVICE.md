@@ -276,3 +276,19 @@ or coarser, and `--ring-reverse` turns the direction round.
 The press is `KEY_POWER`, down and up, as expected. With `nlclient` stopped,
 the memory in use dropped from 24 MB to 15 MB, which leaves Nesto about
 26 MB under monit's limit.
+
+### What a run showed
+
+Nesto ran on the thermostat above in `nlclient`'s place:
+
+- **It paired** with the stand-in client over Wi-Fi, synchronised the demo
+  room, and the ring, press and long press drove it as in the simulator.
+- **Memory** in use stayed at 15 to 16 MB for the whole system, Nesto
+  included: far under monit's 41 MB.
+- **The screen.** `nlclient` doesn't always leave the same page showing (the
+  first check found the second, this run the first); Nesto draws into
+  whichever shows. It also left the backlight at 0, which Nesto turns up.
+- **Ctrl-C** stopped Nesto at once, and `nlclient` was back two seconds
+  later.
+- **The ring's feel:** 150 counts a step felt right overall; a little fine for
+  moving between items, a little coarse for values such as brightness.
