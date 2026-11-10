@@ -9,6 +9,7 @@
 
 #include "app/Ui.hpp"
 #include "core/Log.hpp"
+#include "net/Mdns.hpp"
 #include "net/NetInfo.hpp"
 #include "net/Server.hpp"
 
@@ -71,6 +72,7 @@ long free_ram_kb() {
 App::App(Hal& hal, AppOptions options) : hal_(hal), options_(std::move(options)) {}
 
 App::~App() {
+  mdns_.reset();  // says goodbye on the network
   server_.reset();
   ui_.reset();
   if (display_) {
@@ -125,6 +127,12 @@ bool App::init() {
                                           [this] { return hal_.now(); });
   if (!server_->start()) return false;
 
+  if (options_.mdns) {
+    mdns_ = std::make_unique<net::MdnsResponder>();
+    // Without discovery the panel still works; Home Assistant needs its address.
+    if (!mdns_->start()) mdns_.reset();
+  }
+
   log::info("Nesto %s started: panel %s, %s, state in %s", NESTO_VERSION, info_.panel_id.c_str(),
             pairing_->paired() ? "paired" : "not paired", options_.state_dir.c_str());
   update_status();
@@ -140,6 +148,7 @@ int App::run() {
     // The network waits; the hardware is only checked, so neither delays
     // the other by more than one loop.
     server_->poll(wait);
+    if (mdns_) mdns_->poll(hal_.now());
     inputs.clear();
     hal_.poll(inputs, 0);
     for (const TimedInput& input : inputs) handle(input);
@@ -189,6 +198,13 @@ void App::handle(const std::vector<GestureEvent>& gestures) {
 
 void App::update_status() {
   status_checked_ = hal_.now();
+  const std::string ip = net::primary_ipv4();
+  if (mdns_) {
+    mdns_->update(net::make_service(info_.panel_id, options_.port, info_.firmware, info_.model,
+                                    pairing_->paired()),
+                  ip, hal_.now());
+  }
+
   std::string text;
   const protocol::PanelSession* session = server_->active();
   if (session && session->ready()) {
@@ -198,7 +214,6 @@ void App::update_status() {
   } else if (pairing_->paired()) {
     text = "Waiting for Home Assistant";
   } else {
-    const std::string ip = net::primary_ipv4();
     text = ip.empty() ? "Not paired - no network" : "Not paired - " + ip;
   }
   if (text != status_) {

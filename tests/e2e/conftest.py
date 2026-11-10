@@ -34,8 +34,9 @@ def free_port() -> int:
 class Panel:
     """A panel process, with its log collected as it runs."""
 
-    def __init__(self, state_dir: Path) -> None:
+    def __init__(self, state_dir: Path, extra_args: list[str] | None = None) -> None:
         self.state_dir = state_dir
+        self.extra_args = extra_args or []
         self.port = free_port()
         self.lines: list[str] = []
         self._process: subprocess.Popen[str] | None = None
@@ -43,7 +44,7 @@ class Panel:
     def start(self) -> None:
         command = shlex.split(os.environ.get("NESTO_PANEL_CMD", "/build/sim/nesto --headless"))
         command += ["--port", str(self.port), "--state-dir", str(self.state_dir)]
-        command += ["--panel-id", PANEL_ID]
+        command += ["--panel-id", PANEL_ID, *self.extra_args]
         self.lines = []
         self._process = subprocess.Popen(
             command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True
