@@ -259,8 +259,18 @@ go to `ssh`.
 ### The ring
 
 The ring has no clicks or marks: its optical sensor reports movement in
-counts, many per step on the screen. Nesto adds them up
-(`src/core/RingSteps.hpp`). To see what the sensor reports:
+counts, much finer than anything on the screen. Nesto adds them up into
+ticks (`src/core/RingTicks.hpp`), and the screens use the ticks two ways
+(`src/room/Controller.hpp`):
+
+- **Smooth values** change with every tick: brightness, a cover's position
+  and tilt by 1%, colour temperature by 20 K, hue by 2 degrees.
+- **Everything else** moves a place per click of 5 ticks: the home screen,
+  Settings, lists of choices, switching, and climate targets (a half degree
+  a click, so a thermostat doesn't race away).
+
+In the simulator a wheel notch, an arrow key or a script's `r+1` is one
+click. To see what the thermostat's sensor reports:
 
 ```bash
 scripts/dev.sh device-run <nest-ip> input-test     # 2 minutes; Ctrl-C ends it earlier
@@ -270,8 +280,10 @@ The screen stays as `nlclient` left it while every event is printed. On the
 thermostat above, a turn clockwise (roughly one: with no mark it's hard to
 tell) added up to about 7300 counts, in events of 1 to 25 counts, all
 negative. So by default Nesto takes negative counts as clockwise, and makes a
-step of 150 counts: about 49 steps a turn. `--ring-counts` makes steps finer
-or coarser, and `--ring-reverse` turns the direction round.
+tick of 49 counts: about 150 ticks a turn. That's 30 items a turn, and
+brightness from 0 to 100% in two thirds of one. `--ring-counts` makes ticks
+finer (fewer counts) or coarser, and `--ring-reverse` turns the direction
+round.
 
 The press is `KEY_POWER`, down and up, as expected. With `nlclient` stopped,
 the memory in use dropped from 24 MB to 15 MB, which leaves Nesto about
@@ -290,5 +302,6 @@ Nesto ran on the thermostat above in `nlclient`'s place:
   whichever shows. It also left the backlight at 0, which Nesto turns up.
 - **Ctrl-C** stopped Nesto at once, and `nlclient` was back two seconds
   later.
-- **The ring's feel:** 150 counts a step felt right overall; a little fine for
-  moving between items, a little coarse for values such as brightness.
+- **The ring's feel:** one step of 150 counts for everything (49 a turn)
+  felt right overall; a little fine for moving between items, a little coarse
+  for values such as brightness. Hence the ticks and clicks above.

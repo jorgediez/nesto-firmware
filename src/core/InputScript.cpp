@@ -38,7 +38,7 @@ std::optional<InputScript> parse_input_script(std::string_view script, std::stri
     if (kind == 'r' && arg.size() >= 2 && (arg.front() == '+' || arg.front() == '-') &&
         parse_number(arg.substr(1), value) && value > 0) {
       const int steps = static_cast<int>(arg.front() == '-' ? -value : value);
-      out.events.push_back({t, RingTurn{steps}});
+      out.events.push_back({t, RingTurn{steps * kTicksPerClick}});
       t += kTurnTime;
     } else if ((kind == 'p' || kind == 'h') && arg.empty()) {
       out.events.push_back({t, ButtonEdge{true}});

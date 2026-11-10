@@ -146,7 +146,7 @@ void SimHal::poll_window(std::vector<TimedInput>& out) {
         // Scrolling down turns the ring clockwise.
         int steps = -e.wheel.y;
         if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) steps = -steps;
-        if (steps != 0) out.push_back({t, RingTurn{steps}});
+        if (steps != 0) out.push_back({t, RingTurn{steps * kTicksPerClick}});
         break;
       }
       case SDL_MOUSEBUTTONDOWN:
@@ -161,11 +161,11 @@ void SimHal::poll_window(std::vector<TimedInput>& out) {
         switch (e.key.keysym.sym) {
           case SDLK_RIGHT:
           case SDLK_DOWN:
-            if (down) out.push_back({t, RingTurn{1}});
+            if (down) out.push_back({t, RingTurn{kTicksPerClick}});
             break;
           case SDLK_LEFT:
           case SDLK_UP:
-            if (down) out.push_back({t, RingTurn{-1}});
+            if (down) out.push_back({t, RingTurn{-kTicksPerClick}});
             break;
           case SDLK_SPACE:
           case SDLK_RETURN:

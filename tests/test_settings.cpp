@@ -25,7 +25,8 @@ struct Menu {
         error));
     controller.set_connected(true);
   }
-  void rotate(int steps) { controller.rotate(steps, 0); }
+  // Whole clicks, as the simulator and scripts send them.
+  void rotate(int clicks) { controller.rotate(clicks * kTicksPerClick, 0); }
   void press() { controller.press(0); }
   void hold() { controller.long_press(0); }
   RoomView view() const { return controller.view(); }

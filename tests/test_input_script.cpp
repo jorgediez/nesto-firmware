@@ -20,9 +20,9 @@ TEST_CASE("steps run one after another with their own durations") {
   REQUIRE(e.size() == 6);
 
   CHECK(e[0].offset == 0);
-  CHECK(std::get<RingTurn>(e[0].event).steps == 2);
+  CHECK(std::get<RingTurn>(e[0].event).ticks == 2 * nesto::kTicksPerClick);
   CHECK(e[1].offset == 50);
-  CHECK(std::get<RingTurn>(e[1].event).steps == -1);
+  CHECK(std::get<RingTurn>(e[1].event).ticks == -nesto::kTicksPerClick);
 
   CHECK(e[2].offset == 100);  // press down
   CHECK(std::get<ButtonEdge>(e[2].event).down);

@@ -4,15 +4,16 @@
 #include <cstdint>
 #include <string>
 
-#include "core/RingSteps.hpp"
+#include "core/RingTicks.hpp"
 #include "hal/Hal.hpp"
 
 namespace nesto {
 
 struct NestOptions {
   // Measured on a real thermostat: about 7300 counts a turn, clockwise
-  // negative. 150 counts make about 49 steps a turn, one every 7 degrees.
-  RingSteps::Config ring{150, true};
+  // negative. 49 counts make about 150 ticks a turn: 30 clicks, so 30 items
+  // or choices a turn, and brightness from 0 to 100% in two thirds of one.
+  RingTicks::Config ring{49, true};
 };
 
 /// The thermostat (docs/DEVICE.md): the screen is /dev/fb0, the ring and the
@@ -37,7 +38,7 @@ class NestHal : public Hal {
   void present(const std::uint32_t* pixels) override;
   void set_backlight(int percent) override;
 
-  /// Prints the ring's and the press's raw events, and the steps the ring's
+  /// Prints the ring's and the press's raw events, and the ticks the ring's
   /// make, until interrupted: for measuring the ring. Leaves the screen and
   /// the backlight alone. Returns the exit code.
   int input_test();
@@ -51,7 +52,7 @@ class NestHal : public Hal {
   void read_inputs(std::vector<TimedInput>& out, bool verbose);
 
   NestOptions options_;
-  RingSteps ring_steps_;
+  RingTicks ring_ticks_;
   long ring_total_ = 0;  // raw counts since the start, for input_test()
 
   int fb_fd_ = -1;

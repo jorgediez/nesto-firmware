@@ -192,7 +192,7 @@ void App::handle(const TimedInput& input) {
       [&](const auto& event) {
         using T = std::decay_t<decltype(event)>;
         if constexpr (std::is_same_v<T, RingTurn>) {
-          controller_.rotate(event.steps, input.at);
+          controller_.rotate(event.ticks, input.at);
         } else if constexpr (std::is_same_v<T, ButtonEdge>) {
           handle(event.down ? gestures_.on_down(input.at, press_context())
                             : gestures_.on_up(input.at));

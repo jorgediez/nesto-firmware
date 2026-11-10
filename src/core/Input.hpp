@@ -8,9 +8,14 @@ namespace nesto {
 /// Milliseconds on a monotonic clock. Only differences are meaningful.
 using Millis = std::uint64_t;
 
-/// The ring turned by some steps: positive is clockwise.
+/// The ring turns in ticks, fine enough for smooth values such as
+/// brightness; lists move one place per click of kTicksPerClick ticks. The
+/// simulator's wheel notch, its arrow keys and a script's r+1 are one click.
+constexpr int kTicksPerClick = 5;
+
+/// The ring turned by some ticks: positive is clockwise.
 struct RingTurn {
-  int steps = 0;
+  int ticks = 0;
 };
 
 /// The display was pressed (the Nest's only button) or released.
