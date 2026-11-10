@@ -1,8 +1,10 @@
 name: CI
 
-# Builds and tests in the same container scripts/dev.sh uses locally, then
-# drives the simulator headless and keeps its screenshots, so a pull request
-# shows what the screens look like.
+# Builds and tests in the same container scripts/dev.sh uses locally: the
+# simulator for this machine, and the thermostat's ARM program, whose tests and
+# screens run under QEMU emulating the thermostat's Cortex-A8. Screenshots and
+# the ARM program are kept, so a pull request shows the screens and can be tried
+# on a device.
 on:
   push:
     branches: [main]
@@ -21,11 +23,14 @@ jobs:
       - name: Build the dev image
         run: scripts/dev.sh image
 
-      - name: Build the simulator, the Nest target and the tests
+      - name: Build the simulator, the thermostat's program and the tests
         run: scripts/dev.sh build
 
-      - name: Run the unit tests
+      - name: Run the unit tests, natively and on emulated ARM
         run: scripts/dev.sh test
+
+      - name: Check the ARM programs can run on the thermostat
+        run: scripts/dev.sh check-arm
 
       - name: Take screenshots with the simulator
         run: |
@@ -41,7 +46,23 @@ jobs:
             fi
           done
 
+      - name: Check the ARM build draws the same screen
+        run: |
+          scripts/dev.sh shot-arm screenshots/pressed-arm.png "r+2 p w100"
+          if ! cmp -s screenshots/pressed.png screenshots/pressed-arm.png; then
+            echo "::error::The ARM build drew a different screen from the native one; compare pressed.png and pressed-arm.png"
+            exit 1
+          fi
+
       - uses: actions/upload-artifact@v7
         with:
           name: screenshots
           path: screenshots/
+
+      - name: Strip the thermostat's program
+        run: scripts/dev.sh dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nesto-arm
+          path: dist/nesto
