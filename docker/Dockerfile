@@ -1,6 +1,6 @@
 # Build environment for the simulator, the thermostat and the tests: the same
 # tools locally (through scripts/dev.sh) and in CI.
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
