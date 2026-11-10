@@ -11,20 +11,24 @@
 #   nest-screen.sh watch SECONDS   report every 15 s for SECONDS: uptime,
 #                                  nlclient, the heartbeat, new syslog lines
 #   nest-screen.sh trial [SECONDS] take, watch for SECONDS (default 300), give
+#   nest-screen.sh run SECONDS [NESTO OPTIONS]
+#                                  take, run /nesto/nesto for at most SECONDS
+#                                  with its memory reported, give
 #
 # The stock program nlclient owns the screen, the ring, the press and the
 # backplate. monit restarts it if it stops, so taking it over means asking
 # monit to stop watching it first, as unfr0zen's own Doom mode does. While it's
 # stopped the thermostat doesn't control the heating.
 #
-# What nobody knows yet, and the trial finds out: nlheartbeatd expects a
-# heartbeat from nlclient every 5 s and runs "/etc/init.d/nestlabs kill" after
-# 8 missed ones. Does anything else happen after that, such as a reboot?
-#
 # Safety: "take" first arms a timer, detached from the SSH session, that gives
 # the screen back after SECONDS. If SSH drops, or anything goes wrong, the
 # stock software comes back on its own. A reboot brings it back too, since
 # nothing here is saved: monit watches nlclient again after every boot.
+# Giving back always stops Nesto first.
+#
+# While Nesto runs, monit still watches the whole system: memory in use over
+# 41 MB for 5 cycles (25 s) reboots the thermostat. "run" reports it every
+# 30 s, with Nesto's own share.
 
 MONIT=/usr/sbin/monit
 NESTLABS=/etc/init.d/nestlabs
@@ -33,6 +37,9 @@ NESTLABS=/etc/init.d/nestlabs
 SELF=/tmp/nesto-screen.sh
 TIMER_PID=/tmp/nesto-screen-timer.pid
 SYSLOG=/var/log/messages
+# Programs may only run from / and /media/scratch, and nlclient's start
+# empties the latter (docs/DEVICE.md).
+NESTO=/nesto/nesto
 
 say() {
   echo "[$(date +%H:%M:%S) up $(cut -d' ' -f1 /proc/uptime)s] $*"
@@ -40,6 +47,36 @@ say() {
 
 nlclient_pid() {
   pidof nlclient 2> /dev/null
+}
+
+nesto_pid() {
+  pidof nesto 2> /dev/null
+}
+
+# Memory in use as monit counts it, in KiB: what isn't free, buffers or cache.
+memory_used_kb() {
+  awk '/^MemTotal:/ {t = $2} /^(MemFree|Buffers|Cached):/ {f += $2} END {print t - f}' /proc/meminfo
+}
+
+# Memory report: the system against monit's limit, and Nesto's own share.
+memory() {
+  local rss="" nesto=""
+  [ -n "${1:-}" ] && rss="$(awk '/^VmRSS:/ {print $2}' "/proc/$1/status" 2> /dev/null)"
+  [ -n "$rss" ] && nesto="; Nesto $((rss / 1024)) MB"
+  say "memory in use $(( $(memory_used_kb) / 1024 )) MB (monit reboots above 41 MB)$nesto"
+}
+
+# Stops Nesto, if it runs: TERM, which it handles, then KILL after 5 s.
+stop_nesto() {
+  local pid i
+  pid="$(nesto_pid)" || return 0
+  say "stopping Nesto (pid $pid)"
+  kill $pid 2> /dev/null
+  for i in 1 2 3 4 5; do
+    nesto_pid > /dev/null || return 0
+    sleep 1
+  done
+  kill -9 $pid 2> /dev/null
 }
 
 monit_line() {
@@ -50,6 +87,8 @@ status() {
   say "nlclient: $(nlclient_pid > /dev/null && echo "running, pid $(nlclient_pid)" || echo stopped)"
   say "monit: $(monit_line nlclient)"
   say "monit: $(monit_line nlheartbeatd)"
+  nesto_pid > /dev/null && say "Nesto: running, pid $(nesto_pid)"
+  memory
   holder=""
   for fd in /proc/[0-9]*/fd/*; do
     case "$(readlink "$fd" 2> /dev/null)" in
@@ -105,6 +144,7 @@ take() {
 
 give() {
   cancel_timer
+  stop_nesto
   say "monit watches nlclient again, and starts it"
   "$MONIT" monitor nlclient
   "$MONIT" start nlclient
@@ -138,6 +178,36 @@ watch() {
   done
 }
 
+run() {
+  local seconds="$1" pid deadline reporter code
+  shift
+  if [ ! -x "$NESTO" ]; then
+    say "$NESTO isn't there"
+    return 1
+  fi
+  # The timer outlasts the run by a minute, in case this shell is killed.
+  take $((seconds + 60)) || return 1
+  "$NESTO" "$@" &
+  pid=$!
+  say "Nesto started (pid $pid), for at most $seconds s; Ctrl-C stops it"
+  # Ctrl-C, or the session ending, stops Nesto; giving back follows below.
+  trap 'kill $pid 2> /dev/null' INT TERM HUP
+  (sleep "$seconds" && say "time is up" && kill $pid 2> /dev/null) &
+  deadline=$!
+  (while sleep 30 && kill -0 $pid 2> /dev/null; do memory $pid; done) &
+  reporter=$!
+  # A signal ends "wait" early; wait again until Nesto has really gone.
+  code=0
+  while kill -0 $pid 2> /dev/null; do
+    wait $pid
+    code=$?
+  done
+  trap - INT TERM HUP
+  kill $deadline $reporter 2> /dev/null
+  say "Nesto ended (exit code $code)"
+  give
+}
+
 case "${1:-}" in
   status)
     status
@@ -166,8 +236,19 @@ case "${1:-}" in
     give
     status
     ;;
+  run)
+    if ! [ "${2:-}" -gt 0 ] 2> /dev/null; then
+      echo "usage: nest-screen.sh run SECONDS [NESTO OPTIONS]" >&2
+      exit 2
+    fi
+    run_seconds="$2"
+    shift 2
+    status
+    run "$run_seconds" "$@"
+    status
+    ;;
   *)
-    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac

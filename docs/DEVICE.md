@@ -224,5 +224,49 @@ Five minutes with `nlclient` stopped, on the thermostat above:
 
 So Nesto can take the screen over the same way: monit stops watching
 `nlclient`, `nlclient` stops, and Nesto starts; giving back is the reverse.
-The ring, press and backlight above go into the thermostat's hardware layer
-(`src/hal/nest/`) next.
+
+## Running Nesto on the thermostat
+
+The thermostat's hardware layer (`src/hal/nest/`) draws on `/dev/fb0`, reads
+the ring and the press from the input devices named above (it finds them by
+name, and keeps their events to itself), and sets the backlight. To try it:
+
+```bash
+scripts/dev.sh device-run <nest-ip>                # 10 minutes; or: device-run <nest-ip> 1800
+```
+
+It builds Nesto for the thermostat, copies it to `/nesto/nesto` (`/` is
+where programs may run from and stay), takes the screen as the trial does,
+and runs Nesto with its log in your terminal, saved to
+`device-reports/run-*.txt`. Every 30 s it reports the memory in use, which
+monit holds under 41 MB, and Nesto's own share. Ctrl-C, the time running
+out, or SSH dropping stops Nesto and gives the screen back; the give-back
+timer, a minute longer, is there in case even that fails.
+
+Nesto keeps its pairing in `/media/data/nesto`, which survives reboots. While
+it runs, pair it from another terminal, typing the code the thermostat shows,
+and serve it the demo room:
+
+```bash
+scripts/dev.sh client --host <nest-ip> pair
+scripts/dev.sh client --host <nest-ip> demo
+```
+
+Options after `--` go to Nesto, for instance
+`scripts/dev.sh device-run <nest-ip> -- --ring-counts 8 --ring-reverse`;
+options before it go to `ssh`.
+
+### The ring
+
+The ring has no clicks: its optical sensor reports movement in counts, many
+per step on the screen. Nesto adds them up (`src/core/RingSteps.hpp`), by
+default 16 counts per step. To see what the sensor reports:
+
+```bash
+scripts/dev.sh device-run <nest-ip> input-test     # 2 minutes; Ctrl-C ends it earlier
+```
+
+The screen stays as `nlclient` left it while every event is printed. Turn the
+ring once round clockwise and read the total: divided by the steps a turn
+should give, it is the right `--ring-counts`. If clockwise counts come out
+negative, add `--ring-reverse`.

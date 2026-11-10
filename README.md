@@ -12,8 +12,10 @@ integration, which discovers the panel, pairs with it and decides what it shows.
 > **Status: early development.** In the simulator, the panel pairs with Home
 > Assistant and controls a room's lights, climate, covers, switches and scenes
 > from the layout Home Assistant sends, with icons and colours for what each is
-> doing, and a Settings menu to pair again or forget Home Assistant. Running on
-> the thermostat itself comes next. The wire protocol between the panel and Home
+> doing, and a Settings menu to pair again or forget Home Assistant. On a real
+> thermostat it runs for a supervised while, with its screen, ring and press,
+> and gives the stock software its place back afterwards; installing it for
+> good comes later. The wire protocol between the panel and Home
 > Assistant is in [PROTOCOL.md](PROTOCOL.md).
 
 ## Development
@@ -120,17 +122,21 @@ they match the native ones pixel for pixel.
 Everything built into the program, its version and licence, is listed in
 [THIRD_PARTY.md](THIRD_PARTY.md).
 
-### Checking a real thermostat
+### On a real thermostat
 
 Before Nesto runs on a thermostat, a read-only check describes it: what runs
 the stock software, the watchdog, Wi-Fi, the screen, the ring and the
 backplate, and whether its 2.6.37 kernel runs our programs. Root it with
-unfr0zen and run the check, as [docs/DEVICE.md](docs/DEVICE.md) explains:
+unfr0zen and run the check, then run Nesto in the stock software's place for
+a while, as [docs/DEVICE.md](docs/DEVICE.md) explains:
 
 ```bash
-scripts/dev.sh device-check <nest-ip>          # the report goes to device-reports/
-scripts/dev.sh device-screen <nest-ip> trial   # stop the stock software for 5 minutes, watch, restart it
-scripts/dev.sh check-report                    # run the device scripts in busybox, as CI does
+scripts/dev.sh device-check <nest-ip>             # the report goes to device-reports/
+scripts/dev.sh device-screen <nest-ip> trial      # stop the stock software for 5 minutes, watch, restart it
+scripts/dev.sh device-run <nest-ip> input-test    # print what the ring and the press send
+scripts/dev.sh device-run <nest-ip>               # run Nesto for 10 minutes, then restart the stock software
+scripts/dev.sh client --host <nest-ip> pair       # meanwhile, pair with it (then: demo)
+scripts/dev.sh check-report                       # run the device scripts in busybox, as CI does
 ```
 
 `nesto-probe` (`src/probe/`), the check's program, is built with the rest and

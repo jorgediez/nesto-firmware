@@ -19,8 +19,9 @@ std::string default_state_dir() {
   const char* home = std::getenv("HOME");
   return std::string(home && *home ? home : ".") + "/.nesto";
 #else
-  // Where persistent storage lives on the thermostat is checked in Phase 2.
-  return "/var/lib/nesto";
+  // The flash's data partition: kept across reboots, and left alone by the
+  // stock software (docs/DEVICE.md).
+  return "/media/data/nesto";
 #endif
 }
 
@@ -34,6 +35,12 @@ void print_usage(const char* program) {
       "  --scale N           window pixels per screen pixel, 1 to 4 (default 2)\n"
       "  --script STEPS      play input: r+N r-N (ring), p (press), h (long press), wN (wait ms)\n"
       "  --screenshot FILE   save the screen as PNG after the script, then quit\n");
+#elif defined(NESTO_PLATFORM_NEST)
+  std::printf(
+      "  --ring-counts N     the ring's sensor counts per step (default %d)\n"
+      "  --ring-reverse      the ring's sensor counts the other way round\n"
+      "  --input-test        print the ring's and the press's events, for measuring the ring\n",
+      nesto::RingSteps::Config{}.counts_per_step);
 #endif
   std::printf(
       "  --port N            TCP port for Home Assistant (default 6170)\n"
@@ -52,6 +59,9 @@ int main(int argc, char** argv) {
   app_options.state_dir = default_state_dir();
 #if defined(NESTO_PLATFORM_SIM)
   nesto::SimOptions options;
+#elif defined(NESTO_PLATFORM_NEST)
+  nesto::NestOptions options;
+  bool input_test = false;
 #endif
 
   for (int i = 1; i < argc; ++i) {
@@ -103,6 +113,24 @@ int main(int argc, char** argv) {
       options.screenshot = argv[++i];
       continue;
     }
+#elif defined(NESTO_PLATFORM_NEST)
+    if (arg == "--ring-counts" && has_value) {
+      const long counts = std::strtol(argv[++i], nullptr, 10);
+      if (counts < 1 || counts > 10000) {
+        std::fprintf(stderr, "--ring-counts must be between 1 and 10000\n");
+        return EXIT_FAILURE;
+      }
+      options.ring.counts_per_step = static_cast<int>(counts);
+      continue;
+    }
+    if (arg == "--ring-reverse") {
+      options.ring.reverse = true;
+      continue;
+    }
+    if (arg == "--input-test") {
+      input_test = true;
+      continue;
+    }
 #endif
     (void)has_value;
     std::fprintf(stderr, "Unknown or incomplete option: %s\n\n", arg.c_str());
@@ -113,7 +141,8 @@ int main(int argc, char** argv) {
 #if defined(NESTO_PLATFORM_SIM)
   auto hal = std::make_unique<nesto::SimHal>(options);
 #elif defined(NESTO_PLATFORM_NEST)
-  auto hal = std::make_unique<nesto::NestHal>();
+  auto hal = std::make_unique<nesto::NestHal>(options);
+  if (input_test) return hal->input_test();
 #endif
 
   nesto::App app(*hal, app_options);
