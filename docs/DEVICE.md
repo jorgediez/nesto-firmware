@@ -224,5 +224,71 @@ Five minutes with `nlclient` stopped, on the thermostat above:
 
 So Nesto can take the screen over the same way: monit stops watching
 `nlclient`, `nlclient` stops, and Nesto starts; giving back is the reverse.
-The ring, press and backlight above go into the thermostat's hardware layer
-(`src/hal/nest/`) next.
+
+## Running Nesto on the thermostat
+
+The thermostat's hardware layer (`src/hal/nest/`) draws on `/dev/fb0`, reads
+the ring and the press from the input devices named above (it finds them by
+name, and keeps their events to itself), and sets the backlight. To try it:
+
+```bash
+scripts/dev.sh device-run <nest-ip>                # 10 minutes; or: device-run <nest-ip> 1800
+```
+
+It builds Nesto for the thermostat, copies it to `/nesto/nesto` (`/` is
+where programs may run from and stay), takes the screen as the trial does,
+and runs Nesto with its log in your terminal, saved to
+`device-reports/run-*.txt`. Every 30 s it reports the memory in use, which
+monit holds under 41 MB, and Nesto's own share. Ctrl-C, the time running
+out, or SSH dropping stops Nesto and gives the screen back; the give-back
+timer, a minute longer, is there in case even that fails.
+
+Nesto keeps its pairing in `/media/data/nesto`, which survives reboots. While
+it runs, pair it from another terminal, typing the code the thermostat shows,
+and serve it the demo room:
+
+```bash
+scripts/dev.sh client --host <nest-ip> pair
+scripts/dev.sh client --host <nest-ip> demo
+```
+
+Options after `--` go to Nesto, for instance
+`scripts/dev.sh device-run <nest-ip> -- --ring-counts 100`; options before it
+go to `ssh`.
+
+### The ring
+
+The ring has no clicks or marks: its optical sensor reports movement in
+counts, many per step on the screen. Nesto adds them up
+(`src/core/RingSteps.hpp`). To see what the sensor reports:
+
+```bash
+scripts/dev.sh device-run <nest-ip> input-test     # 2 minutes; Ctrl-C ends it earlier
+```
+
+The screen stays as `nlclient` left it while every event is printed. On the
+thermostat above, a turn clockwise (roughly one: with no mark it's hard to
+tell) added up to about 7300 counts, in events of 1 to 25 counts, all
+negative. So by default Nesto takes negative counts as clockwise, and makes a
+step of 150 counts: about 49 steps a turn. `--ring-counts` makes steps finer
+or coarser, and `--ring-reverse` turns the direction round.
+
+The press is `KEY_POWER`, down and up, as expected. With `nlclient` stopped,
+the memory in use dropped from 24 MB to 15 MB, which leaves Nesto about
+26 MB under monit's limit.
+
+### What a run showed
+
+Nesto ran on the thermostat above in `nlclient`'s place:
+
+- **It paired** with the stand-in client over Wi-Fi, synchronised the demo
+  room, and the ring, press and long press drove it as in the simulator.
+- **Memory** in use stayed at 15 to 16 MB for the whole system, Nesto
+  included: far under monit's 41 MB.
+- **The screen.** `nlclient` doesn't always leave the same page showing (the
+  first check found the second, this run the first); Nesto draws into
+  whichever shows. It also left the backlight at 0, which Nesto turns up.
+- **Ctrl-C** stopped Nesto at once, and `nlclient` was back two seconds
+  later.
+- **The ring's feel:** 150 counts a step felt right overall; a little fine for
+  moving between items, a little coarse for values such as brightness.

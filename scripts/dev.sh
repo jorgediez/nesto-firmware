@@ -12,6 +12,7 @@
 #   scripts/dev.sh sim [options]          open the simulator window (WSLg or X11), port 6170
 #   scripts/dev.sh client pair|connect    talk to the running simulator as Home Assistant would
 #   scripts/dev.sh client demo            serve a made-up room to the running simulator
+#                                         (client --host HOST ...: to a panel elsewhere)
 #   scripts/dev.sh screens DIR [options]  screenshots of every screen against the demo room
 #   scripts/dev.sh shot FILE "STEPS"      play STEPS headless, save the screen to FILE
 #   scripts/dev.sh shot-arm FILE "STEPS"  the same with the ARM build, under QEMU
@@ -21,6 +22,9 @@
 #   scripts/dev.sh check-report           run the device scripts in busybox and dash
 #   scripts/dev.sh device-screen HOST status|take|give|watch|trial [SECONDS] [SSH OPTIONS]
 #                                         take the screen from the stock software, or give it back
+#   scripts/dev.sh device-run HOST [input-test] [SECONDS] [SSH OPTIONS] [-- NESTO OPTIONS]
+#                                         run Nesto on the thermostat for at most SECONDS
+#                                         (default 600), then give the screen back
 #
 # `build` makes three builds:
 #   /build/sim      the simulator for this machine, with sanitizers, and the tests
@@ -123,9 +127,18 @@ case "${1:-}" in
     ;;
   client)
     shift
-    # The simulator's port is published on the Docker host; reach it from here.
+    # The simulator's port is published on the Docker host; reach it from
+    # here. --host HOST talks to a panel elsewhere, such as a thermostat.
+    # Each panel's pairing is kept apart.
+    panel=host.docker.internal
+    key=/build/client.key
+    if [ "${1:-}" = --host ] && [ $# -ge 2 ]; then
+      panel="$2"
+      key="/build/client-${panel//[^A-Za-z0-9.-]/_}.key"
+      shift 2
+    fi
     EXTRA_ARGS=(--add-host=host.docker.internal:host-gateway)
-    run python3 /src/tools/nesto_client.py host.docker.internal --key-file /build/client.key "$@"
+    run python3 /src/tools/nesto_client.py "$panel" --key-file "$key" "$@"
     ;;
   screens)
     shift
@@ -199,6 +212,61 @@ case "${1:-}" in
       ssh -o ConnectTimeout=10 "$@" "root@$host" "$remote" < "$ROOT/scripts/nest-screen.sh"
     fi
     ;;
+  device-run)
+    if [ $# -lt 2 ]; then
+      echo "usage: scripts/dev.sh device-run HOST [input-test] [SECONDS] [SSH OPTIONS] [-- NESTO OPTIONS]" >&2
+      exit 2
+    fi
+    host="$2"
+    shift 2
+    nesto_args=()
+    seconds=600
+    if [ "${1:-}" = input-test ]; then
+      nesto_args=(--input-test)
+      seconds=120
+      shift
+    fi
+    if [ $# -gt 0 ] && [[ "$1" =~ ^[0-9]+$ ]]; then
+      seconds="$1"
+      shift
+    fi
+    ssh_args=()
+    while [ $# -gt 0 ] && [ "$1" != -- ]; do
+      ssh_args+=("$1")
+      shift
+    done
+    [ $# -gt 0 ] && shift  # the --
+    nesto_args+=("$@")
+    # Nesto, built for the thermostat and stripped.
+    run bash -c '
+      set -e
+      cmake --build /build/nest --target nesto > /dev/null
+      mkdir -p /src/dist
+      "$NESTO_ARM_TOOLCHAIN/bin/arm-buildroot-linux-musleabihf-strip" -o /src/dist/nesto /build/nest/nesto'
+    # Two SSH sessions share one connection, so a password is asked for once.
+    control="$(mktemp -u /tmp/nesto-ssh-XXXXXX)"
+    ssh_args=(-o ConnectTimeout=10 -o ServerAliveInterval=15 -o ControlMaster=auto
+              -o "ControlPath=$control" -o ControlPersist=60 "${ssh_args[@]}")
+    # 1. Nesto goes to /, where programs may run from and stay; the screen
+    #    script to RAM, where its give-back timer finds it.
+    echo "Copying Nesto ($(( $(stat -c %s "$ROOT/dist/nesto") / 1024 )) KiB) to $host:/nesto/nesto"
+    tar -C "$ROOT" --format=ustar --owner=0 --group=0 -cf - \
+        --transform 's|.*/||' dist/nesto scripts/nest-screen.sh |
+      ssh "${ssh_args[@]}" "root@$host" \
+        'rm -rf /tmp/nesto-run && mkdir /tmp/nesto-run && tar xf - -C /tmp/nesto-run &&
+         mkdir -p /nesto && mv /tmp/nesto-run/nesto /nesto/nesto.new && chmod 755 /nesto/nesto.new &&
+         mv /nesto/nesto.new /nesto/nesto && mv /tmp/nesto-run/nest-screen.sh /tmp/nesto-screen.sh;
+         status=$?; rm -rf /tmp/nesto-run; exit $status'
+    # 2. Run it, with a terminal, so Ctrl-C reaches it.
+    mkdir -p "$ROOT/device-reports"
+    log="$ROOT/device-reports/run-$(date +%Y%m%d-%H%M%S).txt"
+    remote="sh /tmp/nesto-screen.sh run $seconds"
+    [ ${#nesto_args[@]} -gt 0 ] && remote+=" $(printf '%q ' "${nesto_args[@]}")"
+    ssh -t "${ssh_args[@]}" "root@$host" "$remote" | tee "$log" || true
+    ssh -O exit -o "ControlPath=$control" "root@$host" 2> /dev/null || true
+    echo
+    echo "Saved to device-reports/$(basename "$log")."
+    ;;
   device-check)
     if [ $# -lt 2 ]; then
       echo "usage: scripts/dev.sh device-check HOST [SSH OPTIONS]" >&2
@@ -233,7 +301,7 @@ case "${1:-}" in
     echo "read it before sharing it."
     ;;
   *)
-    sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac

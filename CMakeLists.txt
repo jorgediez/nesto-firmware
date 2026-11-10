@@ -40,6 +40,7 @@ add_library(nesto_core STATIC
   src/core/InputScript.cpp
   src/core/Log.cpp
   src/core/PressGestures.cpp
+  src/core/RingSteps.cpp
   src/core/Png.cpp
 )
 target_include_directories(nesto_core PUBLIC src)
