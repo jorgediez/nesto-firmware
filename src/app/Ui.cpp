@@ -354,12 +354,13 @@ void Ui::build_clock(lv_obj_t* screen) {
   lv_obj_set_flex_align(digital_side_, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
   digital_suffix_ = make_label(digital_side_, fonts_.body, kMuted);
   digital_seconds_ = make_label(digital_side_, fonts_.large, kMuted);
-  // Each in a box of fixed width, sized for the widest text it can show, so
-  // nothing moves as the seconds change: never wrap.
-  for (lv_obj_t* label : {digital_time_, digital_suffix_, digital_seconds_}) {
+  // AM/PM and the seconds each in a box of fixed width, sized for the widest
+  // text it can show, so nothing moves as the seconds change: never wrap. The
+  // time keeps its own width, so the group centres on what is drawn ("11:21"
+  // is much narrower than "88:88"); it can shift a little once a minute.
+  for (lv_obj_t* label : {digital_suffix_, digital_seconds_}) {
     lv_label_set_long_mode(label, LV_LABEL_LONG_MODE_CLIP);
   }
-  lv_obj_set_style_text_align(digital_time_, LV_TEXT_ALIGN_RIGHT, 0);
   lv_obj_set_style_text_align(digital_suffix_, LV_TEXT_ALIGN_LEFT, 0);
   lv_obj_set_style_text_align(digital_seconds_, LV_TEXT_ALIGN_LEFT, 0);
   // Lifts the small text onto the large one's baseline.
@@ -399,10 +400,7 @@ void Ui::show_clock(const room::ClockFace& face, room::ClockStyle style, bool da
     lv_obj_set_hidden(second_hand_, face.seconds.empty());
     if (!face.seconds.empty()) set_hand(second_hand_, second_points_, face.second_angle, 120);
   } else {
-    // Fixed widths, with the time against AM/PM and the seconds: only the
-    // time's left edge moves, and only when its number of digits changes.
     set_text(digital_time_, face.time);
-    lv_obj_set_width(digital_time_, widest_width(fonts_.clock, face.time));
     set_text(digital_suffix_, face.suffix);
     lv_obj_set_width(digital_suffix_, std::max(widest_width(fonts_.body, "AM"),
                                                widest_width(fonts_.body, "PM")));
