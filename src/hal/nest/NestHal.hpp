@@ -42,7 +42,10 @@ class NestHal : public Hal {
   Millis now() const override;
   void poll(std::vector<TimedInput>& out, Millis timeout) override;
   void present(const std::uint32_t* pixels) override;
+  /// Puts a frame on the screen; null for black.
+  void copy_to_screen(const std::uint32_t* pixels);
   void set_backlight(int percent) override;
+  void set_screen_on(bool on) override;
 
   /// Prints the ring's and the press's raw events, and the ticks the ring's
   /// make, until interrupted: for measuring the ring. Leaves the screen and
@@ -60,8 +63,10 @@ class NestHal : public Hal {
   void open_backlight();
   bool open_backplate();
   /// Reads what the backplate sent, moves the session on, and sends what it
-  /// has to say. With `verbose`, prints each frame.
-  void service_backplate(bool verbose);
+  /// has to say. With `verbose`, prints each frame; with `inputs`, adds
+  /// Presence when the proximity sensor says someone is near, or the
+  /// far-field sensor that someone moved.
+  void service_backplate(bool verbose, std::vector<TimedInput>* inputs = nullptr);
   void report_backplate(bool verbose);
   /// Leaves the backplate as the stock software expects to find it.
   void hand_back_backplate();
@@ -86,6 +91,9 @@ class NestHal : public Hal {
   std::string backlight_;  // the brightness file; empty if there is none
   int backlight_max_ = 0;
   int backlight_before_ = -1;
+  // While dark the screen shows black, and frames are kept for waking.
+  bool dark_ = false;
+  const std::uint32_t* last_frame_ = nullptr;  // the App's, alive while it runs
 
   int backplate_fd_ = -1;
   backplate::FrameReader backplate_reader_;
@@ -96,6 +104,12 @@ class NestHal : public Hal {
   int reported_handshakes_ = 0;
   int reported_restarts_ = 0;
   Millis reported_readings_ = 0;
+  // The motion sensors since the last report, to learn what they do.
+  int near_readings_ = 0;   // proximity frames
+  int near_highest_ = 0;
+  int near_count_ = 0;      // at or above the threshold
+  int far_frames_ = 0;      // raw PIR frames
+  int far_moving_ = 0;      // of which not all zero
 };
 
 }  // namespace nesto

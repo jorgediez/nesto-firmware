@@ -14,10 +14,10 @@ integration, which discovers the panel, pairs with it and decides what it shows.
 > from the layout Home Assistant sends, with icons and colours for what each is
 > doing, and a Settings menu to pair again or forget Home Assistant. On a real
 > thermostat it runs for a supervised while, with its screen, ring and press,
-> and gives the stock software its place back afterwards. Runs stay under 30
-> minutes: past that, the thermostat's base resets it unless something talks
-> to it. Nesto now does ([docs/BACKPLATE.md](docs/BACKPLATE.md)), but that's
-> still to be tried on a thermostat. Installing it for good comes after that.
+> and gives the stock software its place back afterwards. It talks to the
+> thermostat's base, which would otherwise reset it after 30 minutes
+> ([docs/BACKPLATE.md](docs/BACKPLATE.md)), so runs last hours, with the
+> display resting to keep the battery up. Installing it for good comes next.
 > The wire protocol between the panel and Home Assistant is in
 > [PROTOCOL.md](PROTOCOL.md).
 
@@ -36,7 +36,14 @@ scripts/dev.sh sim     # open the simulator
 ```
 
 In the simulator, the mouse wheel or arrow keys turn the ring, and the left
-mouse button, Space or Enter press the display. Escape quits.
+mouse button, Space or Enter press the display. M stands for someone coming
+near, as the thermostat's proximity sensor would. Escape quits.
+
+After 30 seconds without input (or what Home Assistant sets) the display
+fades to rest: dark for now, until the clock comes. The ring, a press or
+someone near wakes it, and the input that wakes it does nothing else
+([PROTOCOL.md](PROTOCOL.md) section 13). Home Assistant's `wake_on_motion`
+setting turns waking on someone near off; `client demo --no-motion` tries it.
 
 The simulator listens for Home Assistant on port 6170 and announces itself over
 mDNS as a `_nesto._tcp` service, which is how Home Assistant discovers it
@@ -47,7 +54,7 @@ simulator running:
 
 ```bash
 scripts/dev.sh client pair      # type the code the simulator shows
-scripts/dev.sh client demo      # serve a made-up living room to the simulator
+scripts/dev.sh client demo      # serve a made-up living room to the simulator (--timeout N, --no-motion)
 scripts/dev.sh client connect   # or: authenticate, synchronise, print what the panel sends
 ```
 
@@ -77,7 +84,7 @@ scripts/dev.sh shot screenshots/x.png "r+2 p"   # one screen, without Home Assis
 ```
 
 The steps are `r+N`/`r-N` (turn the ring N clicks, as many wheel notches),
-`p` (press), `h` (long press) and
+`p` (press), `h` (long press), `m` (someone near) and
 `wN` (wait N ms). See `src/core/InputScript.hpp`.
 
 ### Layout
@@ -141,7 +148,7 @@ scripts/dev.sh device-run <nest-ip> input-test    # print what the ring and the 
 scripts/dev.sh device-run <nest-ip> backplate-test  # talk to the backplate, printing every frame
 scripts/dev.sh device-run <nest-ip>               # run Nesto for 10 minutes, then restart the stock software
 scripts/dev.sh client --host <nest-ip> pair       # meanwhile, pair with it (then: demo)
-scripts/dev.sh device-run <nest-ip> detach        # run Nesto for 25 minutes, apart from SSH, watching the battery
+scripts/dev.sh device-run <nest-ip> detach        # run Nesto for an hour, apart from SSH, watching the battery
 scripts/dev.sh device-log <nest-ip> [follow]      # that run's log, into device-reports/
 scripts/dev.sh check-report                       # run the device scripts in busybox, as CI does
 ```

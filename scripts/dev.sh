@@ -26,9 +26,9 @@
 #   scripts/dev.sh device-run HOST [input-test|backplate-test|detach] [SECONDS] [SSH OPTIONS] [-- NESTO OPTIONS]
 #                                         run Nesto on the thermostat for at most SECONDS
 #                                         (default 600), then give the screen back;
-#                                         detach: in the background, default 25 minutes;
-#                                         no run may pass 26 (the backplate resets at 30)
-#                                         unless NESTO_TAKE_MAX (seconds) says so
+#                                         detach: in the background, default an hour;
+#                                         at most 4 hours (NESTO_RUN_MAX, seconds), or
+#                                         26 minutes with --no-backplate (NESTO_TAKE_MAX)
 #   scripts/dev.sh device-log HOST [follow] [SSH OPTIONS]
 #                                         copy a detached run's log to device-reports/, or follow it
 #
@@ -244,9 +244,7 @@ case "${1:-}" in
       shift
     elif [ "${1:-}" = detach ]; then
       mode=detach
-      # The most there is: the backplate resets the thermostat after about
-      # 30 minutes without the stock software (scripts/nest-screen.sh).
-      seconds=1500
+      seconds=3600
       shift
     fi
     if [ $# -gt 0 ] && [[ "$1" =~ ^[0-9]+$ ]]; then
@@ -281,12 +279,13 @@ case "${1:-}" in
          mv /nesto/nesto.new /nesto/nesto && mv /tmp/nesto-run/nest-screen.sh /tmp/nesto-screen.sh;
          status=$?; rm -rf /tmp/nesto-run; exit $status'
     remote="sh /tmp/nesto-screen.sh $mode $seconds"
-    # To try a run past the backplate's 30 minutes, with Nesto talking to it:
-    # NESTO_TAKE_MAX=3600 scripts/dev.sh device-run HOST detach 2700
-    if [ -n "${NESTO_TAKE_MAX:-}" ]; then
-      [[ "$NESTO_TAKE_MAX" =~ ^[0-9]+$ ]] || { echo "NESTO_TAKE_MAX must be seconds" >&2; exit 2; }
-      remote="NESTO_TAKE_MAX=$NESTO_TAKE_MAX $remote"
-    fi
+    # The limits on how long the stock software may be away (scripts/nest-screen.sh).
+    for limit in NESTO_TAKE_MAX NESTO_RUN_MAX; do
+      if [ -n "${!limit:-}" ]; then
+        [[ "${!limit}" =~ ^[0-9]+$ ]] || { echo "$limit must be seconds" >&2; exit 2; }
+        remote="$limit=${!limit} $remote"
+      fi
+    done
     [ ${#nesto_args[@]} -gt 0 ] && remote+=" $(printf '%q ' "${nesto_args[@]}")"
     if [ "$mode" = detach ]; then
       # 2. Start it on the thermostat, where it goes on without this session.

@@ -23,6 +23,8 @@ enum Type : std::uint16_t {
   kAscii = 0x0001,          // text: versions, "BRK" at the end of the start-up burst
   kClimate = 0x0002,        // temperature and humidity
   kFetPresence = 0x0004,    // which terminals have wires
+  kPirRaw = 0x0005,         // the far-field motion sensor, while someone moves; all zero after
+  kProximity = 0x0007,      // how near someone is, about every second
   kState = 0x000b,          // voltages: input, operating, battery
   kTfeVersion = 0x0018,
   kTfeBuildInfo = 0x0019,
@@ -93,6 +95,11 @@ struct Climate {
   double humidity = 0;  // percent
 };
 std::optional<Climate> decode_climate(const std::vector<std::uint8_t>& payload);
+
+/// A kProximity payload: higher is nearer. The stock software logs it as
+/// "near pir msg N, threshold 15", so 15 or more means someone is near.
+std::optional<int> decode_proximity(const std::vector<std::uint8_t>& payload);
+constexpr int kNearThreshold = 15;
 
 /// A frame's payload as text, for kAscii and the version replies.
 std::string text(const Frame& frame);

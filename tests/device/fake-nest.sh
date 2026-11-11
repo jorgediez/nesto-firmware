@@ -141,12 +141,18 @@ pidof nesto > /dev/null && fail "detach, given back early: Nesto still runs"
 nlclient_running && ok "detach, given back early: nlclient is back" || fail "detach, given back early: nlclient isn't back"
 [ -f /tmp/nesto-screen-timer.pid ] && fail "a give-back timer is left over"
 
-# --- Never long enough for the backplate's reset (about 30 minutes) ---
-sh $SCREEN run 1561 > $out 2>&1
-expect $out "over 1620 s: the backplate" "cap: a run over 1560 s doesn't start"
+# --- Without the backplate, never long enough for its reset (about 30 minutes) ---
+sh $SCREEN run 1561 --no-backplate > $out 2>&1
+expect $out "over 1620 s: the backplate" "cap: a run without the backplate over 1560 s doesn't start"
 grep -q "fake nesto" $out && fail "cap: Nesto ran anyway"
-sh $SCREEN detach 1561 > $out 2>&1
-expect $out "at most 1560 s" "cap: a detached run over 1560 s is refused at once"
+sh $SCREEN detach 1561 --input-test > $out 2>&1
+expect $out "at most 1560 s: the backplate" "cap: a detached input test over 1560 s is refused at once"
+# --- With it, up to NESTO_RUN_MAX ---
+NESTO_RUN_MAX=1000 sh $SCREEN run 941 > $out 2>&1
+expect $out "over 1000 s (NESTO_RUN_MAX)" "cap: a run talking to the backplate stops at NESTO_RUN_MAX"
+grep -q "fake nesto" $out && fail "cap: Nesto ran anyway"
+NESTO_RUN_MAX=1000 sh $SCREEN detach 941 > $out 2>&1
+expect $out "at most 940 s (NESTO_RUN_MAX)" "cap: a detached run over NESTO_RUN_MAX is refused at once"
 sh $SCREEN trial 1501 > $out 2>&1
 expect $out "over 1620 s: the backplate" "cap: a trial over 1500 s doesn't start"
 nlclient_running && ok "cap: nlclient left alone" || fail "cap: nlclient stopped"

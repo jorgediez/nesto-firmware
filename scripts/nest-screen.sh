@@ -41,9 +41,12 @@
 # under 3.70 V (NESTO_BATTERY_MIN), so nlclient can charge it again.
 #
 # The backplate resets the thermostat when nothing has talked to it for about
-# 30 minutes (docs/DEVICE.md). So nlclient is never away for more than
-# NESTO_TAKE_MAX seconds (default 1620, 27 minutes): "take" refuses longer,
-# which caps "run" and "detach" at 1560 s and "trial" at 1500 s.
+# 30 minutes (docs/DEVICE.md). Nesto talks to it, so "run" and "detach" may
+# keep nlclient away for up to NESTO_RUN_MAX seconds (default 14400, 4 hours,
+# so 14340 s of Nesto). Without Nesto, or with Nesto's --no-backplate or
+# --input-test, nothing does: then nlclient is never away for more than
+# NESTO_TAKE_MAX seconds (default 1620, 27 minutes), which caps "trial" at
+# 1500 s and such a run at 1560 s.
 
 MONIT=/usr/sbin/monit
 NESTLABS=/etc/init.d/nestlabs
@@ -53,8 +56,10 @@ SELF=/tmp/nesto-screen.sh
 TIMER_PID=/tmp/nesto-screen-timer.pid
 SYSLOG="${NESTO_SYSLOG:-/var/log/messages}"
 BATTERY_MIN="${NESTO_BATTERY_MIN:-3.70}"
-# The longest nlclient may be stopped: under the backplate's 30 minutes.
+# The longest nlclient may be stopped: under the backplate's 30 minutes,
+# unless Nesto talks to the backplate meanwhile.
 TAKE_MAX="${NESTO_TAKE_MAX:-1620}"
+RUN_MAX="${NESTO_RUN_MAX:-14400}"
 # Seconds between a run's reports; the tests make it shorter.
 REPORT_EVERY="${NESTO_REPORT_EVERY:-30}"
 # What a run reported, a line every 30 s, for its summary.
@@ -169,11 +174,31 @@ cancel_timer() {
   fi
 }
 
+# The longest a run of Nesto with these options may keep nlclient away.
+run_max() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --no-backplate | --input-test)
+        echo "$TAKE_MAX"
+        return
+        ;;
+    esac
+  done
+  echo "$RUN_MAX"
+}
+
+# take SECONDS [MAX]: MAX is the limit, NESTO_TAKE_MAX unless Nesto talks to
+# the backplate meanwhile.
 take() {
-  local seconds="${1:-600}"
-  if [ "$seconds" -gt "$TAKE_MAX" ]; then
-    say "nlclient would be stopped for $seconds s, over $TAKE_MAX s: the backplate" \
-      "resets the thermostat after about 30 minutes without it (NESTO_TAKE_MAX)"
+  local seconds="${1:-600}" max="${2:-$TAKE_MAX}"
+  if [ "$seconds" -gt "$max" ]; then
+    if [ "$max" = "$TAKE_MAX" ]; then
+      say "nlclient would be stopped for $seconds s, over $max s: the backplate" \
+        "resets the thermostat after about 30 minutes without it (NESTO_TAKE_MAX)"
+    else
+      say "nlclient would be stopped for $seconds s, over $max s (NESTO_RUN_MAX)"
+    fi
     return 1
   fi
   if ! nlclient_pid > /dev/null; then
@@ -255,7 +280,7 @@ run() {
   fi
   say "battery ${first:-unknown}${first:+ V}; Nesto gives way under $BATTERY_MIN V"
   # The timer outlasts the run by a minute, in case this shell is killed.
-  take $((seconds + 60)) || return 1
+  take $((seconds + 60)) "$(run_max "$@")" || return 1
   "$NESTO" "$@" &
   pid=$!
   say "Nesto started (pid $pid), for at most $seconds s; Ctrl-C stops it"
@@ -297,11 +322,19 @@ detach() {
     return 1
   fi
   # "run" adds a minute for its timer; say no here, not in the background.
-  if [ $(($1 + 60)) -gt "$TAKE_MAX" ]; then
-    say "at most $((TAKE_MAX - 60)) s: the backplate resets the thermostat after" \
-      "about 30 minutes without nlclient (NESTO_TAKE_MAX)"
+  local seconds="$1" max
+  shift
+  max="$(run_max "$@")"
+  if [ $((seconds + 60)) -gt "$max" ]; then
+    if [ "$max" = "$TAKE_MAX" ]; then
+      say "at most $((max - 60)) s: the backplate resets the thermostat after" \
+        "about 30 minutes without nlclient (NESTO_TAKE_MAX)"
+    else
+      say "at most $((max - 60)) s (NESTO_RUN_MAX)"
+    fi
     return 1
   fi
+  set -- "$seconds" "$@"
   mkdir -p "$(dirname "$RUN_LOG")" || return 1
   # The last run's log, kept once.
   [ -f "$RUN_LOG" ] && mv -f "$RUN_LOG" "$RUN_LOG.1"

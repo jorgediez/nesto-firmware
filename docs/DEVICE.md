@@ -327,7 +327,7 @@ scripts/dev.sh device-screen <nest-ip> battery     # the latest voltage
 A run shouldn't hang on an SSH session, so it can go on by itself:
 
 ```bash
-scripts/dev.sh device-run <nest-ip> detach         # 25 minutes, the longest there is
+scripts/dev.sh device-run <nest-ip> detach         # an hour; at most 4 (NESTO_RUN_MAX)
 scripts/dev.sh device-log <nest-ip> follow         # watch it (Ctrl-C stops watching only)
 scripts/dev.sh device-log <nest-ip>                # copy it to device-reports/
 scripts/dev.sh device-screen <nest-ip> give        # end it early
@@ -371,5 +371,68 @@ and a trial at 25. Running Nesto for good needs the backplate's protocol on
 `/dev/ttyO2`: at least keeping it from resetting the thermostat, and
 charging the battery. Others had worked it out, and Nesto now keeps a
 session with the backplate going: see [BACKPLATE.md](BACKPLATE.md), which
-also says how to try a run past 30 minutes. The cap stays until such a run
-shows the reset gone.
+also says how to try a run past 30 minutes.
+
+Three runs of 45 minutes with Nesto talking to the backplate, on 2026-11-11,
+had no reset. So the cap now applies only when nothing talks to the
+backplate: a trial, or Nesto with `--no-backplate` or `--input-test`. Other
+runs may keep `nlclient` away for up to 4 hours (`NESTO_RUN_MAX`, 14400 s),
+and a detached run lasts an hour unless told otherwise.
+
+### Resting the display
+
+On a USB stand the thermostat draws about 100 mA, and a lit screen with
+everything awake needs more: the battery fell 0.12 V an hour with Nesto's
+screen lit, and held with it dark ([BACKPLATE.md](BACKPLATE.md)). So Nesto
+rests the display as [PROTOCOL.md](../PROTOCOL.md) section 13 describes:
+after 30 seconds without input (or the timeout Home Assistant sets), the
+backlight fades out over 0.8 s, then the screen shows black, and the loop
+waits longer between rounds. The fade follows the square of the time left,
+quick at first: a straight line in brightness looks bright until it drops at
+the end. Each fade logs how it went:
+
+```
+backlight: faded to 0% in 32 steps over 893 ms; longest gap 83 ms, longest write 5 ms
+```
+
+Unlike nest-gallery, Nesto doesn't blank the screen (`/sys/class/graphics/fb0/blank`):
+filmed, blanking turned the LCD pale white for about 0.7 s before it
+went dark, with the backlight lit or not. Black with the backlight off looks
+the same as blanked, without the flash, and a dark LCD would still show the
+controls faintly in room light. While dark, new frames wait, and waking puts
+the latest back, then turns the backlight on at once. The ring, a press, or
+someone near wakes it (below); the input that wakes it does nothing else.
+Until there's a clock to show, standby is dark.
+
+A 45-minute run on 2026-11-11 showed the battery level with the
+display resting most of the time: 3.93 V at the start, 3.96 V after a quarter
+of an hour, and 3.95 V at the end, by the backplate's reading.
+
+The base has two sensors for someone near, and each minute's log counts what
+both sent:
+
+```
+backplate: near-field 60 readings, highest 83, 4 at 15 or more; far-field 3 frames, 2 not zero
+```
+
+- The near-field proximity sensor (`0x0007`) reads about once a second, and
+  stays under 10 until something is a hand's width from the glass. 15 or more
+  wakes the display, the stock software's threshold.
+- The far-field motion sensor sends `0x0005` while someone moves in the room,
+  about half of its frames not all zero, then nothing once the room is still.
+  A second 45-minute run showed it: for ten minutes of moving about the room,
+  10 to 23 frames a minute while the near-field sensor never passed 8. So a
+  frame that isn't all zero wakes the display too. What its bytes mean isn't
+  known yet.
+
+The log says which sensor woke the display (`display woken by the far-field
+motion sensor`). Home Assistant's `wake_on_motion` setting turns both off.
+
+To run for 45 minutes with the demo room served meanwhile (`--no-motion` stops
+the sensors waking the display, `--timeout N` rests it after N seconds):
+
+```bash
+scripts/dev.sh device-run <nest-ip> detach 2700
+scripts/dev.sh client --host <nest-ip> demo     # in another terminal
+scripts/dev.sh device-log <nest-ip> follow      # and the log in a third
+```

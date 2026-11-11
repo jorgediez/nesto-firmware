@@ -1,6 +1,7 @@
 #include "app/App.hpp"
 
 #include <algorithm>
+#include <cstdio>
 #include <fstream>
 #include <sstream>
 #include <type_traits>
@@ -23,6 +24,11 @@ const Hal* g_clock = nullptr;
 // Upper bound on how long the loop waits for input, so LVGL keeps animating
 // and the gesture recogniser sees time pass.
 constexpr Millis kMaxWait = 20;
+// The same while the display is in standby or off.
+constexpr Millis kRestingWait = 100;
+
+// Where the display settings are kept, in the state directory.
+constexpr const char* kDisplayConfigFile = "display.json";
 
 const char* name(Gesture gesture) {
   switch (gesture) {
@@ -113,7 +119,12 @@ bool App::init() {
 
   fonts_ = Fonts::load();
   ui_ = std::make_unique<Ui>(fonts_);
-  hal_.set_backlight(100);
+  // The display settings Home Assistant sent last, so the panel dims and
+  // sleeps as it should before Home Assistant connects.
+  load_display_config();
+  hal_.set_screen_on(true);
+  backlight_ = room::BacklightFade(display_power_.brightness());
+  update_backlight();
 
   info_.panel_id = options_.panel_id.empty() ? net::panel_id_from_mac() : options_.panel_id;
   if (info_.panel_id.empty()) {
@@ -154,7 +165,12 @@ int App::run() {
   std::vector<TimedInput> inputs;
   while (!quit_) {
     const std::uint32_t next_timer = lv_timer_handler();
-    const Millis wait = std::min<Millis>(next_timer, kMaxWait);
+    // While the display rests, the loop waits longer: less work, less power,
+    // and waking takes at most that long. Not while it fades, which would
+    // then go in steps.
+    const bool resting = display_power_.state() != room::DisplayState::Active && !gestures_.busy() &&
+                         !backlight_.fading(hal_.now());
+    const Millis wait = std::min<Millis>(next_timer, resting ? kRestingWait : kMaxWait);
 
     // The network waits; the hardware is only checked, so neither delays
     // the other by more than one loop.
@@ -164,6 +180,9 @@ int App::run() {
     hal_.poll(inputs, 0);
     for (const TimedInput& input : inputs) handle(input);
     handle(gestures_.tick(hal_.now()));
+    display_power_.tick(hal_.now());
+    apply_display();
+    update_backlight();
     if (hal_.now() - status_checked_ >= kStatusInterval) update_status();
 
     controller_.tick(hal_.now());
@@ -192,10 +211,20 @@ void App::handle(const TimedInput& input) {
       [&](const auto& event) {
         using T = std::decay_t<decltype(event)>;
         if constexpr (std::is_same_v<T, RingTurn>) {
-          controller_.rotate(event.ticks, input.at);
+          // A turn that wakes the display only wakes it.
+          if (display_power_.input(input.at)) controller_.rotate(event.ticks, input.at);
         } else if constexpr (std::is_same_v<T, ButtonEdge>) {
-          handle(event.down ? gestures_.on_down(input.at, press_context())
-                            : gestures_.on_up(input.at));
+          // While active, a press is activity. While resting, it's the
+          // gesture that decides: a single press or a hold wakes the display,
+          // a double press doesn't (PROTOCOL.md section 13).
+          if (display_power_.state() == room::DisplayState::Active) display_power_.input(input.at);
+          handle(event.down ? gestures_.on_down(input.at, press_context()) : gestures_.on_up(input.at));
+        } else if constexpr (std::is_same_v<T, Presence>) {
+          const bool resting = display_power_.state() != room::DisplayState::Active;
+          display_power_.motion(input.at);
+          if (resting && display_power_.state() == room::DisplayState::Active) {
+            log::info("display woken by the %s sensor", event.far ? "far-field motion" : "proximity");
+          }
         } else if constexpr (std::is_same_v<T, QuitRequest>) {
           quit_ = true;
           exit_code_ = event.exit_code;
@@ -208,7 +237,12 @@ void App::handle(const std::vector<GestureEvent>& gestures) {
   for (const GestureEvent& g : gestures) {
     // Reported to Home Assistant as an `input` event once the connection exists.
     log::info("gesture %s (%s)", name(g.gesture), name(g.context));
-    if (g.context != PressContext::Ui) continue;
+    if (g.context != PressContext::Ui) {
+      // Pressed while resting: it only wakes the display, and a double press
+      // not even that.
+      if (g.gesture != Gesture::Double) display_power_.input(hal_.now());
+      continue;
+    }
     if (g.gesture == Gesture::Single) controller_.press(hal_.now());
     if (g.gesture == Gesture::Long) controller_.long_press(hal_.now());
   }
@@ -307,6 +341,10 @@ void App::on_authenticated(protocol::PanelSession& session) {
 void App::on_ready(protocol::PanelSession& /*session*/) {
   log::info("synchronised with Home Assistant");
   update_status();
+  // Where the display is, for Home Assistant to start from (section 13); a
+  // change from the synchronisation's config is part of it.
+  apply_display(false);
+  send_display_state(display_power_.state(), display_power_.brightness(), "sync");
 }
 
 void App::on_unpaired() {
@@ -359,15 +397,120 @@ bool App::on_message(protocol::PanelSession& session, const protocol::Message& m
     }
     return true;
   }
-  // Time and config are accepted; the clock and display settings that use
-  // them come in a later version.
-  return m.type == "time" || m.type == "config";
+  if (m.type == "config") {
+    // The whole object every time (PROTOCOL.md section 12); what's missing
+    // takes the default.
+    const room::DisplayConfig config = room::DisplayConfig::from_config(m.body);
+    if (!(config == display_power_.config())) {
+      display_power_.configure(config, hal_.now());
+      store_display_config();
+      log::info("display: %d%%, %us to standby, standby %s at %d%%", config.brightness, config.timeout_s,
+                config.standby_mode == room::StandbyMode::Off ? "off" : "on", config.standby_brightness);
+    }
+    return true;
+  }
+  if (m.type == "display" && m.is_request()) {
+    const auto state = room::parse_display_state(m.body.value("state", std::string()));
+    if (!state) {
+      session.send(protocol::result_error(*m.id, protocol::ErrorCode::BadRequest,
+                                         "state must be active, standby or off"));
+      return true;
+    }
+    display_power_.set(*state, hal_.now());
+    apply_display();
+    session.send(protocol::result_ok(*m.id));
+    return true;
+  }
+  // Time is accepted; the clock that uses it comes in a later version.
+  return m.type == "time";
 }
 
 PressContext App::press_context() const {
-  // Standby and off arrive with display power control; until then the panel
-  // is always showing its controls.
+  switch (display_power_.state()) {
+    case room::DisplayState::Active: return PressContext::Ui;
+    case room::DisplayState::Standby: return PressContext::Standby;
+    case room::DisplayState::Off: return PressContext::Off;
+  }
   return PressContext::Ui;
+}
+
+void App::apply_display(bool report) {
+  const auto change = display_power_.take_change();
+  if (!change) return;
+  // Lit: the screen first, then the backlight, at once. Dark: the backlight
+  // fades, and update_backlight() darkens the screen at the end, as a dark
+  // standby is as good as off for the screen itself.
+  if (change->brightness > 0) hal_.set_screen_on(true);
+  backlight_.go(change->brightness, hal_.now());
+  if (backlight_.fading(hal_.now())) fade_stats_ = {true, hal_.now(), hal_.now(), 0, 0, 0};
+  update_backlight();
+  log::info("display %s at %d%% (%s)", room::name(change->state), change->brightness,
+            room::name(change->cause));
+  if (report) send_display_state(change->state, change->brightness, room::name(change->cause));
+}
+
+void App::update_backlight() {
+  const Millis t = hal_.now();
+  const int level = backlight_.level(t);
+  if (level != backlight_level_) {
+    hal_.set_backlight(level);
+    backlight_level_ = level;
+    if (fade_stats_.active) {
+      ++fade_stats_.steps;
+      fade_stats_.longest_gap = std::max(fade_stats_.longest_gap, t - fade_stats_.last_step);
+      fade_stats_.longest_write = std::max(fade_stats_.longest_write, hal_.now() - t);
+      fade_stats_.last_step = t;
+    }
+  }
+  if (level == 0) hal_.set_screen_on(false);
+  if (fade_stats_.active && !backlight_.fading(t)) {
+    fade_stats_.active = false;
+    log::info("backlight: faded to %d%% in %d steps over %llu ms; "
+              "longest gap %llu ms, longest write %llu ms",
+              level, fade_stats_.steps, static_cast<unsigned long long>(hal_.now() - fade_stats_.started),
+              static_cast<unsigned long long>(fade_stats_.longest_gap),
+              static_cast<unsigned long long>(fade_stats_.longest_write));
+  }
+}
+
+void App::send_display_state(room::DisplayState state, int brightness, const char* cause) {
+  protocol::PanelSession* session = server_ ? server_->active() : nullptr;
+  if (!session || !session->ready()) return;
+  session->send(protocol::Json{
+      {"t", "display_state"}, {"state", room::name(state)}, {"brightness", brightness}, {"cause", cause}});
+}
+
+void App::load_display_config() {
+  room::DisplayConfig config;
+  std::ifstream file(options_.state_dir + "/" + kDisplayConfigFile);
+  if (file) {
+    const protocol::Json stored = protocol::Json::parse(file, nullptr, false);
+    if (stored.is_discarded()) {
+      log::warn("%s/%s isn't JSON; using the default display settings", options_.state_dir.c_str(),
+                kDisplayConfigFile);
+    } else {
+      config = room::DisplayConfig::from_config(stored);
+    }
+  }
+  display_power_.configure(config, hal_.now());
+  display_power_.take_change();  // the starting state, applied by the caller
+}
+
+void App::store_display_config() const {
+  // Written aside and renamed, so a power cut never leaves half a file.
+  const std::string path = options_.state_dir + "/" + kDisplayConfigFile;
+  const std::string temporary = path + ".new";
+  {
+    std::ofstream file(temporary, std::ios::trunc);
+    file << display_power_.config().to_config().dump() << '\n';
+    if (!file.flush()) {
+      log::warn("can't store the display settings in %s", temporary.c_str());
+      return;
+    }
+  }
+  if (std::rename(temporary.c_str(), path.c_str()) != 0) {
+    log::warn("can't store the display settings in %s", path.c_str());
+  }
 }
 
 }  // namespace nesto

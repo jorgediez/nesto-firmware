@@ -155,6 +155,13 @@ TEST_CASE("the state carries the voltages, the climate temperature and humidity"
   CHECK(cold->celsius == doctest::Approx(-5.0));
 }
 
+TEST_CASE("proximity: a 16-bit value, near from 15") {
+  CHECK(bp::decode_proximity({0x03, 0x00}) == 3);    // as a thermostat sent with nobody there
+  CHECK(bp::decode_proximity({0x24, 0x00}) == 36);   // "near pir msg 36"
+  CHECK(*bp::decode_proximity({0x24, 0x00}) >= bp::kNearThreshold);
+  CHECK_FALSE(bp::decode_proximity({0x01}));
+}
+
 TEST_CASE("the handshake: break, reset, burst to BRK, acknowledgement, five questions") {
   bp::Session s;
   CHECK(s.phase() == bp::Session::Phase::kStopped);

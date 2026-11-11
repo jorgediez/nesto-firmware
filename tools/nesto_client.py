@@ -167,8 +167,10 @@ class NestoClient:
         title: str = "Test room",
         items: list[dict] | None = None,
         states: dict[str, dict] | None = None,
+        config: dict | None = None,
     ) -> None:
-        """Sends the four synchronisation messages (section 8) and waits for ready."""
+        """Sends the four synchronisation messages (section 8) and waits for ready.
+        `config` is the body of the config message (section 12)."""
         now = datetime.now().astimezone()
         offset = now.utcoffset() or timedelta()
         await self.send(
@@ -178,7 +180,7 @@ class NestoClient:
                 "utc_offset_min": int(offset.total_seconds() // 60),
             }
         )
-        await self.send({"t": "config"})
+        await self.send({"t": "config", **(config or {})})
         await self.send({"t": "layout", "rev": 1, "title": title, "items": items or []})
         await self.send({"t": "states", "full": True, "items": states or {}})
         await self.wait_for("ready")
@@ -245,6 +247,8 @@ class DemoRoom:
         self.states = json.loads(json.dumps(DEMO_STATES))
         self.intents: list[dict] = []
         self.fail_actions: set[str] = set()  # actions to answer with an error, for tests
+        self.config: dict | None = None  # the panel's settings (section 12)
+        self.display_states: list[dict] = []  # what the panel reported (section 13)
         self.log = False
 
     def apply(self, intent: dict) -> dict:
@@ -284,7 +288,7 @@ class DemoRoom:
 
     async def serve(self, client: NestoClient, title: str = DEMO_TITLE) -> None:
         """Synchronises the room, then answers intents until the connection ends."""
-        await client.synchronise(title, DEMO_ITEMS, self.states)
+        await client.synchronise(title, DEMO_ITEMS, self.states, self.config)
 
         async def keep_alive() -> None:
             while True:
@@ -295,6 +299,15 @@ class DemoRoom:
         try:
             while True:
                 message = await client.receive()
+                if message.get("t") == "display_state":
+                    self.display_states.append(message)
+                    if self.log:
+                        print(
+                            f"display: {message['state']} at {message['brightness']}%"
+                            f" ({message['cause']})",
+                            flush=True,
+                        )
+                    continue
                 if message.get("t") != "intent":
                     continue
                 self.intents.append(message)
@@ -378,6 +391,9 @@ async def _demo(args: argparse.Namespace) -> None:
     await client.authenticate(key)
     room = DemoRoom()
     room.log = True
+    # Sent every time, as Home Assistant does, so a setting tried once doesn't
+    # stay on the panel.
+    room.config = {"display": {"timeout_s": args.timeout, "wake_on_motion": not args.no_motion}}
     print(f"Serving the demo room '{DEMO_TITLE}' to panel {client.hello['panel_id']}")
     try:
         await room.serve(client)
@@ -394,7 +410,18 @@ def main() -> None:
     pair = commands.add_parser("pair", help="pair and save the key")
     pair.add_argument("--yes", action="store_true", help="accept the code without asking")
     commands.add_parser("connect", help="authenticate, synchronise and print messages")
-    commands.add_parser("demo", help="serve a made-up room that answers the panel's intents")
+    demo = commands.add_parser("demo", help="serve a made-up room that answers the panel's intents")
+    demo.add_argument(
+        "--timeout",
+        type=int,
+        default=30,
+        help="seconds without input before the display rests (default: 30)",
+    )
+    demo.add_argument(
+        "--no-motion",
+        action="store_true",
+        help="don't wake the display when someone comes near",
+    )
     args = parser.parse_args()
     run = {"pair": _pair, "connect": _connect, "demo": _demo}[args.command]
     try:

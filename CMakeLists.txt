@@ -65,6 +65,7 @@ nesto_target_options(nesto_protocol)
 # with them (PROTOCOL.md sections 9 to 11 and 23). No LVGL, so fully testable.
 add_library(nesto_room STATIC
   src/room/Controller.cpp
+  src/room/DisplayPower.cpp
   src/room/Room.cpp
 )
 target_include_directories(nesto_room PUBLIC src)

@@ -38,7 +38,7 @@ const char* type_name(std::uint16_t type) {
     case backplate::kAscii: return "text";
     case backplate::kClimate: return "temperature and humidity";
     case backplate::kFetPresence: return "wire presence";
-    case 0x0005: return "PIR, raw";
+    case backplate::kPirRaw: return "PIR, raw";
     case 0x0007: return "proximity";
     case 0x0009: return "wire presence (more)";
     case 0x000a: return "ambient light";
@@ -194,7 +194,7 @@ void NestHal::hand_back_backplate() {
   }
 }
 
-void NestHal::service_backplate(bool verbose) {
+void NestHal::service_backplate(bool verbose, std::vector<TimedInput>* inputs) {
   if (backplate_fd_ < 0) return;
   const Millis t = now();
 
@@ -230,6 +230,26 @@ void NestHal::service_backplate(bool verbose) {
       std::printf("\n");
     }
     backplate_.receive(t, frame);
+    if (frame.type == backplate::kProximity) {
+      const auto near = backplate::decode_proximity(frame.payload);
+      if (near) {
+        ++near_readings_;
+        near_highest_ = std::max(near_highest_, *near);
+        if (*near >= backplate::kNearThreshold) {
+          ++near_count_;
+          if (inputs) inputs->push_back({t, Presence{}});
+        }
+      }
+    } else if (frame.type == backplate::kPirRaw) {
+      ++far_frames_;
+      const bool moving = std::any_of(frame.payload.begin(), frame.payload.end(),
+                                      [](std::uint8_t b) { return b != 0; });
+      if (moving) {
+        ++far_moving_;
+        // Not all zero: someone moved in the room (docs/DEVICE.md).
+        if (inputs) inputs->push_back({t, Presence{true}});
+      }
+    }
   }
 
   backplate_.tick(t);
@@ -285,6 +305,12 @@ void NestHal::report_backplate(bool verbose) {
       std::snprintf(climate, sizeof climate, ", %.1f C, %.0f%% humidity", c->celsius, c->humidity);
     }
     log::info("backplate: %s%s", power, climate);
+    // What the motion sensors did over the minute, until we know enough to
+    // wake on the far-field one too.
+    log::info("backplate: near-field %d readings, highest %d, %d at %d or more; "
+              "far-field %d frames, %d not zero",
+              near_readings_, near_highest_, near_count_, backplate::kNearThreshold, far_frames_, far_moving_);
+    near_readings_ = near_highest_ = near_count_ = far_frames_ = far_moving_ = 0;
   }
 }
 
@@ -406,7 +432,7 @@ void NestHal::poll(std::vector<TimedInput>& out, Millis timeout) {
     tv.tv_usec = static_cast<suseconds_t>((timeout % 1000) * 1000);
     select(max_fd + 1, &readable, nullptr, nullptr, &tv);  // EINTR: a signal, seen below
     read_inputs(out, false);
-    service_backplate(false);
+    service_backplate(false, &out);
   }
   if (g_quit_signal != 0) {
     log::info("signal %d: stopping", static_cast<int>(g_quit_signal));
@@ -416,12 +442,21 @@ void NestHal::poll(std::vector<TimedInput>& out, Millis timeout) {
 }
 
 void NestHal::present(const std::uint32_t* pixels) {
+  last_frame_ = pixels;
+  if (!dark_) copy_to_screen(pixels);
+}
+
+void NestHal::copy_to_screen(const std::uint32_t* pixels) {
   const std::size_t row_bytes = static_cast<std::size_t>(kScreenSize) * 4;
   for (int y = 0; y < kScreenSize; ++y) {
     const std::size_t at = static_cast<std::size_t>(y + y_offset_) * line_length_ +
                            static_cast<std::size_t>(x_offset_) * 4;
     if (at + row_bytes > fb_size_) return;
-    std::memcpy(fb_ + at, pixels + static_cast<std::size_t>(y) * kScreenSize, row_bytes);
+    if (pixels) {
+      std::memcpy(fb_ + at, pixels + static_cast<std::size_t>(y) * kScreenSize, row_bytes);
+    } else {
+      std::memset(fb_ + at, 0, row_bytes);
+    }
   }
 }
 
@@ -431,6 +466,14 @@ void NestHal::set_backlight(int percent) {
   // Round up, so any percentage above 0 still lights the screen.
   const int level = (percent * backlight_max_ + 99) / 100;
   if (!write_int(backlight_, level)) log::warn("%s: can't set it to %d", backlight_.c_str(), level);
+}
+
+void NestHal::set_screen_on(bool on) {
+  if (on == !dark_ || !fb_) return;
+  dark_ = !on;
+  // Black while dark, rather than a blanked framebuffer: blanked, the LCD
+  // turns white for most of a second before it goes dark (docs/DEVICE.md).
+  copy_to_screen(on ? last_frame_ : nullptr);
 }
 
 int NestHal::input_test() {
