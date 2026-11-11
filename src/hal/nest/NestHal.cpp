@@ -249,7 +249,11 @@ void NestHal::service_backplate(bool verbose, std::vector<TimedInput>* inputs) {
       ++far_frames_;
       const bool moving = std::any_of(frame.payload.begin(), frame.payload.end(),
                                       [](std::uint8_t b) { return b != 0; });
-      if (moving) ++far_moving_;
+      if (moving) {
+        ++far_moving_;
+        // Not all zero: someone moved in the room (docs/DEVICE.md).
+        if (inputs) inputs->push_back({t, Presence{true}});
+      }
     }
   }
 

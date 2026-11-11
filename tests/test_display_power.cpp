@@ -166,7 +166,7 @@ TEST_CASE("state names, both ways") {
   CHECK_FALSE(nesto::room::parse_display_state("asleep"));
 }
 
-TEST_CASE("the backlight fades down over half a second and comes up at once") {
+TEST_CASE("the backlight fades down on a curve and comes up at once") {
   using nesto::room::BacklightFade;
   BacklightFade fade(80);
   CHECK(fade.level(0) == 80);
@@ -175,10 +175,10 @@ TEST_CASE("the backlight fades down over half a second and comes up at once") {
   fade.go(0, 1000);
   CHECK(fade.level(1000) == 80);
   CHECK(fade.fading(1000));
-  CHECK(fade.level(1250) == 40);
-  CHECK(fade.level(1499) == 1);  // still lit until the very end
-  CHECK(fade.level(1500) == 0);
-  CHECK_FALSE(fade.fading(1500));
+  CHECK(fade.level(1400) == 20);  // halfway, a quarter: the square of the time left
+  CHECK(fade.level(1799) == 1);   // still lit until the very end
+  CHECK(fade.level(1800) == 0);
+  CHECK_FALSE(fade.fading(1800));
 
   // Woken halfway down: back up at once.
   fade = BacklightFade(80);
@@ -189,7 +189,7 @@ TEST_CASE("the backlight fades down over half a second and comes up at once") {
 
   // A lower brightness while lit fades too, from wherever it is.
   fade.go(20, 1000);
-  CHECK(fade.level(1250) == 50);
+  CHECK(fade.level(1400) == 35);
   CHECK(fade.level(2000) == 20);
   CHECK(fade.target() == 20);
 }

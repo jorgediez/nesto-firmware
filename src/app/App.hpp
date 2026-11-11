@@ -94,6 +94,16 @@ class App : private protocol::SessionEvents {
   room::DisplayPower display_power_{0};
   room::BacklightFade backlight_;
   int backlight_level_ = -1;  // what the hardware was last set to
+  // How the last fade went, logged at its end: steps written, the longest
+  // gap between them and the longest write.
+  struct FadeStats {
+    bool active = false;
+    Millis started = 0;
+    Millis last_step = 0;
+    int steps = 0;
+    Millis longest_gap = 0;
+    Millis longest_write = 0;
+  } fade_stats_;
   unsigned rendered_version_ = 0;
   std::map<std::uint32_t, std::string> intent_requests_;  // request id to item key
   std::uint32_t next_request_id_ = 1;

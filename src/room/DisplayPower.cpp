@@ -183,10 +183,12 @@ int BacklightFade::level(Millis now) const {
   if (to_ >= from_) return to_;  // up: at once
   const Millis elapsed = now > start_ ? now - start_ : 0;
   if (elapsed >= kDuration) return to_;
-  // Linear, rounded up, so it reaches the target only at the end.
+  // The square of the time left, rounded up, so it reaches the target only
+  // at the end.
   const Millis left = kDuration - elapsed;
-  const Millis span = static_cast<Millis>(from_ - to_) * left;
-  return to_ + static_cast<int>((span + kDuration - 1) / kDuration);
+  const Millis span = static_cast<Millis>(from_ - to_) * left * left;
+  constexpr Millis kSquare = kDuration * kDuration;
+  return to_ + static_cast<int>((span + kSquare - 1) / kSquare);
 }
 
 }  // namespace nesto::room

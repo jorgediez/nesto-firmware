@@ -23,7 +23,7 @@ enum Type : std::uint16_t {
   kAscii = 0x0001,          // text: versions, "BRK" at the end of the start-up burst
   kClimate = 0x0002,        // temperature and humidity
   kFetPresence = 0x0004,    // which terminals have wires
-  kPirRaw = 0x0005,         // the far-field motion sensor, now and then (meaning not known yet)
+  kPirRaw = 0x0005,         // the far-field motion sensor, while someone moves; all zero after
   kProximity = 0x0007,      // how near someone is, about every second
   kState = 0x000b,          // voltages: input, operating, battery
   kTfeVersion = 0x0018,

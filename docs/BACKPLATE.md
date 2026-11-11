@@ -92,7 +92,8 @@ five times in a row, until monit's recovery rebooted the thermostat.
 |---|---|
 | `0x0002` | temperature (signed, hundredths of a degree C), humidity (tenths of a percent) |
 | `0x000b` | state: at byte 6 the USB supply's voltage (thousandths of a volt), at 8 the input voltage from the heating's wires (hundredths), at 10 the operating voltage and at 12 the battery's (thousandths) |
-| `0x0005`, `0x0007`, `0x000a` | raw PIR, proximity and ambient light, about every second once running |
+| `0x0005` | the far-field motion sensor (raw PIR), while someone moves in the room ([DEVICE.md](DEVICE.md)) |
+| `0x0007`, `0x000a` | near-field proximity and ambient light, about every second once running |
 | `0x000c`, `0x0022`, `0x0023`, `0x002b`, `0x0038` | among the buffered readings; not decoded yet |
 
 ## What a thermostat showed
@@ -144,9 +145,10 @@ scripts/dev.sh device-run <nest-ip> backplate-test   # 3 minutes; every frame, d
 
 Nesto itself talks to the backplate in every run (`--no-backplate` turns
 that off), logging the battery, USB and input voltages, temperature and
-humidity every minute. To see a run outlast the backplate's 30 minutes, the cap on
-how long the stock software may be away has to be lifted on purpose:
+humidity every minute. Three 45-minute runs outlasted the backplate's 30
+minutes without a reset, so a run talking to it may keep the stock software
+away for up to 4 hours (`NESTO_RUN_MAX`; [DEVICE.md](DEVICE.md)):
 
 ```bash
-NESTO_TAKE_MAX=3600 scripts/dev.sh device-run <nest-ip> detach 2700
+scripts/dev.sh device-run <nest-ip> detach 2700
 ```

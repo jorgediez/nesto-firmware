@@ -62,7 +62,8 @@ class NestHal : public Hal {
   bool open_backplate();
   /// Reads what the backplate sent, moves the session on, and sends what it
   /// has to say. With `verbose`, prints each frame; with `inputs`, adds
-  /// Presence when the proximity sensor says someone is near.
+  /// Presence when the proximity sensor says someone is near, or the
+  /// far-field sensor that someone moved.
   void service_backplate(bool verbose, std::vector<TimedInput>* inputs = nullptr);
   void report_backplate(bool verbose);
   /// Leaves the backplate as the stock software expects to find it.

@@ -220,7 +220,11 @@ void App::handle(const TimedInput& input) {
           if (display_power_.state() == room::DisplayState::Active) display_power_.input(input.at);
           handle(event.down ? gestures_.on_down(input.at, press_context()) : gestures_.on_up(input.at));
         } else if constexpr (std::is_same_v<T, Presence>) {
+          const bool resting = display_power_.state() != room::DisplayState::Active;
           display_power_.motion(input.at);
+          if (resting && display_power_.state() == room::DisplayState::Active) {
+            log::info("display woken by the %s sensor", event.far ? "far-field motion" : "proximity");
+          }
         } else if constexpr (std::is_same_v<T, QuitRequest>) {
           quit_ = true;
           exit_code_ = event.exit_code;
@@ -438,6 +442,7 @@ void App::apply_display(bool report) {
   // standby is as good as off for the screen itself.
   if (change->brightness > 0) hal_.set_screen_on(true);
   backlight_.go(change->brightness, hal_.now());
+  if (backlight_.fading(hal_.now())) fade_stats_ = {true, hal_.now(), hal_.now(), 0, 0, 0};
   update_backlight();
   log::info("display %s at %d%% (%s)", room::name(change->state), change->brightness,
             room::name(change->cause));
@@ -445,12 +450,27 @@ void App::apply_display(bool report) {
 }
 
 void App::update_backlight() {
-  const int level = backlight_.level(hal_.now());
+  const Millis t = hal_.now();
+  const int level = backlight_.level(t);
   if (level != backlight_level_) {
     hal_.set_backlight(level);
     backlight_level_ = level;
+    if (fade_stats_.active) {
+      ++fade_stats_.steps;
+      fade_stats_.longest_gap = std::max(fade_stats_.longest_gap, t - fade_stats_.last_step);
+      fade_stats_.longest_write = std::max(fade_stats_.longest_write, hal_.now() - t);
+      fade_stats_.last_step = t;
+    }
   }
   if (level == 0) hal_.set_screen_on(false);
+  if (fade_stats_.active && !backlight_.fading(t)) {
+    fade_stats_.active = false;
+    log::info("backlight: faded to %d%% in %d steps over %llu ms; "
+              "longest gap %llu ms, longest write %llu ms",
+              level, fade_stats_.steps, static_cast<unsigned long long>(hal_.now() - fade_stats_.started),
+              static_cast<unsigned long long>(fade_stats_.longest_gap),
+              static_cast<unsigned long long>(fade_stats_.longest_write));
+  }
 }
 
 void App::send_display_state(room::DisplayState state, int brightness, const char* cause) {
