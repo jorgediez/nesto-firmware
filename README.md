@@ -16,9 +16,10 @@ integration, which discovers the panel, pairs with it and decides what it shows.
 > thermostat it runs for a supervised while, with its screen, ring and press,
 > and gives the stock software its place back afterwards. Runs stay under 30
 > minutes: past that, the thermostat's base resets it unless something talks
-> to it, and only the stock software does so far. Installing it for good comes
-> after that. The wire protocol between the panel and Home
-> Assistant is in [PROTOCOL.md](PROTOCOL.md).
+> to it. Nesto now does ([docs/BACKPLATE.md](docs/BACKPLATE.md)), but that's
+> still to be tried on a thermostat. Installing it for good comes after that.
+> The wire protocol between the panel and Home Assistant is in
+> [PROTOCOL.md](PROTOCOL.md).
 
 ## Development
 
@@ -83,7 +84,7 @@ The steps are `r+N`/`r-N` (turn the ring N clicks, as many wheel notches),
 
 | Path | What's there |
 |---|---|
-| `src/core/` | Logic with no hardware or LVGL dependency, covered by unit tests |
+| `src/core/` | Logic with no hardware or LVGL dependency, covered by unit tests, including the backplate's protocol ([docs/BACKPLATE.md](docs/BACKPLATE.md)) |
 | `src/protocol/` | The link to Home Assistant: framing, messages, pairing and encryption ([PROTOCOL.md](PROTOCOL.md)) |
 | `src/room/` | The room: Home Assistant's layout and states, and what the ring and press do with them |
 | `src/hal/` | The hardware interface, with the simulator (`sim/`) and the thermostat (`nest/`) |
@@ -137,6 +138,7 @@ a while, as [docs/DEVICE.md](docs/DEVICE.md) explains:
 scripts/dev.sh device-check <nest-ip>             # the report goes to device-reports/
 scripts/dev.sh device-screen <nest-ip> trial      # stop the stock software for 5 minutes, watch, restart it
 scripts/dev.sh device-run <nest-ip> input-test    # print what the ring and the press send
+scripts/dev.sh device-run <nest-ip> backplate-test  # talk to the backplate, printing every frame
 scripts/dev.sh device-run <nest-ip>               # run Nesto for 10 minutes, then restart the stock software
 scripts/dev.sh client --host <nest-ip> pair       # meanwhile, pair with it (then: demo)
 scripts/dev.sh device-run <nest-ip> detach        # run Nesto for 25 minutes, apart from SSH, watching the battery

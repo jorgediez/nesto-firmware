@@ -39,7 +39,10 @@ void print_usage(const char* program) {
   std::printf(
       "  --ring-counts N     the ring's sensor counts per tick (default %d)\n"
       "  --ring-reverse      turn the ring's direction round\n"
-      "  --input-test        print the ring's and the press's events, for measuring the ring\n",
+      "  --input-test        print the ring's and the press's events, for measuring the ring\n"
+      "  --backplate-test    talk to the backplate alone, printing every frame\n"
+      "  --no-backplate      don't talk to the backplate (it resets the thermostat after ~30 min)\n"
+      "  --power-steal       set the backplate's power steal mode after the handshake\n",
       nesto::NestOptions{}.ring.counts_per_tick);
 #endif
   std::printf(
@@ -62,6 +65,7 @@ int main(int argc, char** argv) {
 #elif defined(NESTO_PLATFORM_NEST)
   nesto::NestOptions options;
   bool input_test = false;
+  bool backplate_test = false;
 #endif
 
   for (int i = 1; i < argc; ++i) {
@@ -131,6 +135,18 @@ int main(int argc, char** argv) {
       input_test = true;
       continue;
     }
+    if (arg == "--backplate-test") {
+      backplate_test = true;
+      continue;
+    }
+    if (arg == "--no-backplate") {
+      options.backplate = false;
+      continue;
+    }
+    if (arg == "--power-steal") {
+      options.session.power_steal = true;
+      continue;
+    }
 #endif
     (void)has_value;
     std::fprintf(stderr, "Unknown or incomplete option: %s\n\n", arg.c_str());
@@ -143,6 +159,7 @@ int main(int argc, char** argv) {
 #elif defined(NESTO_PLATFORM_NEST)
   auto hal = std::make_unique<nesto::NestHal>(options);
   if (input_test) return hal->input_test();
+  if (backplate_test) return hal->backplate_test();
 #endif
 
   nesto::App app(*hal, app_options);

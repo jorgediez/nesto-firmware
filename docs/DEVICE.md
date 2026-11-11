@@ -365,8 +365,11 @@ hour. The backplate reports it to `nlclient` too (`vb 3.952V`, and an input
 of 0 V). So charging also seems to need `nlclient`'s conversation with the
 backplate.
 
-Until Nesto talks to the backplate itself, `nlclient` is never away for more
-than 27 minutes: `nest-screen.sh` refuses longer (`NESTO_TAKE_MAX`, 1620 s),
-which caps a run at 26 minutes and a trial at 25. Running Nesto for good
-needs the backplate's protocol on `/dev/ttyO2`: at least keeping it from
-resetting the thermostat, and charging the battery.
+So `nlclient` is never away for more than 27 minutes: `nest-screen.sh`
+refuses longer (`NESTO_TAKE_MAX`, 1620 s), which caps a run at 26 minutes
+and a trial at 25. Running Nesto for good needs the backplate's protocol on
+`/dev/ttyO2`: at least keeping it from resetting the thermostat, and
+charging the battery. Others had worked it out, and Nesto now keeps a
+session with the backplate going: see [BACKPLATE.md](BACKPLATE.md), which
+also says how to try a run past 30 minutes. The cap stays until such a run
+shows the reset gone.

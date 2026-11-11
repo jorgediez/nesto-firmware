@@ -37,6 +37,7 @@ endfunction()
 
 # Platform-independent logic, linked into both the program and the tests.
 add_library(nesto_core STATIC
+  src/core/Backplate.cpp
   src/core/InputScript.cpp
   src/core/Log.cpp
   src/core/PressGestures.cpp
