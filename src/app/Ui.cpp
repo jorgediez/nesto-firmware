@@ -78,20 +78,52 @@ void set_text(lv_obj_t* label, const std::string& text) {
   lv_label_set_text(label, text.c_str());
 }
 
-/// The width of `text` in `font` if every digit in it were the widest one:
-/// the font's digits differ in width, so a clock's labels sized by this don't
-/// change size, and the clock doesn't shift, as the time changes.
-std::int32_t widest_width(const lv_font_t* font, const std::string& text) {
+/// The widest of the font's digits.
+std::int32_t widest_digit(const lv_font_t* font) {
   std::int32_t digit = 0;
   for (char d = '0'; d <= '9'; ++d) {
     digit = std::max<std::int32_t>(digit, lv_font_get_glyph_width(font, static_cast<std::uint32_t>(d), 0));
   }
-  std::int32_t width = 2;  // kerning's slack
-  for (char c : text) {
-    width += c >= '0' && c <= '9' ? digit
-                                  : lv_font_get_glyph_width(font, static_cast<unsigned char>(c), 0);
-  }
+  return digit;
+}
+
+/// The width of `text` in `font`, with 2 px for kerning's slack.
+std::int32_t text_width(const lv_font_t* font, const std::string& text) {
+  std::int32_t width = 2;
+  for (char c : text) width += lv_font_get_glyph_width(font, static_cast<unsigned char>(c), 0);
   return width;
+}
+
+/// A row of one-character labels for a clock's numbers: tabular figures.
+template <std::size_t N>
+lv_obj_t* make_cells(lv_obj_t* parent, const lv_font_t* font, lv_color_t colour,
+                     std::array<lv_obj_t*, N>& cells) {
+  lv_obj_t* row = lv_obj_create(parent);
+  lv_obj_remove_style_all(row);
+  lv_obj_set_size(row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+  for (lv_obj_t*& cell : cells) {
+    cell = make_label(row, font, colour);
+    lv_label_set_long_mode(cell, LV_LABEL_LONG_MODE_CLIP);
+  }
+  return row;
+}
+
+/// Shows `text` in the cells: each digit centred in a cell as wide as the
+/// widest digit, other characters at their own width. The font's digits
+/// differ in width ("1" is narrow), so with this nothing moves as the time
+/// changes, only when it gains or loses a digit.
+template <std::size_t N>
+void set_cells(std::array<lv_obj_t*, N>& cells, const lv_font_t* font, const std::string& text) {
+  const std::int32_t digit = widest_digit(font);
+  for (std::size_t i = 0; i < N; ++i) {
+    lv_obj_t* cell = cells[i];
+    lv_obj_set_hidden(cell, i >= text.size());
+    if (i >= text.size()) continue;
+    const char c = text[i];
+    set_text(cell, std::string(1, c));
+    lv_obj_set_width(cell, c >= '0' && c <= '9' ? digit : LV_SIZE_CONTENT);
+  }
 }
 
 }  // namespace
@@ -346,23 +378,17 @@ void Ui::build_clock(lv_obj_t* screen) {
   lv_obj_set_flex_align(digital_, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_END);
   lv_obj_set_style_pad_column(digital_, 4, 0);
   lv_obj_align(digital_, LV_ALIGN_CENTER, 0, -10);
-  digital_time_ = make_label(digital_, fonts_.clock, kClock);
+  digital_time_ = make_cells(digital_, fonts_.clock, kClock, time_cells_);
   digital_side_ = lv_obj_create(digital_);
   lv_obj_remove_style_all(digital_side_);
   lv_obj_set_size(digital_side_, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
   lv_obj_set_flex_flow(digital_side_, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(digital_side_, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
   digital_suffix_ = make_label(digital_side_, fonts_.body, kMuted);
-  digital_seconds_ = make_label(digital_side_, fonts_.large, kMuted);
-  // AM/PM and the seconds each in a box of fixed width, sized for the widest
-  // text it can show, so nothing moves as the seconds change: never wrap. The
-  // time keeps its own width, so the group centres on what is drawn ("11:21"
-  // is much narrower than "88:88"); it can shift a little once a minute.
-  for (lv_obj_t* label : {digital_suffix_, digital_seconds_}) {
-    lv_label_set_long_mode(label, LV_LABEL_LONG_MODE_CLIP);
-  }
+  digital_seconds_ = make_cells(digital_side_, fonts_.large, kMuted, seconds_cells_);
+  // AM/PM in a box as wide as the wider of the two, so it doesn't move.
+  lv_label_set_long_mode(digital_suffix_, LV_LABEL_LONG_MODE_CLIP);
   lv_obj_set_style_text_align(digital_suffix_, LV_TEXT_ALIGN_LEFT, 0);
-  lv_obj_set_style_text_align(digital_seconds_, LV_TEXT_ALIGN_LEFT, 0);
   // Lifts the small text onto the large one's baseline.
   lv_obj_set_style_pad_bottom(digital_side_, 10, 0);
 
@@ -400,13 +426,12 @@ void Ui::show_clock(const room::ClockFace& face, room::ClockStyle style, bool da
     lv_obj_set_hidden(second_hand_, face.seconds.empty());
     if (!face.seconds.empty()) set_hand(second_hand_, second_points_, face.second_angle, 120);
   } else {
-    set_text(digital_time_, face.time);
+    set_cells(time_cells_, fonts_.clock, face.time);
     set_text(digital_suffix_, face.suffix);
-    lv_obj_set_width(digital_suffix_, std::max(widest_width(fonts_.body, "AM"),
-                                               widest_width(fonts_.body, "PM")));
+    lv_obj_set_width(digital_suffix_, std::max(text_width(fonts_.body, "AM"),
+                                               text_width(fonts_.body, "PM")));
     lv_obj_set_hidden(digital_suffix_, face.suffix.empty());
-    set_text(digital_seconds_, face.seconds);
-    lv_obj_set_width(digital_seconds_, widest_width(fonts_.large, face.seconds));
+    set_cells(seconds_cells_, fonts_.large, face.seconds);
     lv_obj_set_hidden(digital_seconds_, face.seconds.empty());
     lv_obj_set_hidden(digital_side_, face.suffix.empty() && face.seconds.empty());
   }

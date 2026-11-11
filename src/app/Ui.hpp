@@ -85,10 +85,13 @@ class Ui {
   lv_obj_t* minute_hand_ = nullptr;
   lv_obj_t* second_hand_ = nullptr;
   lv_obj_t* digital_ = nullptr;
+  // The time and the seconds: a cell per character, "88:88" and ":88" at most.
   lv_obj_t* digital_time_ = nullptr;
+  std::array<lv_obj_t*, 5> time_cells_{};
   lv_obj_t* digital_side_ = nullptr;  // AM/PM over the seconds
   lv_obj_t* digital_suffix_ = nullptr;
   lv_obj_t* digital_seconds_ = nullptr;
+  std::array<lv_obj_t*, 3> seconds_cells_{};
   lv_obj_t* clock_date_ = nullptr;
   lv_obj_t* pairing_ = nullptr;
   lv_obj_t* pairing_code_ = nullptr;
