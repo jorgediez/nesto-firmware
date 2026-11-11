@@ -114,6 +114,7 @@ NestHal::NestHal(NestOptions options)
     : options_(options), ring_ticks_(options.ring), backplate_(options.session) {}
 
 NestHal::~NestHal() {
+  hand_back_backplate();
   if (!backlight_.empty() && backlight_before_ >= 0) write_int(backlight_, backlight_before_);
   if (fb_) munmap(fb_, fb_size_);
   for (int fd : {fb_fd_, ring_fd_, press_fd_, backplate_fd_}) {
@@ -170,6 +171,27 @@ bool NestHal::open_backplate() {
   log::info("%s is the backplate", kBackplate);
   backplate_.start(now());
   return true;
+}
+
+void NestHal::hand_back_backplate() {
+  if (backplate_fd_ < 0 || !options_.backplate) return;
+  // A few seconds at most, as the stock software does when it stops.
+  backplate_.hand_back(now());
+  while (backplate_.handing_back()) {
+    fd_set readable;
+    FD_ZERO(&readable);
+    FD_SET(backplate_fd_, &readable);
+    timeval tv{0, 50000};
+    select(backplate_fd_ + 1, &readable, nullptr, nullptr, &tv);
+    service_backplate(backplate_verbose_);
+  }
+  // Let the last acknowledgement leave before the port closes.
+  tcdrain(backplate_fd_);
+  if (backplate_.handed_back()) {
+    log::info("backplate: handed back (reset, start-up burst, wires acknowledged)");
+  } else {
+    log::warn("backplate: %s", backplate_.problem().c_str());
+  }
 }
 
 void NestHal::service_backplate(bool verbose) {
@@ -437,6 +459,7 @@ int NestHal::input_test() {
 
 int NestHal::backplate_test() {
   catch_quit_signals();
+  backplate_verbose_ = true;
   if (!open_backplate()) return 1;
   std::printf(
       "Talking to the backplate; every frame is printed. Ctrl-C stops.\n"

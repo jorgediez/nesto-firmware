@@ -121,15 +121,26 @@ class Session {
     Millis silence = 120000;   // nothing heard for this long: start again
     Millis retry = 10000;      // pause before starting again
     bool power_steal = false;  // send "set power steal mode" before running
+    Millis hand_back_timeout = 3000;
   };
 
-  enum class Phase { kStopped, kBreak, kBurst, kInfo, kRunning, kRetry };
+  enum class Phase { kStopped, kBreak, kBurst, kInfo, kRunning, kRetry, kHandingBack };
 
   Session() = default;
   explicit Session(Config config) : config_(config) {}
 
   /// Starts (or restarts) the session.
   void start(Millis now);
+
+  /// Leaves the backplate as the stock software does when it stops: a reset,
+  /// the start-up burst, and its wire presence acknowledged. The stock
+  /// software sometimes fails to start after a session left mid-way, and
+  /// monit then reboots the thermostat. Done once handing_back() is false;
+  /// gives up after hand_back_timeout.
+  void hand_back(Millis now);
+  bool handing_back() const { return phase_ == Phase::kHandingBack; }
+  /// Whether the last hand_back() saw the burst through and acknowledged it.
+  bool handed_back() const { return handed_back_; }
 
   /// Advances timers. Call often: every loop is fine.
   void tick(Millis now);
@@ -192,6 +203,7 @@ class Session {
   std::optional<Climate> climate_;
   int handshakes_ = 0;
   int restarts_ = 0;
+  bool handed_back_ = false;
 };
 
 }  // namespace nesto::backplate

@@ -147,6 +147,17 @@ void Session::start(Millis now) {
   query_ = 0;
 }
 
+void Session::hand_back(Millis now) {
+  // As the stock software's log shows it stopping: "sending reset, waiting
+  // for wire state response", the burst, "sending wire ACK".
+  output_.clear();
+  fet_presence_.reset();
+  handed_back_ = false;
+  phase_ = Phase::kHandingBack;
+  since_ = now;
+  send(kReset);
+}
+
 void Session::send(std::uint16_t type, const std::vector<std::uint8_t>& payload) {
   const std::vector<std::uint8_t> frame = encode(type, payload);
   output_.insert(output_.end(), frame.begin(), frame.end());
@@ -241,6 +252,12 @@ void Session::tick(Millis now) {
     case Phase::kRetry:
       if (in_phase >= config_.retry) start(now);
       break;
+    case Phase::kHandingBack:
+      if (in_phase >= config_.hand_back_timeout) {
+        problem_ = "no start-up burst while handing back";
+        phase_ = Phase::kStopped;
+      }
+      break;
   }
 }
 
@@ -284,6 +301,16 @@ void Session::receive(Millis now, const Frame& frame) {
       break;
     case Phase::kRunning:
       if (frame.type == kEndOfBuffers) send(kEndOfBuffersAck);
+      break;
+    case Phase::kHandingBack:
+      if (frame.type == kFetPresence && !fet_presence_) {
+        // The stock software acknowledges the wire state as it comes.
+        fet_presence_ = frame.payload;
+        send(kFetPresenceAck, frame.payload);
+      } else if (frame.type == kAscii && text(frame) == "BRK" && fet_presence_) {
+        handed_back_ = true;
+        phase_ = Phase::kStopped;
+      }
       break;
     default:
       break;

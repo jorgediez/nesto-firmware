@@ -73,8 +73,18 @@ the backplate says nothing for 2 minutes, the session starts again after
 10 s.
 
 cuckoo-nest's example also sets **power steal mode** (`0x00c0`, payload
-`00 00 00 00`) after the questions; Nesto does so only with `--power-steal`,
-until it's clear whether charging needs it.
+`00 00 00 00`) after the questions; Nesto does so only with `--power-steal`.
+On the thermostat below it changed nothing.
+
+### Handing back
+
+When Nesto stops, it leaves the backplate as the stock software does when
+*it* stops (its log: "sending reset, waiting for wire state response", the
+burst, "sending wire ACK"): a reset, the burst, the wire presence
+acknowledged, within 3 s. Nesto first just closed the port mid-session, and
+twice afterwards the stock software struggled to start: once it logged "no
+backplate yet on WiresLayer::Init", "failed to CreateScreens()" and exited,
+five times in a row, until monit's recovery rebooted the thermostat.
 
 ## Readings
 
@@ -108,8 +118,9 @@ display `Display-2.14`, software 5.9.4-5), with the stock software stopped:
   software's), about 0.12 V an hour. The state's flags (byte 1) read `ce`
   throughout, where the stock software logs `8e`: the difference, 0x40, is
   the bit Exploitee.rs's wiki guessed means "charger off". So something the
-  stock software sends turns charging on. Power steal mode (`0x00c0`) is the
-  first thing to try.
+  stock software sends turns charging on. Power steal mode (`0x00c0`) isn't
+  it: the flags stayed `ce` with it. The stock software also logs "setting
+  power steal mode to 0x00000000" as it starts, so it's something else.
 
 
 ## Trying it

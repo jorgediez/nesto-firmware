@@ -63,6 +63,8 @@ class NestHal : public Hal {
   /// has to say. With `verbose`, prints each frame.
   void service_backplate(bool verbose);
   void report_backplate(bool verbose);
+  /// Leaves the backplate as the stock software expects to find it.
+  void hand_back_backplate();
   /// Reads whatever the input devices have, without waiting. With `verbose`,
   /// prints each raw event too.
   void read_inputs(std::vector<TimedInput>& out, bool verbose);
@@ -89,6 +91,7 @@ class NestHal : public Hal {
   backplate::FrameReader backplate_reader_;
   backplate::Session backplate_;
   std::vector<std::uint8_t> backplate_out_;  // written as the line takes it
+  bool backplate_verbose_ = false;           // the backplate test prints every frame
   // What was last reported, to log only changes, and the readings now and then.
   int reported_handshakes_ = 0;
   int reported_restarts_ = 0;

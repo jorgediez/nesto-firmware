@@ -295,6 +295,43 @@ TEST_CASE("a backplate that goes quiet for two minutes is started again") {
   CHECK(s.handshakes() == 1);
 }
 
+TEST_CASE("handing back: a reset, the burst, the wires acknowledged, as the stock software does") {
+  bp::Session s;
+  const nesto::Millis now = handshake(s);
+  s.tick(now + 1000);
+  s.take_output();
+  s.hand_back(now + 2000);
+  CHECK(s.handing_back());
+  CHECK(commands(s.take_output()) == Commands{bp::kReset});
+  // A stray BRK before the burst doesn't end it.
+  say(s, now + 2010, bp::kAscii, ascii("BRK"));
+  CHECK(s.handing_back());
+  say(s, now + 2100, bp::kAscii, ascii("1.0.26 2019-04-05 19:24:34 K"));
+  say(s, now + 2100, bp::kFetPresence, {4, 5});
+  CHECK(s.take_output() == bp::encode(bp::kFetPresenceAck, {4, 5}));
+  say(s, now + 2100, 0x0009, {1});
+  say(s, now + 2110, bp::kAscii, ascii("BRK"));
+  CHECK_FALSE(s.handing_back());
+  CHECK(s.handed_back());
+  CHECK(s.phase() == bp::Session::Phase::kStopped);
+  // Stopped: nothing more is sent.
+  s.tick(now + 60000);
+  CHECK(s.take_output().empty());
+}
+
+TEST_CASE("handing back gives up after three seconds without a burst") {
+  bp::Session s;
+  const nesto::Millis now = handshake(s);
+  s.hand_back(now);
+  s.take_output();
+  s.tick(now + 2999);
+  CHECK(s.handing_back());
+  s.tick(now + 3000);
+  CHECK_FALSE(s.handing_back());
+  CHECK_FALSE(s.handed_back());
+  CHECK(s.problem() == "no start-up burst while handing back");
+}
+
 TEST_CASE("readings are kept whatever the phase") {
   bp::Session s;
   s.start(0);
