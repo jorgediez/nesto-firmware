@@ -86,7 +86,9 @@ class Ui {
   lv_obj_t* second_hand_ = nullptr;
   lv_obj_t* digital_ = nullptr;
   lv_obj_t* digital_time_ = nullptr;
-  lv_obj_t* digital_side_ = nullptr;
+  lv_obj_t* digital_side_ = nullptr;  // AM/PM over the seconds
+  lv_obj_t* digital_suffix_ = nullptr;
+  lv_obj_t* digital_seconds_ = nullptr;
   lv_obj_t* clock_date_ = nullptr;
   lv_obj_t* pairing_ = nullptr;
   lv_obj_t* pairing_code_ = nullptr;

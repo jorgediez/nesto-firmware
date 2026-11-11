@@ -675,10 +675,10 @@ keeps going while HA is offline. That needs no protocol change.
   offset change in its time zone (daylight saving), so the panel never needs a
   time zone database.
 - The panel keeps time from its monotonic clock between messages and also sets
-  the system clock. If the hardware clock keeps time across reboots (to be
-  confirmed on the device), the panel can show the clock right after booting,
-  using the last offset stored in flash, before HA connects. Otherwise it shows
-  no clock until the first `time` message.
+  the system clock. If the hardware clock keeps time across reboots, as the
+  Nest Gen 2's does, the panel can show the clock right after booting, using
+  the last offset stored in flash, before HA connects. Otherwise it shows no
+  clock until the first `time` message.
 - `tz` is informational; the panel only uses `utc_offset_min`.
 
 ## 17. Sensors and input events

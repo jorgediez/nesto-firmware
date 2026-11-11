@@ -39,6 +39,7 @@ SCREENS = {
     # The timeout below rests the display; the clock shows once the fade ends.
     "standby-analog": f"{SETTLE} w3500",
     "standby-digital": f"{SETTLE} w3500",
+    "standby-digital-12h": f"{SETTLE} w3500",
 }
 
 # Settings for the screens that need some, as Home Assistant sends them.
@@ -47,6 +48,11 @@ CONFIGS = {
     "standby-digital": {
         "display": {"timeout_s": 2},
         "standby": {"clock": {"style": "digital", "seconds": True}},
+    },
+    "standby-digital-12h": {
+        "display": {"timeout_s": 2},
+        "standby": {"clock": {"style": "digital", "seconds": True}},
+        "locale": {"hour12": True},
     },
 }
 

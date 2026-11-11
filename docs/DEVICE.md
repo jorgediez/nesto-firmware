@@ -417,7 +417,9 @@ kept from the monotonic clock between messages. Nesto sets the system clock
 when it's over 2 s off, and stores the UTC offset in `time.json` in the state
 directory. At start, if the system clock reads 2025 or later and an offset is
 stored, the clock shows before Home Assistant connects; otherwise standby is
-dark until the first `time` message. The log says which:
+dark until the first `time` message. On 2026-11-11 the thermostat, rebooted,
+showed the clock before the demo room connected: its clock keeps time across
+a reboot. The log says which:
 
 ```
 time from the system clock: 2026-11-11 19:52, UTC+60 min stored
@@ -426,7 +428,9 @@ standby clock shown, analog: 19:52
 ```
 
 `client demo` tries the clock's settings: `--clock digital`, `--seconds`,
-`--hour12` and `--standby-brightness N`.
+`--hour12` and `--standby-brightness N`. It sends this computer's UTC offset
+(`scripts/dev.sh client` passes it into its container, which is on UTC); the
+panel keeps the offset it was sent last.
 
 A 45-minute run on 2026-11-11 showed the battery level with the
 display resting most of the time: 3.93 V at the start, 3.96 V after a quarter
