@@ -220,7 +220,8 @@ Five minutes with `nlclient` stopped, on the thermostat above:
   every 15 s (3.86 to 3.90 V, steady over the five minutes). With `nlclient`
   stopped, nothing talks to the backplate, which is what charges the battery
   from the base. Before Nesto runs for hours, check the battery holds up, or
-  have Nesto talk to the backplate.
+  have Nesto talk to the backplate. (A long run later showed both matter:
+  see below.)
 
 So Nesto can take the screen over the same way: monit stops watching
 `nlclient`, `nlclient` stops, and Nesto starts; giving back is the reverse.
@@ -232,14 +233,15 @@ the ring and the press from the input devices named above (it finds them by
 name, and keeps their events to itself), and sets the backlight. To try it:
 
 ```bash
-scripts/dev.sh device-run <nest-ip>                # 10 minutes; or: device-run <nest-ip> 1800
+scripts/dev.sh device-run <nest-ip>                # 10 minutes; or: device-run <nest-ip> 1500
 ```
 
 It builds Nesto for the thermostat, copies it to `/nesto/nesto` (`/` is
 where programs may run from and stay), takes the screen as the trial does,
 and runs Nesto with its log in your terminal, saved to
 `device-reports/run-*.txt`. Every 30 s it reports the memory in use, which
-monit holds under 41 MB, and Nesto's own share. Ctrl-C, the time running
+monit holds under 41 MB, Nesto's own share, and the battery (see
+[Long runs](#long-runs-and-the-battery)). Ctrl-C, the time running
 out, or SSH dropping stops Nesto and gives the screen back; the give-back
 timer, a minute longer, is there in case even that fails.
 
@@ -305,3 +307,66 @@ Nesto ran on the thermostat above in `nlclient`'s place:
 - **The ring's feel:** one step of 150 counts for everything (49 a turn)
   felt right overall; a little fine for moving between items, a little coarse
   for values such as brightness. Hence the ticks and clicks above.
+
+### Long runs and the battery
+
+The thermostat runs on its battery, which the base charges through the
+backplate, and the backplate is `nlclient`'s: with `nlclient` stopped,
+nothing may be charging it. There's no `/sys/class/power_supply` to ask, but
+`nlshutdownd`, which keeps running, logs the voltage every 15 s
+("shutdown-manager: batteryLevel @ 3.891" in `/var/log/messages`). So every
+run reports it, and gives the screen back as soon as it's under 3.70 V,
+letting `nlclient` charge again; a run doesn't start under it. The 3.70 V is
+a cautious guess, not a measured limit, and `nlshutdownd`'s own shutdown is
+still there below it.
+
+```bash
+scripts/dev.sh device-screen <nest-ip> battery     # the latest voltage
+```
+
+A run shouldn't hang on an SSH session, so it can go on by itself:
+
+```bash
+scripts/dev.sh device-run <nest-ip> detach         # 25 minutes, the longest there is
+scripts/dev.sh device-log <nest-ip> follow         # watch it (Ctrl-C stops watching only)
+scripts/dev.sh device-log <nest-ip>                # copy it to device-reports/
+scripts/dev.sh device-screen <nest-ip> give        # end it early
+```
+
+A detached run writes to `/media/data/nesto/run.log`, on the flash, so the
+log survives even a reboot (the uptime starting again shows one); the run
+before it is kept as `run.log.1`. It ends, like any run, with what it adds up
+to: the most memory in use, and the battery at the start, at its lowest and
+at the end.
+
+For the answer to mean something, the thermostat should be on its base, as
+it would hang; on USB it may charge whatever the backplate does. Nesto keeps
+the screen lit throughout, as it doesn't dim yet, so this is the heaviest
+drain to expect.
+
+### What a long run showed: the backplate resets the thermostat
+
+A detached run meant for 4 hours, on the base, ended after 30 minutes: the
+thermostat rebooted. The run's log on the flash stops mid-run, and the
+uptime afterwards puts the boot 30 minutes and 8 seconds after `nlclient`
+stopped. Its event log (`/media/log/nlevent*`) records the backplate
+(`Backplate-3.2`) with reset reason 2 as `nlclient` stopped, and reason 9
+when it started again after the boot. Nothing in monit's or `nlheartbeatd`'s
+configuration acts after 30 minutes, and memory was at 16 MB throughout. So,
+most likely, **the backplate's own controller resets the thermostat when
+nothing has talked to it for about 30 minutes**. What the reason codes mean
+isn't known, and the kernel's lines from before the reset were already
+pruned. Note when reading the logs: the system log is in UTC, the run's in
+local time.
+
+Over those 30 minutes the battery fell from 3.906 V to 3.816 V, about
+0.18 V an hour, while `nlclient`, once back, had it at 3.95 V within the
+hour. The backplate reports it to `nlclient` too (`vb 3.952V`, and an input
+of 0 V). So charging also seems to need `nlclient`'s conversation with the
+backplate.
+
+Until Nesto talks to the backplate itself, `nlclient` is never away for more
+than 27 minutes: `nest-screen.sh` refuses longer (`NESTO_TAKE_MAX`, 1620 s),
+which caps a run at 26 minutes and a trial at 25. Running Nesto for good
+needs the backplate's protocol on `/dev/ttyO2`: at least keeping it from
+resetting the thermostat, and charging the battery.

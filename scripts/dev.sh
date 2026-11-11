@@ -19,12 +19,17 @@
 #   scripts/dev.sh shell                  a shell in the container
 #   scripts/dev.sh device-check HOST [SSH OPTIONS]
 #                                         describe a rooted thermostat, read-only (docs/DEVICE.md)
-#   scripts/dev.sh check-report           run the device scripts in busybox and dash
-#   scripts/dev.sh device-screen HOST status|take|give|watch|trial [SECONDS] [SSH OPTIONS]
+#   scripts/dev.sh check-report           run the device scripts in busybox and dash, and
+#                                         nest-screen.sh against a pretend thermostat
+#   scripts/dev.sh device-screen HOST status|take|give|watch|trial|battery [SECONDS] [SSH OPTIONS]
 #                                         take the screen from the stock software, or give it back
-#   scripts/dev.sh device-run HOST [input-test] [SECONDS] [SSH OPTIONS] [-- NESTO OPTIONS]
+#   scripts/dev.sh device-run HOST [input-test|detach] [SECONDS] [SSH OPTIONS] [-- NESTO OPTIONS]
 #                                         run Nesto on the thermostat for at most SECONDS
-#                                         (default 600), then give the screen back
+#                                         (default 600), then give the screen back;
+#                                         detach: in the background, default 25 minutes;
+#                                         no run may pass 26 (the backplate resets at 30)
+#   scripts/dev.sh device-log HOST [follow] [SSH OPTIONS]
+#                                         copy a detached run's log to device-reports/, or follow it
 #
 # `build` makes three builds:
 #   /build/sim      the simulator for this machine, with sanitizers, and the tests
@@ -184,10 +189,14 @@ case "${1:-}" in
       fi
       echo "ok:   nest-screen.sh parses"
     done
+    # nest-screen.sh's runs, against a pretend thermostat in busybox.
+    echo "== nest-screen.sh on a pretend thermostat, in busybox"
+    docker run --rm -v "$ROOT/scripts":/scripts:ro -v "$ROOT/tests/device":/t:ro \
+      "$BUSYBOX_IMAGE" sh /t/fake-nest.sh
     ;;
   device-screen)
-    if [ $# -lt 3 ] || ! [[ "$3" =~ ^(status|take|give|watch|trial)$ ]]; then
-      echo "usage: scripts/dev.sh device-screen HOST status|take|give|watch|trial [SECONDS] [SSH OPTIONS]" >&2
+    if [ $# -lt 3 ] || ! [[ "$3" =~ ^(status|take|give|watch|trial|battery)$ ]]; then
+      echo "usage: scripts/dev.sh device-screen HOST status|take|give|watch|trial|battery [SECONDS] [SSH OPTIONS]" >&2
       exit 2
     fi
     host="$2"
@@ -199,8 +208,10 @@ case "${1:-}" in
       shift
     fi
     # The script goes into RAM first, so its give-back timer can run it after
-    # the session ends (scripts/nest-screen.sh).
-    remote="cat > /tmp/nesto-screen.sh && sh /tmp/nesto-screen.sh $action $seconds"
+    # the session ends (scripts/nest-screen.sh). It replaces the copy rather
+    # than writing over it: a detached run may still be reading that one.
+    remote="cat > /tmp/nesto-screen.sh.new && mv /tmp/nesto-screen.sh.new /tmp/nesto-screen.sh &&
+            sh /tmp/nesto-screen.sh $action $seconds"
     if [ "$action" = trial ]; then
       mkdir -p "$ROOT/device-reports"
       log="$ROOT/device-reports/screen-trial-$(date +%Y%m%d-%H%M%S).txt"
@@ -214,16 +225,23 @@ case "${1:-}" in
     ;;
   device-run)
     if [ $# -lt 2 ]; then
-      echo "usage: scripts/dev.sh device-run HOST [input-test] [SECONDS] [SSH OPTIONS] [-- NESTO OPTIONS]" >&2
+      echo "usage: scripts/dev.sh device-run HOST [input-test|detach] [SECONDS] [SSH OPTIONS] [-- NESTO OPTIONS]" >&2
       exit 2
     fi
     host="$2"
     shift 2
     nesto_args=()
     seconds=600
+    mode=run
     if [ "${1:-}" = input-test ]; then
       nesto_args=(--input-test)
       seconds=120
+      shift
+    elif [ "${1:-}" = detach ]; then
+      mode=detach
+      # The most there is: the backplate resets the thermostat after about
+      # 30 minutes without the stock software (scripts/nest-screen.sh).
+      seconds=1500
       shift
     fi
     if [ $# -gt 0 ] && [[ "$1" =~ ^[0-9]+$ ]]; then
@@ -257,15 +275,51 @@ case "${1:-}" in
          mkdir -p /nesto && mv /tmp/nesto-run/nesto /nesto/nesto.new && chmod 755 /nesto/nesto.new &&
          mv /nesto/nesto.new /nesto/nesto && mv /tmp/nesto-run/nest-screen.sh /tmp/nesto-screen.sh;
          status=$?; rm -rf /tmp/nesto-run; exit $status'
+    remote="sh /tmp/nesto-screen.sh $mode $seconds"
+    [ ${#nesto_args[@]} -gt 0 ] && remote+=" $(printf '%q ' "${nesto_args[@]}")"
+    if [ "$mode" = detach ]; then
+      # 2. Start it on the thermostat, where it goes on without this session.
+      ssh "${ssh_args[@]}" "root@$host" "$remote" || true
+      ssh -O exit -o "ControlPath=$control" "root@$host" 2> /dev/null || true
+      echo
+      echo "Follow it:  scripts/dev.sh device-log $host follow"
+      echo "Copy it:    scripts/dev.sh device-log $host"
+      echo "Stop early: scripts/dev.sh device-screen $host give"
+      exit 0
+    fi
     # 2. Run it, with a terminal, so Ctrl-C reaches it.
     mkdir -p "$ROOT/device-reports"
     log="$ROOT/device-reports/run-$(date +%Y%m%d-%H%M%S).txt"
-    remote="sh /tmp/nesto-screen.sh run $seconds"
-    [ ${#nesto_args[@]} -gt 0 ] && remote+=" $(printf '%q ' "${nesto_args[@]}")"
     ssh -t "${ssh_args[@]}" "root@$host" "$remote" | tee "$log" || true
     ssh -O exit -o "ControlPath=$control" "root@$host" 2> /dev/null || true
     echo
     echo "Saved to device-reports/$(basename "$log")."
+    ;;
+  device-log)
+    if [ $# -lt 2 ]; then
+      echo "usage: scripts/dev.sh device-log HOST [follow] [SSH OPTIONS]" >&2
+      exit 2
+    fi
+    host="$2"
+    shift 2
+    # Where a detached run writes (scripts/nest-screen.sh).
+    run_log=/media/data/nesto/run.log
+    if [ "${1:-}" = follow ]; then
+      shift
+      echo "Following $host:$run_log; Ctrl-C stops following, not the run."
+      ssh -t -o ConnectTimeout=10 -o ServerAliveInterval=15 "$@" "root@$host" "tail -n 40 -f $run_log" || true
+      exit 0
+    fi
+    mkdir -p "$ROOT/device-reports"
+    log="$ROOT/device-reports/run-detached-$(date +%Y%m%d-%H%M%S).txt"
+    if ! ssh -o ConnectTimeout=10 "$@" "root@$host" "cat $run_log" > "$log"; then
+      rm -f "$log"
+      echo "No run log on $host ($run_log)." >&2
+      exit 1
+    fi
+    tail -n 5 "$log"
+    echo
+    echo "Saved to device-reports/$(basename "$log") ($(wc -l < "$log") lines)."
     ;;
   device-check)
     if [ $# -lt 2 ]; then

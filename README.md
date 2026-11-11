@@ -14,8 +14,10 @@ integration, which discovers the panel, pairs with it and decides what it shows.
 > from the layout Home Assistant sends, with icons and colours for what each is
 > doing, and a Settings menu to pair again or forget Home Assistant. On a real
 > thermostat it runs for a supervised while, with its screen, ring and press,
-> and gives the stock software its place back afterwards; installing it for
-> good comes later. The wire protocol between the panel and Home
+> and gives the stock software its place back afterwards. Runs stay under 30
+> minutes: past that, the thermostat's base resets it unless something talks
+> to it, and only the stock software does so far. Installing it for good comes
+> after that. The wire protocol between the panel and Home
 > Assistant is in [PROTOCOL.md](PROTOCOL.md).
 
 ## Development
@@ -137,6 +139,8 @@ scripts/dev.sh device-screen <nest-ip> trial      # stop the stock software for 
 scripts/dev.sh device-run <nest-ip> input-test    # print what the ring and the press send
 scripts/dev.sh device-run <nest-ip>               # run Nesto for 10 minutes, then restart the stock software
 scripts/dev.sh client --host <nest-ip> pair       # meanwhile, pair with it (then: demo)
+scripts/dev.sh device-run <nest-ip> detach        # run Nesto for 25 minutes, apart from SSH, watching the battery
+scripts/dev.sh device-log <nest-ip> [follow]      # that run's log, into device-reports/
 scripts/dev.sh check-report                       # run the device scripts in busybox, as CI does
 ```
 

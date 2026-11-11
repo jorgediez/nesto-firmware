@@ -13,7 +13,12 @@
 #   nest-screen.sh trial [SECONDS] take, watch for SECONDS (default 300), give
 #   nest-screen.sh run SECONDS [NESTO OPTIONS]
 #                                  take, run /nesto/nesto for at most SECONDS
-#                                  with its memory reported, give
+#                                  with its memory and the battery reported,
+#                                  give
+#   nest-screen.sh detach SECONDS [NESTO OPTIONS]
+#                                  "run" in the background, apart from the SSH
+#                                  session, into /media/data/nesto/run.log
+#   nest-screen.sh battery         the battery's latest voltage
 #
 # The stock program nlclient owns the screen, the ring, the press and the
 # backplate. monit restarts it if it stops, so taking it over means asking
@@ -29,6 +34,16 @@
 # While Nesto runs, monit still watches the whole system: memory in use over
 # 41 MB for 5 cycles (25 s) reboots the thermostat. "run" reports it every
 # 30 s, with Nesto's own share.
+#
+# Nothing charges the battery from the base while nlclient is stopped, or so
+# it seems: nlclient talks to the backplate. "run" reports the battery's
+# voltage, which nlshutdownd logs every 15 s, and gives back as soon as it's
+# under 3.70 V (NESTO_BATTERY_MIN), so nlclient can charge it again.
+#
+# The backplate resets the thermostat when nothing has talked to it for about
+# 30 minutes (docs/DEVICE.md). So nlclient is never away for more than
+# NESTO_TAKE_MAX seconds (default 1620, 27 minutes): "take" refuses longer,
+# which caps "run" and "detach" at 1560 s and "trial" at 1500 s.
 
 MONIT=/usr/sbin/monit
 NESTLABS=/etc/init.d/nestlabs
@@ -36,7 +51,16 @@ NESTLABS=/etc/init.d/nestlabs
 # /tmp is noexec, which doesn't matter to "sh FILE".
 SELF=/tmp/nesto-screen.sh
 TIMER_PID=/tmp/nesto-screen-timer.pid
-SYSLOG=/var/log/messages
+SYSLOG="${NESTO_SYSLOG:-/var/log/messages}"
+BATTERY_MIN="${NESTO_BATTERY_MIN:-3.70}"
+# The longest nlclient may be stopped: under the backplate's 30 minutes.
+TAKE_MAX="${NESTO_TAKE_MAX:-1620}"
+# Seconds between a run's reports; the tests make it shorter.
+REPORT_EVERY="${NESTO_REPORT_EVERY:-30}"
+# What a run reported, a line every 30 s, for its summary.
+RUN_STATS=/tmp/nesto-run.stats
+# Where a detached run writes: the flash, so it outlasts a reboot.
+RUN_LOG="${NESTO_RUN_LOG:-/media/data/nesto/run.log}"
 # Programs may only run from / and /media/scratch, and nlclient's start
 # empties the latter (docs/DEVICE.md).
 NESTO=/nesto/nesto
@@ -58,12 +82,46 @@ memory_used_kb() {
   awk '/^MemTotal:/ {t = $2} /^(MemFree|Buffers|Cached):/ {f += $2} END {print t - f}' /proc/meminfo
 }
 
-# Memory report: the system against monit's limit, and Nesto's own share.
+# The battery's latest voltage, from nlshutdownd's syslog lines
+# ("shutdown-manager: batteryLevel @ 3.891"); nothing if there's none yet.
+# syslogd rotates the log into messages.0, so that's read first.
+battery() {
+  cat "$SYSLOG.0" "$SYSLOG" 2> /dev/null |
+    sed -n 's/.*batteryLevel @ *\([0-9][0-9.]*\).*/\1/p' | tail -n 1
+}
+
+# Whether voltage $1 is under $2.
+under() {
+  awk -v v="$1" -v m="$2" 'BEGIN {exit !(v + 0 < m + 0)}'
+}
+
+# Memory report: the system against monit's limit, Nesto's own share, and the
+# battery. With a second argument, also adds "MB volts" to that file.
 memory() {
-  local rss="" nesto=""
+  local rss="" nesto="" used volts power=""
   [ -n "${1:-}" ] && rss="$(awk '/^VmRSS:/ {print $2}' "/proc/$1/status" 2> /dev/null)"
   [ -n "$rss" ] && nesto="; Nesto $((rss / 1024)) MB"
-  say "memory in use $(( $(memory_used_kb) / 1024 )) MB (monit reboots above 41 MB)$nesto"
+  used=$(( $(memory_used_kb) / 1024 ))
+  volts="$(battery)"
+  [ -n "$volts" ] && power="; battery $volts V"
+  say "memory in use $used MB (monit reboots above 41 MB)$nesto$power"
+  [ -n "${2:-}" ] && echo "$used ${volts:--}" >> "$2"
+}
+
+# What a run's reports add up to.
+summary() {
+  [ -s "$RUN_STATS" ] || return 0
+  awk -v first="$1" '
+    $1 > mem {mem = $1}
+    $2 != "-" {if (!seen || $2 + 0 < low + 0) low = $2; last = $2; seen = 1}
+    END {
+      printf "memory in use at most %d MB", mem
+      if (seen) {
+        printf "; battery %s V at the start, %s V at the lowest, %s V at the end",
+          (first == "" ? "?" : first), low, last
+      }
+      printf "\n"
+    }' "$RUN_STATS"
 }
 
 # Stops Nesto, if it runs: TERM, which it handles, then KILL after 5 s.
@@ -113,6 +171,11 @@ cancel_timer() {
 
 take() {
   local seconds="${1:-600}"
+  if [ "$seconds" -gt "$TAKE_MAX" ]; then
+    say "nlclient would be stopped for $seconds s, over $TAKE_MAX s: the backplate" \
+      "resets the thermostat after about 30 minutes without it (NESTO_TAKE_MAX)"
+    return 1
+  fi
   if ! nlclient_pid > /dev/null; then
     say "nlclient isn't running; nothing to take"
     return 1
@@ -179,12 +242,18 @@ watch() {
 }
 
 run() {
-  local seconds="$1" pid deadline reporter code
+  local seconds="$1" pid deadline reporter code first
   shift
   if [ ! -x "$NESTO" ]; then
     say "$NESTO isn't there"
     return 1
   fi
+  first="$(battery)"
+  if [ -n "$first" ] && under "$first" "$BATTERY_MIN"; then
+    say "the battery is at $first V, under $BATTERY_MIN V: not running Nesto"
+    return 1
+  fi
+  say "battery ${first:-unknown}${first:+ V}; Nesto gives way under $BATTERY_MIN V"
   # The timer outlasts the run by a minute, in case this shell is killed.
   take $((seconds + 60)) || return 1
   "$NESTO" "$@" &
@@ -194,7 +263,18 @@ run() {
   trap 'kill $pid 2> /dev/null' INT TERM HUP
   (sleep "$seconds" && say "time is up" && kill $pid 2> /dev/null) &
   deadline=$!
-  (while sleep 30 && kill -0 $pid 2> /dev/null; do memory $pid; done) &
+  rm -f "$RUN_STATS"
+  (
+    while sleep "$REPORT_EVERY" && kill -0 $pid 2> /dev/null; do
+      memory $pid "$RUN_STATS"
+      volts="$(tail -n 1 "$RUN_STATS" | cut -d' ' -f2)"
+      if [ "$volts" != - ] && under "$volts" "$BATTERY_MIN"; then
+        say "the battery is under $BATTERY_MIN V: stopping Nesto, so nlclient charges it"
+        kill $pid 2> /dev/null
+        break
+      fi
+    done
+  ) &
   reporter=$!
   # A signal ends "wait" early; wait again until Nesto has really gone.
   code=0
@@ -205,7 +285,30 @@ run() {
   trap - INT TERM HUP
   kill $deadline $reporter 2> /dev/null
   say "Nesto ended (exit code $code)"
+  say "$(summary "$first")"
+  rm -f "$RUN_STATS"
   give
+}
+
+# "run", apart from this session: it goes on when SSH drops, into $RUN_LOG.
+detach() {
+  if nesto_pid > /dev/null; then
+    say "Nesto is already running (pid $(nesto_pid)); stop it with: give"
+    return 1
+  fi
+  # "run" adds a minute for its timer; say no here, not in the background.
+  if [ $(($1 + 60)) -gt "$TAKE_MAX" ]; then
+    say "at most $((TAKE_MAX - 60)) s: the backplate resets the thermostat after" \
+      "about 30 minutes without nlclient (NESTO_TAKE_MAX)"
+    return 1
+  fi
+  mkdir -p "$(dirname "$RUN_LOG")" || return 1
+  # The last run's log, kept once.
+  [ -f "$RUN_LOG" ] && mv -f "$RUN_LOG" "$RUN_LOG.1"
+  [ "$0" = "$SELF" ] || cp "$0" "$SELF"
+  setsid sh "$SELF" run "$@" > "$RUN_LOG" 2>&1 < /dev/null &
+  say "running in the background (pid $!) for at most $1 s, writing to $RUN_LOG"
+  say "follow it with: tail -f $RUN_LOG; stop it early with: sh $SELF give"
 }
 
 case "${1:-}" in
@@ -247,8 +350,24 @@ case "${1:-}" in
     run "$run_seconds" "$@"
     status
     ;;
+  detach)
+    if ! [ "${2:-}" -gt 0 ] 2> /dev/null; then
+      echo "usage: nest-screen.sh detach SECONDS [NESTO OPTIONS]" >&2
+      exit 2
+    fi
+    shift
+    detach "$@"
+    ;;
+  battery)
+    volts="$(battery)"
+    if [ -z "$volts" ]; then
+      echo "no battery reading in $SYSLOG yet" >&2
+      exit 1
+    fi
+    echo "$volts"
+    ;;
   *)
-    sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac
