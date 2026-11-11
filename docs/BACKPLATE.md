@@ -113,14 +113,25 @@ display `Display-2.14`, software 5.9.4-5), with the stock software stopped:
   load.
 - **No reset.** A 45-minute run with Nesto talking to the backplate went
   past the 30-minute mark without a reset, and ended cleanly.
-- **But no charging.** Over those 45 minutes the battery fell from 3.906 V
-  to 3.784 V by the backplate's reading (3.864 V to 3.780 V by the stock
-  software's), about 0.12 V an hour. The state's flags (byte 1) read `ce`
-  throughout, where the stock software logs `8e`: the difference, 0x40, is
-  the bit Exploitee.rs's wiki guessed means "charger off". So something the
-  stock software sends turns charging on. Power steal mode (`0x00c0`) isn't
-  it: the flags stayed `ce` with it. The stock software also logs "setting
-  power steal mode to 0x00000000" as it starts, so it's something else.
+- **The battery fell with the screen lit.** Over those 45 minutes, Nesto
+  showing its screen, it fell from 3.906 V to 3.784 V by the backplate's
+  reading (3.864 V to 3.780 V by the stock software's), about 0.12 V an
+  hour.
+- **It held with the screen dark.** A 20-minute backplate test with the
+  backlight off and little else running kept it at 3.81 to 3.84 V by the
+  backplate's reading, and the stock software's rose from 3.76 V to 3.81 V.
+- **So it's the power budget**, not a command missing. On this stand the
+  thermostat draws about 100 mA (its own screen says "Iin 100 mA", and the
+  shutdown manager logs "AuxPowerChange (hvac-100ma)"). A lit screen, a busy
+  processor and Wi-Fi need more; the stock software's battery falls too
+  while it's awake (3.938 V to 3.92 V just after it starts), and it spends
+  most of its time asleep with the screen off. Nesto has to do the same:
+  dim and sleep when nobody's using it.
+- The state's flags (byte 1) read `ce` throughout with Nesto, where the
+  stock software logs `8e`. Exploitee.rs's wiki guessed 0x40 means "charger
+  off", but the battery held with it set, so its meaning is open. Power
+  steal mode (`0x00c0`) didn't change it, and the stock software sends
+  that too ("setting power steal mode to 0x00000000"), before its reset.
 
 
 ## Trying it

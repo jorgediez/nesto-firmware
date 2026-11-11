@@ -219,8 +219,8 @@ void NestHal::service_backplate(bool verbose) {
         if (frame.payload.size() > 24) std::printf(" ...");
       }
       if (auto power = frame.type == backplate::kState ? backplate::decode_power(frame.payload) : std::nullopt) {
-        std::printf("  [flags %02x%s, USB %.2f V, input %.2f V, operating %.3f V, battery %.3f V]",
-                    power->flags, power->charger_off ? " charger off" : "", power->usb, power->input,
+        std::printf("  [flags %02x, USB %.2f V, input %.2f V, operating %.3f V, battery %.3f V]",
+                    power->flags, power->usb, power->input,
                     power->operating, power->battery);
       }
       if (auto climate =
@@ -277,8 +277,8 @@ void NestHal::report_backplate(bool verbose) {
     reported_readings_ = t;
     char power[96] = "no state yet";
     if (const auto& p = backplate_.power()) {
-      std::snprintf(power, sizeof power, "battery %.3f V (charger %s, flags %02x), USB %.2f V, input %.2f V",
-                    p->battery, p->charger_off ? "off" : "on", p->flags, p->usb, p->input);
+      std::snprintf(power, sizeof power, "battery %.3f V (flags %02x), USB %.2f V, input %.2f V",
+                    p->battery, p->flags, p->usb, p->input);
     }
     char climate[64] = "";
     if (const auto& c = backplate_.climate()) {
