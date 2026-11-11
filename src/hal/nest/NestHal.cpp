@@ -7,6 +7,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/select.h>
+#include <termios.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -27,6 +28,36 @@ constexpr const char* kBacklights = "/sys/class/backlight";
 // The input devices' names, as the kernel reports them (docs/DEVICE.md).
 constexpr const char* kRingName = "avago-adbs-a330";
 constexpr const char* kPressName = "twl4030_pwrbutton";
+constexpr const char* kBackplate = "/dev/ttyO2";
+// How often a run logs the backplate's readings.
+constexpr Millis kBackplateReport = 60000;
+
+/// A backplate message type's name, for the backplate test.
+const char* type_name(std::uint16_t type) {
+  switch (type) {
+    case backplate::kAscii: return "text";
+    case backplate::kClimate: return "temperature and humidity";
+    case backplate::kFetPresence: return "wire presence";
+    case 0x0005: return "PIR, raw";
+    case 0x0007: return "proximity";
+    case 0x0009: return "wire presence (more)";
+    case 0x000a: return "ambient light";
+    case backplate::kState: return "state";
+    case 0x000c: return "sensor ADC";
+    case 0x0010: return "TFE id";
+    case backplate::kTfeVersion: return "TFE version";
+    case backplate::kTfeBuildInfo: return "TFE build";
+    case backplate::kBslId: return "BSL id";
+    case backplate::kHardware: return "name";
+    case backplate::kSerial: return "serial";
+    case 0x0022: return "buffered temperature";
+    case 0x0023: return "PIR motion";
+    case 0x0025: return "proximity event";
+    case 0x0027: return "proximity, detailed";
+    case backplate::kEndOfBuffers: return "end of buffers";
+    default: return "?";
+  }
+}
 
 volatile std::sig_atomic_t g_quit_signal = 0;
 
@@ -79,12 +110,14 @@ bool write_int(const std::string& path, int value) {
 
 }  // namespace
 
-NestHal::NestHal(NestOptions options) : options_(options), ring_ticks_(options.ring) {}
+NestHal::NestHal(NestOptions options)
+    : options_(options), ring_ticks_(options.ring), backplate_(options.session) {}
 
 NestHal::~NestHal() {
+  hand_back_backplate();
   if (!backlight_.empty() && backlight_before_ >= 0) write_int(backlight_, backlight_before_);
   if (fb_) munmap(fb_, fb_size_);
-  for (int fd : {fb_fd_, ring_fd_, press_fd_}) {
+  for (int fd : {fb_fd_, ring_fd_, press_fd_, backplate_fd_}) {
     if (fd >= 0) close(fd);
   }
 }
@@ -96,7 +129,163 @@ bool NestHal::init() {
   const RingTicks::Config& ring = ring_ticks_.config();
   log::info("the ring: %d counts per tick, clockwise %s", ring.counts_per_tick,
             ring.reverse ? "negative" : "positive");
+  // Without the backplate Nesto still runs; the thermostat resets after
+  // about 30 minutes.
+  if (options_.backplate) {
+    open_backplate();
+  } else {
+    log::warn("not talking to the backplate: it resets the thermostat after about 30 minutes");
+  }
   return true;
+}
+
+bool NestHal::open_backplate() {
+  backplate_fd_ = open(kBackplate, O_RDWR | O_NOCTTY | O_NONBLOCK | O_CLOEXEC);
+  if (backplate_fd_ < 0) {
+    log::error("%s: %s; the thermostat resets after about 30 minutes", kBackplate,
+               std::strerror(errno));
+    return false;
+  }
+  // 115200 baud, 8N1, raw: in particular no CR to NL, which would break
+  // frames holding 0x0d.
+  termios tty{};
+  if (tcgetattr(backplate_fd_, &tty) != 0) {
+    log::error("%s: %s", kBackplate, std::strerror(errno));
+    close(backplate_fd_);
+    backplate_fd_ = -1;
+    return false;
+  }
+  cfmakeraw(&tty);
+  cfsetispeed(&tty, B115200);
+  cfsetospeed(&tty, B115200);
+  tty.c_cflag |= CLOCAL | CREAD;
+  tty.c_cflag &= ~static_cast<tcflag_t>(CSTOPB | CRTSCTS | PARENB);
+  tty.c_cc[VMIN] = 0;
+  tty.c_cc[VTIME] = 0;
+  if (tcsetattr(backplate_fd_, TCSANOW, &tty) != 0) {
+    log::error("%s: can't set it up: %s", kBackplate, std::strerror(errno));
+    close(backplate_fd_);
+    backplate_fd_ = -1;
+    return false;
+  }
+  log::info("%s is the backplate", kBackplate);
+  backplate_.start(now());
+  return true;
+}
+
+void NestHal::hand_back_backplate() {
+  if (backplate_fd_ < 0 || !options_.backplate) return;
+  // A few seconds at most, as the stock software does when it stops.
+  backplate_.hand_back(now());
+  while (backplate_.handing_back()) {
+    fd_set readable;
+    FD_ZERO(&readable);
+    FD_SET(backplate_fd_, &readable);
+    timeval tv{0, 50000};
+    select(backplate_fd_ + 1, &readable, nullptr, nullptr, &tv);
+    service_backplate(backplate_verbose_);
+  }
+  // Let the last acknowledgement leave before the port closes.
+  tcdrain(backplate_fd_);
+  if (backplate_.handed_back()) {
+    log::info("backplate: handed back (reset, start-up burst, wires acknowledged)");
+  } else {
+    log::warn("backplate: %s", backplate_.problem().c_str());
+  }
+}
+
+void NestHal::service_backplate(bool verbose) {
+  if (backplate_fd_ < 0) return;
+  const Millis t = now();
+
+  std::uint8_t buffer[256];
+  std::vector<backplate::Frame> frames;
+  for (;;) {
+    const ssize_t n = read(backplate_fd_, buffer, sizeof buffer);
+    if (n <= 0) break;  // EAGAIN: nothing more for now
+    backplate_reader_.feed(buffer, static_cast<std::size_t>(n), frames);
+  }
+  for (const backplate::Frame& frame : frames) {
+    if (verbose) {
+      std::printf("bp <- %04x %-26s %3zu bytes ", frame.type, type_name(frame.type),
+                  frame.payload.size());
+      const bool printable = frame.type == backplate::kAscii || frame.type == backplate::kTfeVersion ||
+                             frame.type == backplate::kTfeBuildInfo || frame.type == backplate::kHardware ||
+                             frame.type == backplate::kSerial;
+      if (printable) {
+        std::printf(" \"%s\"", backplate::text(frame).c_str());
+      } else {
+        for (std::size_t i = 0; i < frame.payload.size() && i < 24; ++i) std::printf(" %02x", frame.payload[i]);
+        if (frame.payload.size() > 24) std::printf(" ...");
+      }
+      if (auto power = frame.type == backplate::kState ? backplate::decode_power(frame.payload) : std::nullopt) {
+        std::printf("  [flags %02x, USB %.2f V, input %.2f V, operating %.3f V, battery %.3f V]",
+                    power->flags, power->usb, power->input,
+                    power->operating, power->battery);
+      }
+      if (auto climate =
+              frame.type == backplate::kClimate ? backplate::decode_climate(frame.payload) : std::nullopt) {
+        std::printf("  [%.2f C, %.1f%%]", climate->celsius, climate->humidity);
+      }
+      std::printf("\n");
+    }
+    backplate_.receive(t, frame);
+  }
+
+  backplate_.tick(t);
+  if (backplate_.take_break()) {
+    // Start afresh: drop whatever is on the line, then the break.
+    tcflush(backplate_fd_, TCIOFLUSH);
+    backplate_reader_.clear();
+    backplate_out_.clear();
+    if (tcsendbreak(backplate_fd_, 0) != 0) log::warn("%s: break: %s", kBackplate, std::strerror(errno));
+    if (verbose) std::printf("bp -> break\n");
+  }
+  const std::vector<std::uint8_t> out = backplate_.take_output();
+  if (verbose && !out.empty()) {
+    // The commands, by type.
+    for (std::size_t i = 0; i + 7 <= out.size();) {
+      const unsigned type = out[i + 3] | (out[i + 4] << 8);
+      const std::size_t length = out[i + 5] | (out[i + 6] << 8);
+      std::printf("bp -> %04x (%zu bytes)\n", type, length);
+      i += 7 + length + 2;
+    }
+  }
+  backplate_out_.insert(backplate_out_.end(), out.begin(), out.end());
+  if (!backplate_out_.empty()) {
+    const ssize_t n = write(backplate_fd_, backplate_out_.data(), backplate_out_.size());
+    if (n > 0) backplate_out_.erase(backplate_out_.begin(), backplate_out_.begin() + n);
+  }
+  report_backplate(verbose);
+  if (verbose) std::fflush(stdout);
+}
+
+void NestHal::report_backplate(bool verbose) {
+  if (backplate_.handshakes() != reported_handshakes_) {
+    reported_handshakes_ = backplate_.handshakes();
+    log::info("backplate: talking to it (%s, serial %s, BSL id %s, firmware %s)",
+              backplate_.model().empty() ? "no name" : backplate_.model().c_str(),
+              backplate_.serial().empty() ? "?" : backplate_.serial().c_str(), backplate_.bsl_id().c_str(),
+              backplate_.version().c_str());
+  }
+  if (backplate_.restarts() != reported_restarts_) {
+    reported_restarts_ = backplate_.restarts();
+    log::warn("backplate: %s; starting again", backplate_.problem().c_str());
+  }
+  const Millis t = now();
+  if (!verbose && backplate_.running() && t - reported_readings_ >= kBackplateReport) {
+    reported_readings_ = t;
+    char power[96] = "no state yet";
+    if (const auto& p = backplate_.power()) {
+      std::snprintf(power, sizeof power, "battery %.3f V (flags %02x), USB %.2f V, input %.2f V",
+                    p->battery, p->flags, p->usb, p->input);
+    }
+    char climate[64] = "";
+    if (const auto& c = backplate_.climate()) {
+      std::snprintf(climate, sizeof climate, ", %.1f C, %.0f%% humidity", c->celsius, c->humidity);
+    }
+    log::info("backplate: %s%s", power, climate);
+  }
 }
 
 bool NestHal::open_inputs() {
@@ -207,7 +396,7 @@ void NestHal::poll(std::vector<TimedInput>& out, Millis timeout) {
     fd_set readable;
     FD_ZERO(&readable);
     int max_fd = -1;
-    for (int fd : {ring_fd_, press_fd_}) {
+    for (int fd : {ring_fd_, press_fd_, backplate_fd_}) {
       if (fd < 0) continue;
       FD_SET(fd, &readable);
       max_fd = std::max(max_fd, fd);
@@ -217,6 +406,7 @@ void NestHal::poll(std::vector<TimedInput>& out, Millis timeout) {
     tv.tv_usec = static_cast<suseconds_t>((timeout % 1000) * 1000);
     select(max_fd + 1, &readable, nullptr, nullptr, &tv);  // EINTR: a signal, seen below
     read_inputs(out, false);
+    service_backplate(false);
   }
   if (g_quit_signal != 0) {
     log::info("signal %d: stopping", static_cast<int>(g_quit_signal));
@@ -265,6 +455,47 @@ int NestHal::input_test() {
   }
   std::printf("ring total: %+ld counts\n", ring_total_);
   return 0;
+}
+
+int NestHal::backplate_test() {
+  catch_quit_signals();
+  backplate_verbose_ = true;
+  if (!open_backplate()) return 1;
+  // Dark, so the battery's reading isn't spent on a lit screen; put back on
+  // the way out.
+  open_backlight();
+  set_backlight(0);
+  std::printf(
+      "Talking to the backplate, with the backlight off; every frame is printed. Ctrl-C stops.\n"
+      "The handshake should end with a model and version, then a keep-alive every 15 s\n"
+      "and buffered readings every 30 s.\n");
+  std::fflush(stdout);
+  Millis printed = now();
+  while (g_quit_signal == 0) {
+    fd_set readable;
+    FD_ZERO(&readable);
+    FD_SET(backplate_fd_, &readable);
+    timeval tv{0, 50000};
+    select(backplate_fd_ + 1, &readable, nullptr, nullptr, &tv);
+    service_backplate(true);
+    // Now and then, what it adds up to.
+    if (now() - printed >= 30000) {
+      printed = now();
+      char battery[32] = "?";
+      if (const auto& p = backplate_.power()) std::snprintf(battery, sizeof battery, "%.3f V", p->battery);
+      char climate[48] = "?";
+      if (const auto& c = backplate_.climate()) {
+        std::snprintf(climate, sizeof climate, "%.2f C, %.1f%%", c->celsius, c->humidity);
+      }
+      std::printf("== %s; handshakes %d, restarts %d, bad frames %zu; battery %s; climate %s\n",
+                  backplate_.running() ? "running" : "not running", backplate_.handshakes(),
+                  backplate_.restarts(), backplate_reader_.bad_frames(), battery, climate);
+      std::fflush(stdout);
+    }
+  }
+  std::printf("stopped: handshakes %d, restarts %d, bad frames %zu\n", backplate_.handshakes(),
+              backplate_.restarts(), backplate_reader_.bad_frames());
+  return backplate_.handshakes() > 0 ? 0 : 1;
 }
 
 }  // namespace nesto

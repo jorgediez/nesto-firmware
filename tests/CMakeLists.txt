@@ -1,5 +1,6 @@
 add_executable(nesto_tests
   main.cpp
+  test_backplate.cpp
   test_bytes.cpp
   test_controller.cpp
   test_fonts.cpp
