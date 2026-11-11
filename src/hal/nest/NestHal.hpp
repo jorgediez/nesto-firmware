@@ -50,8 +50,8 @@ class NestHal : public Hal {
   int input_test();
 
   /// Talks to the backplate alone, printing every frame and what it means,
-  /// until interrupted. Leaves the screen, ring and press alone. Returns the
-  /// exit code.
+  /// until interrupted. Turns the backlight off meanwhile, and leaves the
+  /// screen, ring and press alone. Returns the exit code.
   int backplate_test();
 
  private:

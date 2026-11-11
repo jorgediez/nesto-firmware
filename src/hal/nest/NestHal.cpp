@@ -461,8 +461,12 @@ int NestHal::backplate_test() {
   catch_quit_signals();
   backplate_verbose_ = true;
   if (!open_backplate()) return 1;
+  // Dark, so the battery's reading isn't spent on a lit screen; put back on
+  // the way out.
+  open_backlight();
+  set_backlight(0);
   std::printf(
-      "Talking to the backplate; every frame is printed. Ctrl-C stops.\n"
+      "Talking to the backplate, with the backlight off; every frame is printed. Ctrl-C stops.\n"
       "The handshake should end with a model and version, then a keep-alive every 15 s\n"
       "and buffered readings every 30 s.\n");
   std::fflush(stdout);
