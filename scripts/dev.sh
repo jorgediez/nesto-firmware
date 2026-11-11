@@ -26,7 +26,8 @@
 #   scripts/dev.sh device-run HOST [input-test|detach] [SECONDS] [SSH OPTIONS] [-- NESTO OPTIONS]
 #                                         run Nesto on the thermostat for at most SECONDS
 #                                         (default 600), then give the screen back;
-#                                         detach: in the background, default 4 hours
+#                                         detach: in the background, default 25 minutes;
+#                                         no run may pass 26 (the backplate resets at 30)
 #   scripts/dev.sh device-log HOST [follow] [SSH OPTIONS]
 #                                         copy a detached run's log to device-reports/, or follow it
 #
@@ -238,7 +239,9 @@ case "${1:-}" in
       shift
     elif [ "${1:-}" = detach ]; then
       mode=detach
-      seconds=14400
+      # The most there is: the backplate resets the thermostat after about
+      # 30 minutes without the stock software (scripts/nest-screen.sh).
+      seconds=1500
       shift
     fi
     if [ $# -gt 0 ] && [[ "$1" =~ ^[0-9]+$ ]]; then

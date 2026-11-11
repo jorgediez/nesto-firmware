@@ -39,6 +39,11 @@
 # it seems: nlclient talks to the backplate. "run" reports the battery's
 # voltage, which nlshutdownd logs every 15 s, and gives back as soon as it's
 # under 3.70 V (NESTO_BATTERY_MIN), so nlclient can charge it again.
+#
+# The backplate resets the thermostat when nothing has talked to it for about
+# 30 minutes (docs/DEVICE.md). So nlclient is never away for more than
+# NESTO_TAKE_MAX seconds (default 1620, 27 minutes): "take" refuses longer,
+# which caps "run" and "detach" at 1560 s and "trial" at 1500 s.
 
 MONIT=/usr/sbin/monit
 NESTLABS=/etc/init.d/nestlabs
@@ -48,6 +53,8 @@ SELF=/tmp/nesto-screen.sh
 TIMER_PID=/tmp/nesto-screen-timer.pid
 SYSLOG="${NESTO_SYSLOG:-/var/log/messages}"
 BATTERY_MIN="${NESTO_BATTERY_MIN:-3.70}"
+# The longest nlclient may be stopped: under the backplate's 30 minutes.
+TAKE_MAX="${NESTO_TAKE_MAX:-1620}"
 # Seconds between a run's reports; the tests make it shorter.
 REPORT_EVERY="${NESTO_REPORT_EVERY:-30}"
 # What a run reported, a line every 30 s, for its summary.
@@ -164,6 +171,11 @@ cancel_timer() {
 
 take() {
   local seconds="${1:-600}"
+  if [ "$seconds" -gt "$TAKE_MAX" ]; then
+    say "nlclient would be stopped for $seconds s, over $TAKE_MAX s: the backplate" \
+      "resets the thermostat after about 30 minutes without it (NESTO_TAKE_MAX)"
+    return 1
+  fi
   if ! nlclient_pid > /dev/null; then
     say "nlclient isn't running; nothing to take"
     return 1
@@ -282,6 +294,12 @@ run() {
 detach() {
   if nesto_pid > /dev/null; then
     say "Nesto is already running (pid $(nesto_pid)); stop it with: give"
+    return 1
+  fi
+  # "run" adds a minute for its timer; say no here, not in the background.
+  if [ $(($1 + 60)) -gt "$TAKE_MAX" ]; then
+    say "at most $((TAKE_MAX - 60)) s: the backplate resets the thermostat after" \
+      "about 30 minutes without nlclient (NESTO_TAKE_MAX)"
     return 1
   fi
   mkdir -p "$(dirname "$RUN_LOG")" || return 1

@@ -141,5 +141,16 @@ pidof nesto > /dev/null && fail "detach, given back early: Nesto still runs"
 nlclient_running && ok "detach, given back early: nlclient is back" || fail "detach, given back early: nlclient isn't back"
 [ -f /tmp/nesto-screen-timer.pid ] && fail "a give-back timer is left over"
 
+# --- Never long enough for the backplate's reset (about 30 minutes) ---
+sh $SCREEN run 1561 > $out 2>&1
+expect $out "over 1620 s: the backplate" "cap: a run over 1560 s doesn't start"
+grep -q "fake nesto" $out && fail "cap: Nesto ran anyway"
+sh $SCREEN detach 1561 > $out 2>&1
+expect $out "at most 1560 s" "cap: a detached run over 1560 s is refused at once"
+sh $SCREEN trial 1501 > $out 2>&1
+expect $out "over 1620 s: the backplate" "cap: a trial over 1500 s doesn't start"
+nlclient_running && ok "cap: nlclient left alone" || fail "cap: nlclient stopped"
+[ -f /tmp/nesto-screen-timer.pid ] && fail "cap: a give-back timer was armed"
+
 [ "$failures" -eq 0 ] && echo "all good" || echo "$failures failed" >&2
 exit "$failures"
