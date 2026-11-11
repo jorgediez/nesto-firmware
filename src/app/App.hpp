@@ -56,6 +56,8 @@ class App : private protocol::SessionEvents {
   /// Applies the display's state changes to the hardware and, with `report`,
   /// tells Home Assistant.
   void apply_display(bool report = true);
+  /// Moves the backlight along its fade, and blanks the screen once it's dark.
+  void update_backlight();
   void send_display_state(room::DisplayState state, int brightness, const char* cause);
   void load_display_config();
   void store_display_config() const;
@@ -90,6 +92,8 @@ class App : private protocol::SessionEvents {
 
   room::Controller controller_;
   room::DisplayPower display_power_{0};
+  room::BacklightFade backlight_;
+  int backlight_level_ = -1;  // what the hardware was last set to
   unsigned rendered_version_ = 0;
   std::map<std::uint32_t, std::string> intent_requests_;  // request id to item key
   std::uint32_t next_request_id_ = 1;

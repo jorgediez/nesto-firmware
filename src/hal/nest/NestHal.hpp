@@ -99,6 +99,12 @@ class NestHal : public Hal {
   int reported_handshakes_ = 0;
   int reported_restarts_ = 0;
   Millis reported_readings_ = 0;
+  // The motion sensors since the last report, to learn what they do.
+  int near_readings_ = 0;   // proximity frames
+  int near_highest_ = 0;
+  int near_count_ = 0;      // at or above the threshold
+  int far_frames_ = 0;      // raw PIR frames
+  int far_moving_ = 0;      // of which not all zero
 };
 
 }  // namespace nesto

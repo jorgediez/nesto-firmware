@@ -173,4 +173,20 @@ std::optional<DisplayPower::Change> DisplayPower::take_change() {
   return out;
 }
 
+void BacklightFade::go(int target, Millis now) {
+  from_ = level(now);
+  to_ = target;
+  start_ = now;
+}
+
+int BacklightFade::level(Millis now) const {
+  if (to_ >= from_) return to_;  // up: at once
+  const Millis elapsed = now > start_ ? now - start_ : 0;
+  if (elapsed >= kDuration) return to_;
+  // Linear, rounded up, so it reaches the target only at the end.
+  const Millis left = kDuration - elapsed;
+  const Millis span = static_cast<Millis>(from_ - to_) * left;
+  return to_ + static_cast<int>((span + kDuration - 1) / kDuration);
+}
+
 }  // namespace nesto::room

@@ -123,7 +123,8 @@ bool App::init() {
   // sleeps as it should before Home Assistant connects.
   load_display_config();
   hal_.set_screen_on(true);
-  hal_.set_backlight(display_power_.brightness());
+  backlight_ = room::BacklightFade(display_power_.brightness());
+  update_backlight();
 
   info_.panel_id = options_.panel_id.empty() ? net::panel_id_from_mac() : options_.panel_id;
   if (info_.panel_id.empty()) {
@@ -165,8 +166,10 @@ int App::run() {
   while (!quit_) {
     const std::uint32_t next_timer = lv_timer_handler();
     // While the display rests, the loop waits longer: less work, less power,
-    // and waking takes at most that long.
-    const bool resting = display_power_.state() != room::DisplayState::Active && !gestures_.busy();
+    // and waking takes at most that long. Not while it fades, which would
+    // then go in steps.
+    const bool resting = display_power_.state() != room::DisplayState::Active && !gestures_.busy() &&
+                         !backlight_.fading(hal_.now());
     const Millis wait = std::min<Millis>(next_timer, resting ? kRestingWait : kMaxWait);
 
     // The network waits; the hardware is only checked, so neither delays
@@ -179,6 +182,7 @@ int App::run() {
     handle(gestures_.tick(hal_.now()));
     display_power_.tick(hal_.now());
     apply_display();
+    update_backlight();
     if (hal_.now() - status_checked_ >= kStatusInterval) update_status();
 
     controller_.tick(hal_.now());
@@ -429,12 +433,24 @@ PressContext App::press_context() const {
 void App::apply_display(bool report) {
   const auto change = display_power_.take_change();
   if (!change) return;
-  // A dark standby is as good as off for the screen itself.
-  hal_.set_screen_on(change->brightness > 0);
-  hal_.set_backlight(change->brightness);
+  // Lit: the screen first, then the backlight, at once. Dark: the backlight
+  // fades, and update_backlight() blanks the screen at the end, as a dark
+  // standby is as good as off for the screen itself.
+  if (change->brightness > 0) hal_.set_screen_on(true);
+  backlight_.go(change->brightness, hal_.now());
+  update_backlight();
   log::info("display %s at %d%% (%s)", room::name(change->state), change->brightness,
             room::name(change->cause));
   if (report) send_display_state(change->state, change->brightness, room::name(change->cause));
+}
+
+void App::update_backlight() {
+  const int level = backlight_.level(hal_.now());
+  if (level != backlight_level_) {
+    hal_.set_backlight(level);
+    backlight_level_ = level;
+  }
+  if (level == 0) hal_.set_screen_on(false);
 }
 
 void App::send_display_state(room::DisplayState state, int brightness, const char* cause) {

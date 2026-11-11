@@ -40,9 +40,10 @@ mouse button, Space or Enter press the display. M stands for someone coming
 near, as the thermostat's proximity sensor would. Escape quits.
 
 After 30 seconds without input (or what Home Assistant sets) the display
-rests: dark for now, until the clock comes. The ring, a press or someone near
-wakes it, and the input that wakes it does nothing else
-([PROTOCOL.md](PROTOCOL.md) section 13).
+fades to rest: dark for now, until the clock comes. The ring, a press or
+someone near wakes it, and the input that wakes it does nothing else
+([PROTOCOL.md](PROTOCOL.md) section 13). Home Assistant's `wake_on_motion`
+setting turns waking on someone near off; `client demo --no-motion` tries it.
 
 The simulator listens for Home Assistant on port 6170 and announces itself over
 mDNS as a `_nesto._tcp` service, which is how Home Assistant discovers it
@@ -53,7 +54,7 @@ simulator running:
 
 ```bash
 scripts/dev.sh client pair      # type the code the simulator shows
-scripts/dev.sh client demo      # serve a made-up living room to the simulator (--timeout N: rest after N s)
+scripts/dev.sh client demo      # serve a made-up living room to the simulator (--timeout N, --no-motion)
 scripts/dev.sh client connect   # or: authenticate, synchronise, print what the panel sends
 ```
 

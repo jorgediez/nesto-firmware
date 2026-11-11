@@ -41,7 +41,7 @@ const char* type_name(std::uint16_t type) {
     case backplate::kAscii: return "text";
     case backplate::kClimate: return "temperature and humidity";
     case backplate::kFetPresence: return "wire presence";
-    case 0x0005: return "PIR, raw";
+    case backplate::kPirRaw: return "PIR, raw";
     case 0x0007: return "proximity";
     case 0x0009: return "wire presence (more)";
     case 0x000a: return "ambient light";
@@ -235,9 +235,21 @@ void NestHal::service_backplate(bool verbose, std::vector<TimedInput>* inputs) {
       std::printf("\n");
     }
     backplate_.receive(t, frame);
-    if (inputs && frame.type == backplate::kProximity) {
+    if (frame.type == backplate::kProximity) {
       const auto near = backplate::decode_proximity(frame.payload);
-      if (near && *near >= backplate::kNearThreshold) inputs->push_back({t, Presence{}});
+      if (near) {
+        ++near_readings_;
+        near_highest_ = std::max(near_highest_, *near);
+        if (*near >= backplate::kNearThreshold) {
+          ++near_count_;
+          if (inputs) inputs->push_back({t, Presence{}});
+        }
+      }
+    } else if (frame.type == backplate::kPirRaw) {
+      ++far_frames_;
+      const bool moving = std::any_of(frame.payload.begin(), frame.payload.end(),
+                                      [](std::uint8_t b) { return b != 0; });
+      if (moving) ++far_moving_;
     }
   }
 
@@ -294,6 +306,12 @@ void NestHal::report_backplate(bool verbose) {
       std::snprintf(climate, sizeof climate, ", %.1f C, %.0f%% humidity", c->celsius, c->humidity);
     }
     log::info("backplate: %s%s", power, climate);
+    // What the motion sensors did over the minute, until we know enough to
+    // wake on the far-field one too.
+    log::info("backplate: near-field %d readings, highest %d, %d at %d or more; "
+              "far-field %d frames, %d not zero",
+              near_readings_, near_highest_, near_count_, backplate::kNearThreshold, far_frames_, far_moving_);
+    near_readings_ = near_highest_ = near_count_ = far_frames_ = far_moving_ = 0;
   }
 }
 

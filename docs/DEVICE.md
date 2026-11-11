@@ -381,14 +381,30 @@ everything awake needs more: the battery fell 0.12 V an hour with Nesto's
 screen lit, and held with it dark ([BACKPLATE.md](BACKPLATE.md)). So Nesto
 rests the display as [PROTOCOL.md](../PROTOCOL.md) section 13 describes:
 after 30 seconds without input (or the timeout Home Assistant sets), the
-backlight goes off and the framebuffer is blanked, and the loop waits longer
-between rounds. The ring, a press, or the base's proximity sensor reading 15
-or more wakes it; the input that wakes it does nothing else. Until there's a
+backlight fades out over half a second, then the framebuffer is blanked, and
+the loop waits longer between rounds. The order matters: blanked while still
+lit, the LCD shows white. Waking turns the screen on first, then the
+backlight, at once. The ring, a press, or the base's proximity sensor reading
+15 or more wakes it; the input that wakes it does nothing else. Until there's a
 clock to show, standby is dark. Leaving, Nesto unblanks the screen for the
 stock software.
 
-To see whether the battery now holds over a run past the backplate's 30
-minutes, with the demo room served meanwhile:
+A 45-minute run on 2026-11-11 showed the battery level with the
+display resting most of the time: 3.93 V at the start, 3.96 V after a quarter
+of an hour, and 3.95 V at the end, by the backplate's reading.
+
+The proximity sensor Nesto wakes on (`0x0007`) is the near-field one: it reads
+0 until something is a hand's width from the glass. The far-field motion
+sensor sends `0x0005` now and then, and what its bytes mean isn't known yet.
+To learn, each minute's log has a line on both, for instance:
+
+```
+backplate: near-field 60 readings, highest 83, 4 at 15 or more; far-field 3 frames, 2 not zero
+```
+
+To run past the backplate's 30 minutes, with the demo room served meanwhile
+(`--no-motion` stops the sensor waking the display, `--timeout N` rests it
+after N seconds):
 
 ```bash
 NESTO_TAKE_MAX=3600 scripts/dev.sh device-run <nest-ip> detach 2700

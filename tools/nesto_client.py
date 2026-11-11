@@ -391,8 +391,9 @@ async def _demo(args: argparse.Namespace) -> None:
     await client.authenticate(key)
     room = DemoRoom()
     room.log = True
-    if args.timeout is not None:
-        room.config = {"display": {"timeout_s": args.timeout}}
+    # Sent every time, as Home Assistant does, so a setting tried once doesn't
+    # stay on the panel.
+    room.config = {"display": {"timeout_s": args.timeout, "wake_on_motion": not args.no_motion}}
     print(f"Serving the demo room '{DEMO_TITLE}' to panel {client.hello['panel_id']}")
     try:
         await room.serve(client)
@@ -413,7 +414,13 @@ def main() -> None:
     demo.add_argument(
         "--timeout",
         type=int,
-        help="seconds without input before the display rests (default: the panel's, 30)",
+        default=30,
+        help="seconds without input before the display rests (default: 30)",
+    )
+    demo.add_argument(
+        "--no-motion",
+        action="store_true",
+        help="don't wake the display when someone comes near",
     )
     args = parser.parse_args()
     run = {"pair": _pair, "connect": _connect, "demo": _demo}[args.command]

@@ -101,4 +101,29 @@ class DisplayPower {
   std::optional<Change> change_;
 };
 
+/// The backlight's way to a new brightness. Going down it fades, so resting
+/// looks calm, and the screen is blanked only once it's dark: blanked while
+/// lit, the thermostat's LCD shows white. Going up it's at once, so waking is
+/// quick.
+class BacklightFade {
+ public:
+  static constexpr Millis kDuration = 500;
+
+  explicit BacklightFade(int level = 0) : from_(level), to_(level) {}
+
+  /// Heads for `target` from where the backlight is at `now`.
+  void go(int target, Millis now);
+
+  /// The backlight's level at `now`.
+  int level(Millis now) const;
+  int target() const { return to_; }
+  /// Still on the way down at `now`.
+  bool fading(Millis now) const { return level(now) != to_; }
+
+ private:
+  int from_;
+  int to_;
+  Millis start_ = 0;
+};
+
 }  // namespace nesto::room
