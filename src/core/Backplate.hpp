@@ -79,6 +79,8 @@ class FrameReader {
 
 /// A kState payload, in volts.
 struct Power {
+  std::uint8_t flags = 0;    // byte 1; the stock software logs it as "flags"
+  bool charger_off = false;  // flags & 0x40, as Exploitee.rs's wiki guessed
   double usb = 0;        // from a USB supply, as on a stand
   double input = 0;      // from the heating's wires
   double operating = 0;

@@ -145,6 +145,9 @@ TEST_CASE("the state carries the voltages, the climate temperature and humidity"
   CHECK(stand->usb == doctest::Approx(4.94));
   CHECK(stand->input == doctest::Approx(0.0));
   CHECK(stand->battery == doctest::Approx(3.907));
+  CHECK(stand->flags == 0xce);
+  CHECK(stand->charger_off);
+  CHECK_FALSE(power->charger_off);
 
   const auto climate = bp::decode_climate({0x9a, 0x08, 0xbb, 0x01});  // 2202, 443
   REQUIRE(climate);

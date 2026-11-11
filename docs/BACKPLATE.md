@@ -101,6 +101,15 @@ display `Display-2.14`, software 5.9.4-5), with the stock software stopped:
   USB). The backplate's battery reading (3.91 V) is a little above what the
   stock software shows (3.89 V): it's measured elsewhere, under another
   load.
+- **No reset.** A 45-minute run with Nesto talking to the backplate went
+  past the 30-minute mark without a reset, and ended cleanly.
+- **But no charging.** Over those 45 minutes the battery fell from 3.906 V
+  to 3.784 V by the backplate's reading (3.864 V to 3.780 V by the stock
+  software's), about 0.12 V an hour. The state's flags (byte 1) read `ce`
+  throughout, where the stock software logs `8e`: the difference, 0x40, is
+  the bit Exploitee.rs's wiki guessed means "charger off". So something the
+  stock software sends turns charging on. Power steal mode (`0x00c0`) is the
+  first thing to try.
 
 
 ## Trying it

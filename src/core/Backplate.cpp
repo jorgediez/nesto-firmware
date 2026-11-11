@@ -107,6 +107,10 @@ void FrameReader::feed(const std::uint8_t* data, std::size_t size, std::vector<F
 std::optional<Power> decode_power(const std::vector<std::uint8_t>& payload) {
   if (payload.size() < 14) return std::nullopt;
   Power power;
+  // The stock software logged flags 8e while charging; with Nesto talking to
+  // the backplate they read ce, and the battery fell.
+  power.flags = payload[1];
+  power.charger_off = (payload[1] & 0x40) != 0;
   // Byte 6 matched the stock software's "Vusb" on a thermostat on a stand.
   power.usb = u16(&payload[6]) / 1000.0;
   power.input = u16(&payload[8]) / 100.0;
