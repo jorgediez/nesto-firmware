@@ -27,6 +27,7 @@ struct InputScript {
 ///   r+N / r-N  turn the ring N steps clockwise / anticlockwise (50 ms)
 ///   p          press and release (80 ms down, then 120 ms)
 ///   h          hold for a long press (900 ms down, then 120 ms)
+///   m          someone comes near (50 ms)
 ///   wN         wait N milliseconds
 ///
 /// Returns nothing and fills `error` if a step isn't understood.

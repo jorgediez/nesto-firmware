@@ -45,6 +45,9 @@ std::optional<InputScript> parse_input_script(std::string_view script, std::stri
       t += kind == 'p' ? kPressDown : kHoldDown;
       out.events.push_back({t, ButtonEdge{false}});
       t += kAfterRelease;
+    } else if (kind == 'm' && arg.empty()) {
+      out.events.push_back({t, Presence{}});
+      t += kTurnTime;
     } else if (kind == 'w' && parse_number(arg, value) && value >= 0) {
       t += static_cast<Millis>(value);
     } else {

@@ -373,3 +373,25 @@ charging the battery. Others had worked it out, and Nesto now keeps a
 session with the backplate going: see [BACKPLATE.md](BACKPLATE.md), which
 also says how to try a run past 30 minutes. The cap stays until such a run
 shows the reset gone.
+
+### Resting the display
+
+On a USB stand the thermostat draws about 100 mA, and a lit screen with
+everything awake needs more: the battery fell 0.12 V an hour with Nesto's
+screen lit, and held with it dark ([BACKPLATE.md](BACKPLATE.md)). So Nesto
+rests the display as [PROTOCOL.md](../PROTOCOL.md) section 13 describes:
+after 30 seconds without input (or the timeout Home Assistant sets), the
+backlight goes off and the framebuffer is blanked, and the loop waits longer
+between rounds. The ring, a press, or the base's proximity sensor reading 15
+or more wakes it; the input that wakes it does nothing else. Until there's a
+clock to show, standby is dark. Leaving, Nesto unblanks the screen for the
+stock software.
+
+To see whether the battery now holds over a run past the backplate's 30
+minutes, with the demo room served meanwhile:
+
+```bash
+NESTO_TAKE_MAX=3600 scripts/dev.sh device-run <nest-ip> detach 2700
+scripts/dev.sh client --host <nest-ip> demo     # in another terminal
+scripts/dev.sh device-log <nest-ip> follow      # and the log in a third
+```

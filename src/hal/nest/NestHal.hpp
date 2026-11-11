@@ -43,6 +43,7 @@ class NestHal : public Hal {
   void poll(std::vector<TimedInput>& out, Millis timeout) override;
   void present(const std::uint32_t* pixels) override;
   void set_backlight(int percent) override;
+  void set_screen_on(bool on) override;
 
   /// Prints the ring's and the press's raw events, and the ticks the ring's
   /// make, until interrupted: for measuring the ring. Leaves the screen and
@@ -60,8 +61,9 @@ class NestHal : public Hal {
   void open_backlight();
   bool open_backplate();
   /// Reads what the backplate sent, moves the session on, and sends what it
-  /// has to say. With `verbose`, prints each frame.
-  void service_backplate(bool verbose);
+  /// has to say. With `verbose`, prints each frame; with `inputs`, adds
+  /// Presence when the proximity sensor says someone is near.
+  void service_backplate(bool verbose, std::vector<TimedInput>* inputs = nullptr);
   void report_backplate(bool verbose);
   /// Leaves the backplate as the stock software expects to find it.
   void hand_back_backplate();
@@ -86,6 +88,7 @@ class NestHal : public Hal {
   std::string backlight_;  // the brightness file; empty if there is none
   int backlight_max_ = 0;
   int backlight_before_ = -1;
+  bool blanked_ = false;  // the framebuffer is blanked (screen off)
 
   int backplate_fd_ = -1;
   backplate::FrameReader backplate_reader_;

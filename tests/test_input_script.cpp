@@ -35,8 +35,17 @@ TEST_CASE("steps run one after another with their own durations") {
   CHECK(script->duration == 1820);
 }
 
+TEST_CASE("m: someone comes near") {
+  std::string error;
+  auto script = parse_input_script("m w100 m", error);
+  REQUIRE(script);
+  REQUIRE(script->events.size() == 2);
+  CHECK(std::holds_alternative<nesto::Presence>(script->events[0].event));
+  CHECK(script->events[1].offset == 150);
+}
+
 TEST_CASE("unknown steps are reported") {
-  for (const char* bad : {"x", "r1", "r+", "r+0", "r+a", "p2", "w", "w-5", "hh"}) {
+  for (const char* bad : {"x", "r1", "r+", "r+0", "r+a", "p2", "w", "w-5", "hh", "m2"}) {
     std::string error;
     CAPTURE(bad);
     CHECK_FALSE(parse_input_script(bad, error));

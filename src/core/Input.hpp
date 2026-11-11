@@ -23,13 +23,16 @@ struct ButtonEdge {
   bool down = false;
 };
 
+/// Someone is near: on the thermostat, the base's proximity sensor.
+struct Presence {};
+
 /// The program should stop, for example because the simulator's window was
 /// closed. A non-zero exit code reports a failure to whoever started it.
 struct QuitRequest {
   int exit_code = 0;
 };
 
-using InputEvent = std::variant<RingTurn, ButtonEdge, QuitRequest>;
+using InputEvent = std::variant<RingTurn, ButtonEdge, Presence, QuitRequest>;
 
 struct TimedInput {
   Millis at = 0;

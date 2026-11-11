@@ -29,6 +29,9 @@ constexpr const char* kBacklights = "/sys/class/backlight";
 constexpr const char* kRingName = "avago-adbs-a330";
 constexpr const char* kPressName = "twl4030_pwrbutton";
 constexpr const char* kBackplate = "/dev/ttyO2";
+// Blanking the framebuffer turns the display controller off too, as
+// nest-gallery does while its display sleeps.
+constexpr const char* kBlank = "/sys/class/graphics/fb0/blank";
 // How often a run logs the backplate's readings.
 constexpr Millis kBackplateReport = 60000;
 
@@ -115,6 +118,8 @@ NestHal::NestHal(NestOptions options)
 
 NestHal::~NestHal() {
   hand_back_backplate();
+  // The stock software expects the screen as it found it: lit, not blanked.
+  if (blanked_) write_int(kBlank, 0);
   if (!backlight_.empty() && backlight_before_ >= 0) write_int(backlight_, backlight_before_);
   if (fb_) munmap(fb_, fb_size_);
   for (int fd : {fb_fd_, ring_fd_, press_fd_, backplate_fd_}) {
@@ -194,7 +199,7 @@ void NestHal::hand_back_backplate() {
   }
 }
 
-void NestHal::service_backplate(bool verbose) {
+void NestHal::service_backplate(bool verbose, std::vector<TimedInput>* inputs) {
   if (backplate_fd_ < 0) return;
   const Millis t = now();
 
@@ -230,6 +235,10 @@ void NestHal::service_backplate(bool verbose) {
       std::printf("\n");
     }
     backplate_.receive(t, frame);
+    if (inputs && frame.type == backplate::kProximity) {
+      const auto near = backplate::decode_proximity(frame.payload);
+      if (near && *near >= backplate::kNearThreshold) inputs->push_back({t, Presence{}});
+    }
   }
 
   backplate_.tick(t);
@@ -406,7 +415,7 @@ void NestHal::poll(std::vector<TimedInput>& out, Millis timeout) {
     tv.tv_usec = static_cast<suseconds_t>((timeout % 1000) * 1000);
     select(max_fd + 1, &readable, nullptr, nullptr, &tv);  // EINTR: a signal, seen below
     read_inputs(out, false);
-    service_backplate(false);
+    service_backplate(false, &out);
   }
   if (g_quit_signal != 0) {
     log::info("signal %d: stopping", static_cast<int>(g_quit_signal));
@@ -431,6 +440,15 @@ void NestHal::set_backlight(int percent) {
   // Round up, so any percentage above 0 still lights the screen.
   const int level = (percent * backlight_max_ + 99) / 100;
   if (!write_int(backlight_, level)) log::warn("%s: can't set it to %d", backlight_.c_str(), level);
+}
+
+void NestHal::set_screen_on(bool on) {
+  if (on == !blanked_) return;
+  if (!write_int(kBlank, on ? 0 : 1)) {
+    log::warn("%s: can't %s the screen", kBlank, on ? "unblank" : "blank");
+    return;
+  }
+  blanked_ = !on;
 }
 
 int NestHal::input_test() {

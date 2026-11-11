@@ -171,6 +171,9 @@ void SimHal::poll_window(std::vector<TimedInput>& out) {
           case SDLK_RETURN:
             if (!e.key.repeat) out.push_back({t, ButtonEdge{down}});
             break;
+          case SDLK_m:  // someone comes near
+            if (down) out.push_back({t, Presence{}});
+            break;
           case SDLK_ESCAPE:
             if (down) out.push_back({t, QuitRequest{}});
             break;

@@ -126,6 +126,11 @@ std::optional<Climate> decode_climate(const std::vector<std::uint8_t>& payload) 
   return climate;
 }
 
+std::optional<int> decode_proximity(const std::vector<std::uint8_t>& payload) {
+  if (payload.size() < 2) return std::nullopt;
+  return static_cast<int>(u16(&payload[0]));
+}
+
 std::string text(const Frame& frame) {
   std::string out;
   for (std::uint8_t c : frame.payload) {

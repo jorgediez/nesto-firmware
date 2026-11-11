@@ -31,6 +31,10 @@ class Hal {
 
   /// Sets the backlight, 0 (off) to 100.
   virtual void set_backlight(int percent) = 0;
+
+  /// Turns the screen itself off or on, beyond the backlight, where the
+  /// hardware can: the thermostat blanks its framebuffer.
+  virtual void set_screen_on(bool /*on*/) {}
 };
 
 }  // namespace nesto

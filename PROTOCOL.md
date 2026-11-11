@@ -561,9 +561,16 @@ timeout.
 {"t": "display_state", "state": "standby", "brightness": 20, "cause": "timeout"}
 ```
 
-`cause` is `"input"`, `"motion"`, `"timeout"`, `"ha"` or `"notification"`. HA
-exposes this through a `light` entity (on = `active` or `standby`, with
-brightness) and a `select` entity for the standby mode.
+`cause` is `"input"`, `"motion"`, `"timeout"`, `"ha"` or `"notification"`, or
+`"sync"` for the one the panel sends right after synchronisation, so HA knows
+where the display stands. HA exposes this through a `light` entity (on =
+`active` or `standby`, with brightness) and a `select` entity for the standby
+mode.
+
+Until a panel has a standby screen to show, its `standby` is dark: brightness
+0, waking as `standby` does. Motion is the base's proximity sensor, on the
+thermostat; a press wakes the panel once it's recognised as a single press or
+a hold, so a double press can stay a trigger for HA.
 
 ## 14. Notifications
 

@@ -12,6 +12,7 @@
 #include "lvgl.h"
 #include "protocol/PanelSession.hpp"
 #include "room/Controller.hpp"
+#include "room/DisplayPower.hpp"
 
 namespace nesto {
 
@@ -52,6 +53,12 @@ class App : private protocol::SessionEvents {
   void handle(const TimedInput& input);
   void handle(const std::vector<GestureEvent>& gestures);
   PressContext press_context() const;
+  /// Applies the display's state changes to the hardware and, with `report`,
+  /// tells Home Assistant.
+  void apply_display(bool report = true);
+  void send_display_state(room::DisplayState state, int brightness, const char* cause);
+  void load_display_config();
+  void store_display_config() const;
   void update_status();
   void send_intent(const room::Intent& intent);
   void open_pairing();
@@ -82,6 +89,7 @@ class App : private protocol::SessionEvents {
   Millis status_checked_ = 0;
 
   room::Controller controller_;
+  room::DisplayPower display_power_{0};
   unsigned rendered_version_ = 0;
   std::map<std::uint32_t, std::string> intent_requests_;  // request id to item key
   std::uint32_t next_request_id_ = 1;

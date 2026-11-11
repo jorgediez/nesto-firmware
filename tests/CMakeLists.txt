@@ -5,6 +5,7 @@ add_executable(nesto_tests
   test_controller.cpp
   test_fonts.cpp
   test_crypto.cpp
+  test_display_power.cpp
   test_frame.cpp
   test_input_script.cpp
   test_mdns.cpp
