@@ -1,5 +1,6 @@
 #include "app/Ui.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 
@@ -75,6 +76,22 @@ lv_obj_t* make_label(lv_obj_t* parent, const lv_font_t* font, lv_color_t colour,
 
 void set_text(lv_obj_t* label, const std::string& text) {
   lv_label_set_text(label, text.c_str());
+}
+
+/// The width of `text` in `font` if every digit in it were the widest one:
+/// the font's digits differ in width, so a clock's labels sized by this don't
+/// change size, and the clock doesn't shift, as the time changes.
+std::int32_t widest_width(const lv_font_t* font, const std::string& text) {
+  std::int32_t digit = 0;
+  for (char d = '0'; d <= '9'; ++d) {
+    digit = std::max<std::int32_t>(digit, lv_font_get_glyph_width(font, static_cast<std::uint32_t>(d), 0));
+  }
+  std::int32_t width = 2;  // kerning's slack
+  for (char c : text) {
+    width += c >= '0' && c <= '9' ? digit
+                                  : lv_font_get_glyph_width(font, static_cast<unsigned char>(c), 0);
+  }
+  return width;
 }
 
 }  // namespace
@@ -331,6 +348,9 @@ void Ui::build_clock(lv_obj_t* screen) {
   lv_obj_align(digital_, LV_ALIGN_CENTER, 0, -10);
   digital_time_ = make_label(digital_, fonts_.clock, kClock);
   digital_side_ = make_label(digital_, fonts_.large, kMuted);
+  // Their widths are set to fit the widest digits: never wrap.
+  lv_label_set_long_mode(digital_time_, LV_LABEL_LONG_MODE_CLIP);
+  lv_label_set_long_mode(digital_side_, LV_LABEL_LONG_MODE_CLIP);
   // Lifts the small text onto the large one's baseline.
   lv_obj_set_style_pad_bottom(digital_side_, 10, 0);
 
@@ -368,10 +388,21 @@ void Ui::show_clock(const room::ClockFace& face, room::ClockStyle style, bool da
     lv_obj_set_hidden(second_hand_, face.seconds.empty());
     if (!face.seconds.empty()) set_hand(second_hand_, second_points_, face.second_angle, 120);
   } else {
+    // Fixed widths, with the time against the seconds or AM/PM: only the
+    // time's left edge moves, and only when its number of digits changes.
     set_text(digital_time_, face.time);
-    std::string side = face.seconds;
-    if (!face.suffix.empty()) side += (side.empty() ? "" : " ") + face.suffix;
+    lv_obj_set_width(digital_time_, widest_width(fonts_.clock, face.time));
+    lv_obj_set_style_text_align(digital_time_, LV_TEXT_ALIGN_RIGHT, 0);
+    const std::string gap = face.seconds.empty() ? "" : " ";
+    const std::string side = face.suffix.empty() ? face.seconds : face.seconds + gap + face.suffix;
     set_text(digital_side_, side);
+    std::int32_t side_width = widest_width(fonts_.large, face.seconds);
+    if (!face.suffix.empty()) {
+      side_width = std::max(widest_width(fonts_.large, face.seconds + gap + "AM"),
+                            widest_width(fonts_.large, face.seconds + gap + "PM"));
+    }
+    lv_obj_set_width(digital_side_, side_width);
+    lv_obj_set_style_text_align(digital_side_, LV_TEXT_ALIGN_LEFT, 0);
     lv_obj_set_hidden(digital_side_, side.empty());
   }
   // The date: under the hands' hub on the analog face, under the time on the
