@@ -568,7 +568,9 @@ where the display stands. HA exposes this through a `light` entity (on =
 mode.
 
 Until a panel has a standby screen to show, its `standby` is dark: brightness
-0, waking as `standby` does. Motion is the base's proximity sensor, on the
+0, waking as `standby` does. A panel whose clock waits for the time (section
+16) reports `standby` at `standby.brightness` with cause `"ha"` once the
+first `time` message arrives. Motion is the base's proximity sensor, on the
 thermostat; a press wakes the panel once it's recognised as a single press or
 a hold, so a double press can stay a trigger for HA.
 

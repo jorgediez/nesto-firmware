@@ -55,24 +55,43 @@ DisplayConfig DisplayConfig::from_config(const protocol::Json& config) {
     if (mode == "off") out.standby_mode = StandbyMode::Off;
   }
   out.standby_brightness = percent(standby, "brightness", out.standby_brightness);
+
+  const protocol::Json& clock = section(standby, "clock");
+  if (const auto it = clock.find("style"); it != clock.end() && it->is_string()) {
+    const std::string style = it->get<std::string>();
+    if (style == "analog") out.clock_style = ClockStyle::Analog;
+    if (style == "digital") out.clock_style = ClockStyle::Digital;
+  }
+  out.clock_seconds = flag(clock, "seconds", out.clock_seconds);
+  out.clock_date = flag(clock, "date", out.clock_date);
+  out.hour12 = flag(section(config, "locale"), "hour12", out.hour12);
   return out;
 }
 
 protocol::Json DisplayConfig::to_config() const {
-  return protocol::Json{{"display",
-                         {{"brightness", brightness},
-                          {"auto_brightness", auto_brightness},
-                          {"timeout_s", timeout_s},
-                          {"wake_on_motion", wake_on_motion},
-                          {"wake_on_input_when_off", wake_on_input_when_off}}},
-                        {"standby", {{"mode", name(standby_mode)}, {"brightness", standby_brightness}}}};
+  return protocol::Json{
+      {"display",
+       {{"brightness", brightness},
+        {"auto_brightness", auto_brightness},
+        {"timeout_s", timeout_s},
+        {"wake_on_motion", wake_on_motion},
+        {"wake_on_input_when_off", wake_on_input_when_off}}},
+      {"standby",
+       {{"mode", name(standby_mode)},
+        {"brightness", standby_brightness},
+        {"clock",
+         {{"style", clock_style == ClockStyle::Digital ? "digital" : "analog"},
+          {"seconds", clock_seconds},
+          {"date", clock_date}}}}},
+      {"locale", {{"hour12", hour12}}}};
 }
 
 bool DisplayConfig::operator==(const DisplayConfig& o) const {
   return brightness == o.brightness && auto_brightness == o.auto_brightness &&
          timeout_s == o.timeout_s && wake_on_motion == o.wake_on_motion &&
          wake_on_input_when_off == o.wake_on_input_when_off && standby_mode == o.standby_mode &&
-         standby_brightness == o.standby_brightness;
+         standby_brightness == o.standby_brightness && clock_style == o.clock_style &&
+         clock_seconds == o.clock_seconds && clock_date == o.clock_date && hour12 == o.hour12;
 }
 
 const char* name(DisplayState state) {
@@ -113,6 +132,12 @@ void DisplayPower::configure(const DisplayConfig& config, Millis now) {
   if (brightness() != before) change_ = Change{state_, brightness(), DisplayCause::Ha};
 }
 
+void DisplayPower::set_has_standby_screen(bool has) {
+  if (has == has_standby_screen_) return;
+  has_standby_screen_ = has;
+  if (state_ == DisplayState::Standby) change_ = Change{state_, brightness(), DisplayCause::Ha};
+}
+
 DisplayState DisplayPower::resting_state() const {
   return config_.standby_mode == StandbyMode::Off ? DisplayState::Off : DisplayState::Standby;
 }
@@ -120,7 +145,7 @@ DisplayState DisplayPower::resting_state() const {
 int DisplayPower::brightness() const {
   switch (state_) {
     case DisplayState::Active: return config_.brightness;
-    // Until there's a clock to show, standby is dark, but still wakes on motion.
+    // With no clock to show, standby is dark, but still wakes on motion.
     case DisplayState::Standby: return has_standby_screen_ ? config_.standby_brightness : 0;
     case DisplayState::Off: return 0;
   }

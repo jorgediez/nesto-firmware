@@ -4,6 +4,7 @@
 
 using nesto::room::DisplayCause;
 using nesto::room::DisplayConfig;
+using nesto::room::ClockStyle;
 using nesto::room::DisplayPower;
 using nesto::room::DisplayState;
 using nesto::room::StandbyMode;
@@ -36,12 +37,18 @@ TEST_CASE("the config's defaults are the protocol's example, and missing fields 
   CHECK(empty.timeout_s == 30);
   CHECK(empty.standby_mode == StandbyMode::Clock);
   CHECK(empty.standby_brightness == 20);
+  CHECK(empty.clock_style == ClockStyle::Analog);
+  CHECK_FALSE(empty.clock_seconds);
+  CHECK(empty.clock_date);
+  CHECK_FALSE(empty.hour12);
 
   const DisplayConfig c = DisplayConfig::from_config(Json::parse(R"({
     "t": "config",
     "display": {"brightness": 55, "timeout_s": 12, "wake_on_motion": false,
                 "wake_on_input_when_off": false, "auto_brightness": false},
-    "standby": {"mode": "off", "brightness": 5}
+    "standby": {"mode": "off", "brightness": 5,
+                "clock": {"style": "digital", "seconds": true, "date": false}},
+    "locale": {"language": "es", "hour12": true}
   })"));
   CHECK(c.brightness == 55);
   CHECK(c.timeout_s == 12);
@@ -50,6 +57,10 @@ TEST_CASE("the config's defaults are the protocol's example, and missing fields 
   CHECK_FALSE(c.auto_brightness);
   CHECK(c.standby_mode == StandbyMode::Off);
   CHECK(c.standby_brightness == 5);
+  CHECK(c.clock_style == ClockStyle::Digital);
+  CHECK(c.clock_seconds);
+  CHECK_FALSE(c.clock_date);
+  CHECK(c.hour12);
   CHECK(DisplayConfig::from_config(c.to_config()) == c);  // stored and read back
 }
 
@@ -86,6 +97,22 @@ TEST_CASE("with a standby screen, standby has its own brightness") {
   d.configure(config(10), 0);
   d.tick(10000);
   expect_change(d, DisplayState::Standby, 20, DisplayCause::Timeout);
+}
+
+TEST_CASE("the clock becoming known lights standby; losing it darkens it") {
+  DisplayPower d(0);
+  d.configure(config(10), 0);
+  d.set_has_standby_screen(true);
+  CHECK_FALSE(d.take_change());  // active: nothing changes
+  d.set_has_standby_screen(false);
+  d.tick(10000);
+  expect_change(d, DisplayState::Standby, 0, DisplayCause::Timeout);
+  d.set_has_standby_screen(true);
+  expect_change(d, DisplayState::Standby, 20, DisplayCause::Ha);
+  d.set_has_standby_screen(true);
+  CHECK_FALSE(d.take_change());
+  d.set_has_standby_screen(false);
+  expect_change(d, DisplayState::Standby, 0, DisplayCause::Ha);
 }
 
 TEST_CASE("motion wakes standby and keeps active awake, unless turned off") {

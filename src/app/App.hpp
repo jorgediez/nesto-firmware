@@ -13,6 +13,7 @@
 #include "protocol/PanelSession.hpp"
 #include "room/Controller.hpp"
 #include "room/DisplayPower.hpp"
+#include "room/StandbyClock.hpp"
 
 namespace nesto {
 
@@ -58,6 +59,13 @@ class App : private protocol::SessionEvents {
   void apply_display(bool report = true);
   /// Moves the backlight along its fade, and darkens the screen once it's dark.
   void update_backlight();
+  /// Shows the standby clock once standby is lit and the fade is over, moves
+  /// it on, and hides it otherwise.
+  void update_clock();
+  /// Home Assistant's `time` message (PROTOCOL.md section 16).
+  void set_time(const protocol::Json& body);
+  void load_time();
+  void store_time() const;
   void send_display_state(room::DisplayState state, int brightness, const char* cause);
   void load_display_config();
   void store_display_config() const;
@@ -104,6 +112,8 @@ class App : private protocol::SessionEvents {
     Millis longest_gap = 0;
     Millis longest_write = 0;
   } fade_stats_;
+  room::WallClock wall_clock_;
+  std::string clock_drawn_;  // what the clock shows, to redraw only on a change
   unsigned rendered_version_ = 0;
   std::map<std::uint32_t, std::string> intent_requests_;  // request id to item key
   std::uint32_t next_request_id_ = 1;

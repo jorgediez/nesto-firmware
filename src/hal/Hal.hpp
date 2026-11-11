@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <vector>
 
@@ -36,6 +37,18 @@ class Hal {
   /// hardware needs it: the thermostat shows black while dark, as a dark LCD
   /// still shows its picture in room light, and puts the last frame back.
   virtual void set_screen_on(bool /*on*/) {}
+
+  /// UTC in milliseconds from the system's wall clock, which may never have
+  /// been set: see WallClock::kEarliestUtcMs.
+  virtual std::int64_t wall_clock_ms() const {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+  }
+
+  /// Sets the system's wall clock where Nesto owns it: the thermostat's, not
+  /// the simulator's host. Returns false if it couldn't.
+  virtual bool set_wall_clock(std::int64_t /*utc_ms*/) { return true; }
 };
 
 }  // namespace nesto

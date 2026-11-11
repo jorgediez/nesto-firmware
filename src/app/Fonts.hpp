@@ -12,6 +12,7 @@ struct Fonts {
   const lv_font_t* body = nullptr;       // 20 px: titles, messages
   const lv_font_t* large = nullptr;      // 28 px: the selected item's name
   const lv_font_t* huge = nullptr;       // 48 px: values, the pairing code
+  const lv_font_t* clock = nullptr;      // 80 px: the digital standby clock
   const lv_font_t* icon_small = nullptr; // 28 px icons
   const lv_font_t* icon_large = nullptr; // 56 px icons
 

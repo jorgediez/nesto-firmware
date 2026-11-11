@@ -1,10 +1,12 @@
 #pragma once
 
+#include <array>
 #include <string>
 
 #include "app/Fonts.hpp"
 #include "lvgl.h"
 #include "room/Controller.hpp"
+#include "room/StandbyClock.hpp"
 
 namespace nesto {
 
@@ -36,7 +38,18 @@ class Ui {
   void show_pairing_code(const std::string& code);
   void hide_pairing_code();
 
+  /// The standby clock, over everything but the pairing code. Called again
+  /// to move it on.
+  void show_clock(const room::ClockFace& face, room::ClockStyle style, bool date);
+  void hide_clock();
+  bool clock_shown() const;
+
  private:
+  using Hand = std::array<lv_point_precise_t, 2>;
+  void build_clock(lv_obj_t* screen);
+  lv_obj_t* make_hand(Hand& points, std::int32_t width, lv_color_t colour);
+  void set_hand(lv_obj_t* line, Hand& points, int angle, int length);
+
   void render_list(const room::RoomView& view);
   void update_footer();
   static void hide_toast(lv_timer_t* timer);
@@ -61,6 +74,20 @@ class Ui {
   lv_obj_t* footer_ = nullptr;
   lv_obj_t* toast_ = nullptr;
   lv_timer_t* toast_timer_ = nullptr;
+  // The standby clock: analog or digital, with the date.
+  lv_obj_t* clock_ = nullptr;
+  lv_obj_t* analog_ = nullptr;
+  std::array<Hand, 12> marks_{};
+  Hand hour_points_{};
+  Hand minute_points_{};
+  Hand second_points_{};
+  lv_obj_t* hour_hand_ = nullptr;
+  lv_obj_t* minute_hand_ = nullptr;
+  lv_obj_t* second_hand_ = nullptr;
+  lv_obj_t* digital_ = nullptr;
+  lv_obj_t* digital_time_ = nullptr;
+  lv_obj_t* digital_side_ = nullptr;
+  lv_obj_t* clock_date_ = nullptr;
   lv_obj_t* pairing_ = nullptr;
   lv_obj_t* pairing_code_ = nullptr;
 };
