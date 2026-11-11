@@ -12,15 +12,20 @@ constexpr std::array<std::uint8_t, 4> kReplyPreamble = {0xd5, 0xd5, 0xaa, 0x96};
 constexpr std::size_t kHeader = 4;
 constexpr std::size_t kTrailer = 2;
 
-// What the session asks once the burst is over, and the reply to each.
+// What the session asks once the burst is over, and the reply to each. An
+// optional question that goes unanswered is skipped: the replies' types are
+// assumed from the others' pattern.
 struct Question {
   std::uint16_t command;
   std::uint16_t reply;
+  bool optional;
 };
 constexpr Question kQuestions[] = {
-    {kGetTfeVersion, kTfeVersion},
-    {kGetTfeBuildInfo, kTfeBuildInfo},
-    {kGetModel, kModel},
+    {kGetTfeVersion, kTfeVersion, false},
+    {kGetTfeBuildInfo, kTfeBuildInfo, false},
+    {kGetBslId, kBslId, false},
+    {kGetHardware, kHardware, true},
+    {kGetSerial, kSerial, true},
 };
 constexpr std::size_t kQuestionCount = sizeof kQuestions / sizeof kQuestions[0];
 
@@ -102,6 +107,8 @@ void FrameReader::feed(const std::uint8_t* data, std::size_t size, std::vector<F
 std::optional<Power> decode_power(const std::vector<std::uint8_t>& payload) {
   if (payload.size() < 14) return std::nullopt;
   Power power;
+  // Byte 6 matched the stock software's "Vusb" on a thermostat on a stand.
+  power.usb = u16(&payload[6]) / 1000.0;
   power.input = u16(&payload[8]) / 100.0;
   power.operating = u16(&payload[10]) / 1000.0;
   power.battery = u16(&payload[12]) / 1000.0;
@@ -141,11 +148,21 @@ void Session::send(std::uint16_t type, const std::vector<std::uint8_t>& payload)
   output_.insert(output_.end(), frame.begin(), frame.end());
 }
 
-std::string* Session::answer(std::size_t question) {
+void Session::store(std::size_t question, const Frame& frame) {
   switch (question) {
-    case 0: return &version_;
-    case 1: return &build_info_;
-    default: return &model_;
+    case 0: version_ = text(frame); break;
+    case 1: build_info_ = text(frame); break;
+    case 2: {
+      static const char kHex[] = "0123456789abcdef";
+      bsl_id_.clear();
+      for (std::uint8_t b : frame.payload) {
+        bsl_id_ += kHex[b >> 4];
+        bsl_id_ += kHex[b & 0x0f];
+      }
+      break;
+    }
+    case 3: model_ = text(frame); break;
+    default: serial_ = text(frame); break;
   }
 }
 
@@ -194,7 +211,14 @@ void Session::tick(Millis now) {
       if (in_phase >= config_.burst_timeout) fail(now, "no start-up burst ending in BRK");
       break;
     case Phase::kInfo:
-      if (in_phase >= config_.reply_timeout) fail(now, "no reply to a version question");
+      if (in_phase >= config_.reply_timeout) {
+        if (query_ < kQuestionCount && kQuestions[query_].optional) {
+          ++query_;
+          ask(now);
+        } else {
+          fail(now, "no reply to a version question");
+        }
+      }
       break;
     case Phase::kRunning:
       if (now - heard_ >= config_.silence) {
@@ -249,7 +273,7 @@ void Session::receive(Millis now, const Frame& frame) {
       break;
     case Phase::kInfo:
       if (query_ < kQuestionCount && frame.type == kQuestions[query_].reply) {
-        *answer(query_) = text(frame);
+        store(query_, frame);
         ++query_;
         ask(now);
       }

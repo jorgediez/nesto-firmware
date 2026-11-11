@@ -26,14 +26,18 @@ enum Type : std::uint16_t {
   kState = 0x000b,          // voltages: input, operating, battery
   kTfeVersion = 0x0018,
   kTfeBuildInfo = 0x0019,
-  kModel = 0x001d,
+  kBslId = 0x001d,          // two bytes, not text
+  kHardware = 0x001e,       // the backplate's name, for instance "Backplate-3.2" (assumed)
+  kSerial = 0x001f,         // (assumed)
   kEndOfBuffers = 0x002f,
 
   kStatusRequest = 0x0083,  // the keep-alive
   kFetPresenceAck = 0x008f,
   kGetTfeVersion = 0x0098,
   kGetTfeBuildInfo = 0x0099,
-  kGetModel = 0x009d,
+  kGetBslId = 0x009d,
+  kGetHardware = 0x009e,
+  kGetSerial = 0x009f,
   kRequestBuffers = 0x00a2,
   kEndOfBuffersAck = 0x00a3,
   kSetPowerSteal = 0x00c0,
@@ -75,7 +79,8 @@ class FrameReader {
 
 /// A kState payload, in volts.
 struct Power {
-  double input = 0;      // from the base
+  double usb = 0;        // from a USB supply, as on a stand
+  double input = 0;      // from the heating's wires
   double operating = 0;
   double battery = 0;
 };
@@ -96,7 +101,8 @@ std::string text(const Frame& frame);
 ///  1. a break on the line, a quarter of a second's pause, and a reset;
 ///  2. the backplate's start-up burst, up to "BRK", which must include which
 ///     terminals have wires; that's acknowledged with the same payload;
-///  3. its versions and model, asked one at a time;
+///  3. its versions and identity, asked one at a time (the name and serial
+///     number are optional: unanswered, they're skipped);
 ///  4. then, for as long as it runs, a keep-alive every 15 s and a request
 ///     for its buffered readings every 30 s, whose end is acknowledged.
 ///
@@ -145,7 +151,9 @@ class Session {
   // What the backplate said about itself.
   const std::string& version() const { return version_; }
   const std::string& build_info() const { return build_info_; }
+  const std::string& bsl_id() const { return bsl_id_; }  // in hex
   const std::string& model() const { return model_; }
+  const std::string& serial() const { return serial_; }
 
   // Its latest readings, if any came yet.
   const std::optional<Power>& power() const { return power_; }
@@ -155,7 +163,7 @@ class Session {
   int restarts() const { return restarts_; }
 
  private:
-  std::string* answer(std::size_t question);
+  void store(std::size_t question, const Frame& frame);
   void send(std::uint16_t type, const std::vector<std::uint8_t>& payload = {});
   void ask(Millis now);
   void enter_running(Millis now);
@@ -175,7 +183,9 @@ class Session {
 
   std::string version_;
   std::string build_info_;
+  std::string bsl_id_;
   std::string model_;
+  std::string serial_;
   std::optional<Power> power_;
   std::optional<Climate> climate_;
   int handshakes_ = 0;

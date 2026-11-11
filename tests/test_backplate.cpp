@@ -62,11 +62,15 @@ nesto::Millis handshake(bp::Session& s, nesto::Millis now = 1000) {
   say(s, now + 10, bp::kTfeVersion, ascii("4.2.8"));
   CHECK(commands(s.take_output()) == Commands{bp::kGetTfeBuildInfo});
   say(s, now + 20, bp::kTfeBuildInfo, ascii("2019-04-03 12:00:00"));
-  CHECK(commands(s.take_output()) == Commands{bp::kGetModel});
-  say(s, now + 30, bp::kModel, ascii("Backplate-3.2\r"));
+  CHECK(commands(s.take_output()) == Commands{bp::kGetBslId});
+  say(s, now + 30, bp::kBslId, {0x00, 0x00});
+  CHECK(commands(s.take_output()) == Commands{bp::kGetHardware});
+  say(s, now + 40, bp::kHardware, ascii("Backplate-3.2\r"));
+  CHECK(commands(s.take_output()) == Commands{bp::kGetSerial});
+  say(s, now + 50, bp::kSerial, ascii("03BA01AC1015023X"));
   CHECK(s.running());
   CHECK(commands(s.take_output()) == Commands{bp::kStatusRequest, bp::kRequestBuffers});
-  return now + 30;
+  return now + 50;
 }
 
 }  // namespace
@@ -127,10 +131,20 @@ TEST_CASE("the state carries the voltages, the climate temperature and humidity"
   const Bytes state = {0, 0, 0, 0, 0, 0, 0, 0, 0xb0, 0x04, 0xe4, 0x0c, 0x70, 0x0f, 0, 0};
   const auto power = bp::decode_power(state);
   REQUIRE(power);
+  CHECK(power->usb == doctest::Approx(0.0));
   CHECK(power->input == doctest::Approx(12.0));
   CHECK(power->operating == doctest::Approx(3.3));
   CHECK(power->battery == doctest::Approx(3.952));
   CHECK_FALSE(bp::decode_power(Bytes(13, 0)));
+
+  // A real one, from an EU backplate on a stand: the stock software showed
+  // Vusb 4.94 V and Vin 0.00 V.
+  const auto stand = bp::decode_power({0x01, 0xce, 0x0f, 0x00, 0x00, 0x00, 0x4c, 0x13, 0x00, 0x00,
+                                       0x01, 0x00, 0x43, 0x0f, 0x14, 0x14});
+  REQUIRE(stand);
+  CHECK(stand->usb == doctest::Approx(4.94));
+  CHECK(stand->input == doctest::Approx(0.0));
+  CHECK(stand->battery == doctest::Approx(3.907));
 
   const auto climate = bp::decode_climate({0x9a, 0x08, 0xbb, 0x01});  // 2202, 443
   REQUIRE(climate);
@@ -140,15 +154,38 @@ TEST_CASE("the state carries the voltages, the climate temperature and humidity"
   CHECK(cold->celsius == doctest::Approx(-5.0));
 }
 
-TEST_CASE("the handshake: break, reset, burst to BRK, acknowledgement, three questions") {
+TEST_CASE("the handshake: break, reset, burst to BRK, acknowledgement, five questions") {
   bp::Session s;
   CHECK(s.phase() == bp::Session::Phase::kStopped);
   handshake(s);
   CHECK(s.version() == "4.2.8");
   CHECK(s.build_info() == "2019-04-03 12:00:00");
+  CHECK(s.bsl_id() == "0000");
   CHECK(s.model() == "Backplate-3.2");
+  CHECK(s.serial() == "03BA01AC1015023X");
   CHECK(s.handshakes() == 1);
   CHECK_FALSE(s.take_break());
+}
+
+TEST_CASE("the name and serial are optional: unanswered, they're skipped") {
+  bp::Session s;
+  s.start(0);
+  s.tick(250);
+  s.take_output();
+  say(s, 300, bp::kFetPresence, {1});
+  say(s, 300, bp::kAscii, ascii("BRK"));
+  say(s, 310, bp::kTfeVersion);
+  say(s, 320, bp::kTfeBuildInfo);
+  say(s, 330, bp::kBslId, {0x12, 0xab});
+  CHECK(s.bsl_id() == "12ab");
+  s.take_output();
+  s.tick(1330);  // the name: no reply
+  CHECK(commands(s.take_output()) == Commands{bp::kGetSerial});
+  s.tick(2330);  // nor the serial
+  CHECK(s.running());
+  CHECK(s.restarts() == 0);
+  CHECK(s.model().empty());
+  CHECK(commands(s.take_output()) == Commands{bp::kStatusRequest, bp::kRequestBuffers});
 }
 
 TEST_CASE("the wire presence is acknowledged with its own payload") {
@@ -194,8 +231,10 @@ TEST_CASE("power steal mode is only set when asked for") {
   say(s, 300, bp::kAscii, ascii("BRK"));
   say(s, 310, bp::kTfeVersion);
   say(s, 320, bp::kTfeBuildInfo);
+  say(s, 330, bp::kBslId);
+  say(s, 340, bp::kHardware);
   s.take_output();
-  say(s, 330, bp::kModel);
+  say(s, 350, bp::kSerial);
   CHECK(commands(s.take_output()) ==
         Commands{bp::kSetPowerSteal, bp::kStatusRequest, bp::kRequestBuffers});
 }

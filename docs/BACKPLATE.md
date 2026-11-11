@@ -58,9 +58,12 @@ returns into newlines, as some replies hold a `0x0d`.
    which terminals have wires (`0x0004`), more text, and the text `BRK` to
    end it.
 3. The wire presence is acknowledged with the same payload (`0x008f`).
-4. Its versions and model are asked one at a time: `0x0098` (reply
-   `0x0018`), `0x0099` (`0x0019`), `0x009d` (`0x001d`, for instance
-   `Backplate-3.2`).
+4. Its versions and identity are asked one at a time: `0x0098` (reply
+   `0x0018`, the firmware version), `0x0099` (`0x0019`, the build),
+   `0x009d` (`0x001d`, two bytes: the "BSL id"), then `0x009e`, the name
+   (for instance `Backplate-3.2`), and `0x009f`, the serial number. The
+   replies to the last two are assumed to be `0x001e` and `0x001f`, after the
+   others; unanswered, those two are skipped.
 5. From then on: a keep-alive (`0x0083`) every 15 s, and a request for its
    buffered readings (`0x00a2`) every 30 s. The readings end with `0x002f`,
    which is acknowledged (`0x00a3`).
@@ -78,8 +81,27 @@ until it's clear whether charging needs it.
 | Type | Payload |
 |---|---|
 | `0x0002` | temperature (signed, hundredths of a degree C), humidity (tenths of a percent) |
-| `0x000b` | state: at byte 8 the input voltage (hundredths of a volt), at 10 the operating voltage and at 12 the battery's (thousandths) |
-| `0x0007`, `0x000a` | proximity and ambient light, about every second once running |
+| `0x000b` | state: at byte 6 the USB supply's voltage (thousandths of a volt), at 8 the input voltage from the heating's wires (hundredths), at 10 the operating voltage and at 12 the battery's (thousandths) |
+| `0x0005`, `0x0007`, `0x000a` | raw PIR, proximity and ambient light, about every second once running |
+| `0x000c`, `0x0022`, `0x0023`, `0x002b`, `0x0038` | among the buffered readings; not decoded yet |
+
+## What a thermostat showed
+
+On a thermostat on an EU stand (base `Backplate-3.2`, firmware 1.0.26,
+display `Display-2.14`, software 5.9.4-5), with the stock software stopped:
+
+- The handshake went through at the first try, with no bad frames, and the
+  session ran without restarting. The backplate also sends a `BRK` on its
+  own after the break, before the reset; it's ignored.
+- The burst carried two wire-presence messages (`0x0004` and `0x0009`) and a
+  `*sense ...; detect ...` line.
+- `0x009d` answered two bytes, `00 00`, not the name.
+- The readings matched the stock software's own screens: 22.6 to 22.8 °C
+  and 43% humidity; USB 4.94 V and input 0.00 V (the stand is powered over
+  USB). The backplate's battery reading (3.91 V) is a little above what the
+  stock software shows (3.89 V): it's measured elsewhere, under another
+  load.
+
 
 ## Trying it
 
@@ -90,8 +112,8 @@ scripts/dev.sh device-run <nest-ip> backplate-test   # 3 minutes; every frame, d
 ```
 
 Nesto itself talks to the backplate in every run (`--no-backplate` turns
-that off), logging the battery, input voltage, temperature and humidity
-every minute. To see a run outlast the backplate's 30 minutes, the cap on
+that off), logging the battery, USB and input voltages, temperature and
+humidity every minute. To see a run outlast the backplate's 30 minutes, the cap on
 how long the stock software may be away has to be lifted on purpose:
 
 ```bash

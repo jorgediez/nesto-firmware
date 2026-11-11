@@ -47,7 +47,9 @@ const char* type_name(std::uint16_t type) {
     case 0x0010: return "TFE id";
     case backplate::kTfeVersion: return "TFE version";
     case backplate::kTfeBuildInfo: return "TFE build";
-    case backplate::kModel: return "model";
+    case backplate::kBslId: return "BSL id";
+    case backplate::kHardware: return "name";
+    case backplate::kSerial: return "serial";
     case 0x0022: return "buffered temperature";
     case 0x0023: return "PIR motion";
     case 0x0025: return "proximity event";
@@ -186,7 +188,8 @@ void NestHal::service_backplate(bool verbose) {
       std::printf("bp <- %04x %-26s %3zu bytes ", frame.type, type_name(frame.type),
                   frame.payload.size());
       const bool printable = frame.type == backplate::kAscii || frame.type == backplate::kTfeVersion ||
-                             frame.type == backplate::kTfeBuildInfo || frame.type == backplate::kModel;
+                             frame.type == backplate::kTfeBuildInfo || frame.type == backplate::kHardware ||
+                             frame.type == backplate::kSerial;
       if (printable) {
         std::printf(" \"%s\"", backplate::text(frame).c_str());
       } else {
@@ -194,8 +197,8 @@ void NestHal::service_backplate(bool verbose) {
         if (frame.payload.size() > 24) std::printf(" ...");
       }
       if (auto power = frame.type == backplate::kState ? backplate::decode_power(frame.payload) : std::nullopt) {
-        std::printf("  [input %.2f V, operating %.3f V, battery %.3f V]", power->input,
-                    power->operating, power->battery);
+        std::printf("  [USB %.2f V, input %.2f V, operating %.3f V, battery %.3f V]", power->usb,
+                    power->input, power->operating, power->battery);
       }
       if (auto climate =
               frame.type == backplate::kClimate ? backplate::decode_climate(frame.payload) : std::nullopt) {
@@ -237,7 +240,9 @@ void NestHal::service_backplate(bool verbose) {
 void NestHal::report_backplate(bool verbose) {
   if (backplate_.handshakes() != reported_handshakes_) {
     reported_handshakes_ = backplate_.handshakes();
-    log::info("backplate: talking to it (%s, firmware %s)", backplate_.model().c_str(),
+    log::info("backplate: talking to it (%s, serial %s, BSL id %s, firmware %s)",
+              backplate_.model().empty() ? "no name" : backplate_.model().c_str(),
+              backplate_.serial().empty() ? "?" : backplate_.serial().c_str(), backplate_.bsl_id().c_str(),
               backplate_.version().c_str());
   }
   if (backplate_.restarts() != reported_restarts_) {
@@ -249,7 +254,8 @@ void NestHal::report_backplate(bool verbose) {
     reported_readings_ = t;
     char power[96] = "no state yet";
     if (const auto& p = backplate_.power()) {
-      std::snprintf(power, sizeof power, "battery %.3f V, input %.2f V", p->battery, p->input);
+      std::snprintf(power, sizeof power, "battery %.3f V, USB %.2f V, input %.2f V", p->battery, p->usb,
+                    p->input);
     }
     char climate[64] = "";
     if (const auto& c = backplate_.climate()) {
