@@ -29,9 +29,6 @@ constexpr const char* kBacklights = "/sys/class/backlight";
 constexpr const char* kRingName = "avago-adbs-a330";
 constexpr const char* kPressName = "twl4030_pwrbutton";
 constexpr const char* kBackplate = "/dev/ttyO2";
-// Blanking the framebuffer turns the display controller off too, as
-// nest-gallery does while its display sleeps.
-constexpr const char* kBlank = "/sys/class/graphics/fb0/blank";
 // How often a run logs the backplate's readings.
 constexpr Millis kBackplateReport = 60000;
 
@@ -118,8 +115,6 @@ NestHal::NestHal(NestOptions options)
 
 NestHal::~NestHal() {
   hand_back_backplate();
-  // The stock software expects the screen as it found it: lit, not blanked.
-  if (blanked_) write_int(kBlank, 0);
   if (!backlight_.empty() && backlight_before_ >= 0) write_int(backlight_, backlight_before_);
   if (fb_) munmap(fb_, fb_size_);
   for (int fd : {fb_fd_, ring_fd_, press_fd_, backplate_fd_}) {
@@ -447,12 +442,21 @@ void NestHal::poll(std::vector<TimedInput>& out, Millis timeout) {
 }
 
 void NestHal::present(const std::uint32_t* pixels) {
+  last_frame_ = pixels;
+  if (!dark_) copy_to_screen(pixels);
+}
+
+void NestHal::copy_to_screen(const std::uint32_t* pixels) {
   const std::size_t row_bytes = static_cast<std::size_t>(kScreenSize) * 4;
   for (int y = 0; y < kScreenSize; ++y) {
     const std::size_t at = static_cast<std::size_t>(y + y_offset_) * line_length_ +
                            static_cast<std::size_t>(x_offset_) * 4;
     if (at + row_bytes > fb_size_) return;
-    std::memcpy(fb_ + at, pixels + static_cast<std::size_t>(y) * kScreenSize, row_bytes);
+    if (pixels) {
+      std::memcpy(fb_ + at, pixels + static_cast<std::size_t>(y) * kScreenSize, row_bytes);
+    } else {
+      std::memset(fb_ + at, 0, row_bytes);
+    }
   }
 }
 
@@ -465,12 +469,11 @@ void NestHal::set_backlight(int percent) {
 }
 
 void NestHal::set_screen_on(bool on) {
-  if (on == !blanked_) return;
-  if (!write_int(kBlank, on ? 0 : 1)) {
-    log::warn("%s: can't %s the screen", kBlank, on ? "unblank" : "blank");
-    return;
-  }
-  blanked_ = !on;
+  if (on == !dark_ || !fb_) return;
+  dark_ = !on;
+  // Black while dark, rather than a blanked framebuffer: blanked, the LCD
+  // turns white for most of a second before it goes dark (docs/DEVICE.md).
+  copy_to_screen(on ? last_frame_ : nullptr);
 }
 
 int NestHal::input_test() {

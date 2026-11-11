@@ -32,8 +32,9 @@ class Hal {
   /// Sets the backlight, 0 (off) to 100.
   virtual void set_backlight(int percent) = 0;
 
-  /// Turns the screen itself off or on, beyond the backlight, where the
-  /// hardware can: the thermostat blanks its framebuffer.
+  /// Turns the screen itself dark or back on, beyond the backlight, where the
+  /// hardware needs it: the thermostat shows black while dark, as a dark LCD
+  /// still shows its picture in room light, and puts the last frame back.
   virtual void set_screen_on(bool /*on*/) {}
 };
 

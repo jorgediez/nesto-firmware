@@ -102,9 +102,8 @@ class DisplayPower {
 };
 
 /// The backlight's way to a new brightness. Going down it fades, so resting
-/// looks calm, and the screen is blanked only once it's dark: blanked while
-/// lit, the thermostat's LCD shows white. Going up it's at once, so waking is
-/// quick. The fade follows a curve, faster at first: the eye sees a straight
+/// looks calm, and the screen turns black only once it's dark. Going up it's
+/// at once, so waking is quick. The fade follows a curve, faster at first: the eye sees a straight
 /// line in brightness as staying bright and then dropping at the end.
 class BacklightFade {
  public:

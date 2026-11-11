@@ -42,6 +42,8 @@ class NestHal : public Hal {
   Millis now() const override;
   void poll(std::vector<TimedInput>& out, Millis timeout) override;
   void present(const std::uint32_t* pixels) override;
+  /// Puts a frame on the screen; null for black.
+  void copy_to_screen(const std::uint32_t* pixels);
   void set_backlight(int percent) override;
   void set_screen_on(bool on) override;
 
@@ -89,7 +91,9 @@ class NestHal : public Hal {
   std::string backlight_;  // the brightness file; empty if there is none
   int backlight_max_ = 0;
   int backlight_before_ = -1;
-  bool blanked_ = false;  // the framebuffer is blanked (screen off)
+  // While dark the screen shows black, and frames are kept for waking.
+  bool dark_ = false;
+  const std::uint32_t* last_frame_ = nullptr;  // the App's, alive while it runs
 
   int backplate_fd_ = -1;
   backplate::FrameReader backplate_reader_;

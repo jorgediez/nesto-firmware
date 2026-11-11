@@ -438,7 +438,7 @@ void App::apply_display(bool report) {
   const auto change = display_power_.take_change();
   if (!change) return;
   // Lit: the screen first, then the backlight, at once. Dark: the backlight
-  // fades, and update_backlight() blanks the screen at the end, as a dark
+  // fades, and update_backlight() darkens the screen at the end, as a dark
   // standby is as good as off for the screen itself.
   if (change->brightness > 0) hal_.set_screen_on(true);
   backlight_.go(change->brightness, hal_.now());

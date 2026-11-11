@@ -386,22 +386,23 @@ everything awake needs more: the battery fell 0.12 V an hour with Nesto's
 screen lit, and held with it dark ([BACKPLATE.md](BACKPLATE.md)). So Nesto
 rests the display as [PROTOCOL.md](../PROTOCOL.md) section 13 describes:
 after 30 seconds without input (or the timeout Home Assistant sets), the
-backlight fades out over 0.8 s, then the framebuffer is blanked, and the
-loop waits longer between rounds. The fade follows the square of the time
-left, quick at first: a straight line in brightness looks bright until it
-drops at the end. Each fade logs how it went, to see whether it's smooth on
-the hardware too:
+backlight fades out over 0.8 s, then the screen shows black, and the loop
+waits longer between rounds. The fade follows the square of the time left,
+quick at first: a straight line in brightness looks bright until it drops at
+the end. Each fade logs how it went:
 
 ```
-backlight: faded to 0% in 37 steps over 801 ms; longest gap 21 ms, longest write 1 ms
+backlight: faded to 0% in 32 steps over 893 ms; longest gap 83 ms, longest write 5 ms
 ```
 
- The order matters: blanked while still
-lit, the LCD shows white. Waking turns the screen on first, then the
-backlight, at once. The ring, a press, or someone near wakes it (below); the
-input that wakes it does nothing else. Until there's a
-clock to show, standby is dark. Leaving, Nesto unblanks the screen for the
-stock software.
+Unlike nest-gallery, Nesto doesn't blank the screen (`/sys/class/graphics/fb0/blank`):
+filmed, blanking turned the LCD pale white for about 0.7 s before it
+went dark, with the backlight lit or not. Black with the backlight off looks
+the same as blanked, without the flash, and a dark LCD would still show the
+controls faintly in room light. While dark, new frames wait, and waking puts
+the latest back, then turns the backlight on at once. The ring, a press, or
+someone near wakes it (below); the input that wakes it does nothing else.
+Until there's a clock to show, standby is dark.
 
 A 45-minute run on 2026-11-11 showed the battery level with the
 display resting most of the time: 3.93 V at the start, 3.96 V after a quarter
