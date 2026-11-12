@@ -159,6 +159,14 @@ TEST_CASE("proximity: a 16-bit value, near from 15") {
   CHECK(bp::decode_proximity({0x03, 0x00}) == 3);    // as a thermostat sent with nobody there
   CHECK(bp::decode_proximity({0x24, 0x00}) == 36);   // "near pir msg 36"
   CHECK(*bp::decode_proximity({0x24, 0x00}) >= bp::kNearThreshold);
+
+  // Light, as a thermostat sent: 0x0317 and 0x26.
+  const auto light = bp::decode_light({0x17, 0x03, 0x26, 0x00});
+  REQUIRE(light);
+  CHECK(light->value == 791);
+  CHECK(light->extra == 38);
+  CHECK_FALSE(bp::decode_light({0x00, 0x00, 0x64, 0x00}));  // the first, no reading
+  CHECK_FALSE(bp::decode_light({0x17, 0x03}));
   CHECK_FALSE(bp::decode_proximity({0x01}));
 }
 

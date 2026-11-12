@@ -23,7 +23,7 @@
 #                                         nest-screen.sh against a pretend thermostat
 #   scripts/dev.sh device-screen HOST status|take|give|watch|trial|battery [SECONDS] [SSH OPTIONS]
 #                                         take the screen from the stock software, or give it back
-#   scripts/dev.sh device-run HOST [input-test|backplate-test|detach] [SECONDS] [SSH OPTIONS] [-- NESTO OPTIONS]
+#   scripts/dev.sh device-run HOST [input-test|backplate-test|light-test|detach] [SECONDS] [SSH OPTIONS] [-- NESTO OPTIONS]
 #                                         run Nesto on the thermostat for at most SECONDS
 #                                         (default 600), then give the screen back;
 #                                         detach: in the background, default an hour;
@@ -231,7 +231,7 @@ case "${1:-}" in
     ;;
   device-run)
     if [ $# -lt 2 ]; then
-      echo "usage: scripts/dev.sh device-run HOST [input-test|backplate-test|detach] [SECONDS] [SSH OPTIONS] [-- NESTO OPTIONS]" >&2
+      echo "usage: scripts/dev.sh device-run HOST [input-test|backplate-test|light-test|detach] [SECONDS] [SSH OPTIONS] [-- NESTO OPTIONS]" >&2
       exit 2
     fi
     host="$2"
@@ -245,6 +245,10 @@ case "${1:-}" in
       shift
     elif [ "${1:-}" = backplate-test ]; then
       nesto_args=(--backplate-test)
+      seconds=180
+      shift
+    elif [ "${1:-}" = light-test ]; then
+      nesto_args=(--light-test)
       seconds=180
       shift
     elif [ "${1:-}" = detach ]; then

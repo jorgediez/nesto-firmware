@@ -27,6 +27,9 @@ const Hal* g_clock = nullptr;
 constexpr Millis kMaxWait = 20;
 // The same while the display is in standby or off.
 constexpr Millis kRestingWait = 100;
+// Auto brightness waits for a change of this many points, so the screen
+// doesn't keep shifting.
+constexpr int kAutoStep = 5;
 
 // Where the display settings are kept, in the state directory.
 constexpr const char* kDisplayConfigFile = "display.json";
@@ -176,7 +179,7 @@ int App::run() {
     // and waking takes at most that long. Not while it fades, which would
     // then go in steps.
     const bool resting = display_power_.state() != room::DisplayState::Active && !gestures_.busy() &&
-                         !backlight_.fading(hal_.now());
+                         !backlight_.moving(hal_.now());
     const Millis wait = std::min<Millis>(next_timer, resting ? kRestingWait : kMaxWait);
 
     // The network waits; the hardware is only checked, so neither delays
@@ -189,6 +192,7 @@ int App::run() {
     handle(gestures_.tick(hal_.now()));
     display_power_.tick(hal_.now());
     apply_display();
+    update_auto_brightness();
     update_backlight();
     update_clock();
     if (hal_.now() - status_checked_ >= kStatusInterval) update_status();
@@ -233,6 +237,8 @@ void App::handle(const TimedInput& input) {
           if (resting && display_power_.state() == room::DisplayState::Active) {
             log::info("display woken by the %s sensor", event.far ? "far-field motion" : "proximity");
           }
+        } else if constexpr (std::is_same_v<T, Light>) {
+          auto_brightness_.reading(event.raw, input.at);
         } else if constexpr (std::is_same_v<T, QuitRequest>) {
           quit_ = true;
           exit_code_ = event.exit_code;
@@ -352,7 +358,7 @@ void App::on_ready(protocol::PanelSession& /*session*/) {
   // Where the display is, for Home Assistant to start from (section 13); a
   // change from the synchronisation's config is part of it.
   apply_display(false);
-  send_display_state(display_power_.state(), display_power_.brightness(), "sync");
+  send_display_state(display_power_.state(), backlight_.target(), "sync");
 }
 
 void App::on_unpaired() {
@@ -451,15 +457,40 @@ void App::apply_display(bool report) {
   // Lit: the screen first, then the backlight, at once. Dark: the backlight
   // fades, and update_backlight() darkens the screen at the end, as a dark
   // standby is as good as off for the screen itself.
-  backlight_.go(change->brightness, hal_.now());
+  const int brightness = shown_brightness(change->brightness);
+  backlight_.go(brightness, hal_.now());
   // What the new state shows is drawn before the backlight rises.
   update_clock();
-  if (change->brightness > 0) hal_.set_screen_on(true);
+  if (brightness > 0) hal_.set_screen_on(true);
   if (backlight_.fading(hal_.now())) fade_stats_ = {true, hal_.now(), hal_.now(), 0, 0, 0};
   update_backlight();
-  log::info("display %s at %d%% (%s)", room::name(change->state), change->brightness,
-            room::name(change->cause));
-  if (report) send_display_state(change->state, change->brightness, room::name(change->cause));
+  if (brightness != change->brightness) {
+    log::info("display %s at %d%%, %d%% for the room's light (%s)", room::name(change->state),
+              change->brightness, brightness, room::name(change->cause));
+  } else {
+    log::info("display %s at %d%% (%s)", room::name(change->state), brightness, room::name(change->cause));
+  }
+  if (report) send_display_state(change->state, brightness, room::name(change->cause));
+}
+
+int App::shown_brightness(int brightness) const {
+  if (!display_power_.config().auto_brightness) return brightness;
+  return auto_brightness_.scale(brightness, hal_.now());
+}
+
+void App::update_auto_brightness() {
+  const Millis now = hal_.now();
+  if (backlight_.fading(now)) return;  // a change of state goes first
+  const int configured = display_power_.brightness();
+  const int wanted = shown_brightness(configured);
+  const int target = backlight_.target();
+  if (wanted == target) return;
+  // Back to the configured brightness at once (auto brightness turned off,
+  // the sensor gone, a lit room); a darker or lighter room waits for a
+  // change worth seeing.
+  if (wanted != configured && std::abs(wanted - target) < kAutoStep) return;
+  backlight_.glide(wanted, now);
+  log::info("auto brightness: %d%% of %d%% (light %d)", wanted, configured, auto_brightness_.raw());
 }
 
 void App::update_backlight() {

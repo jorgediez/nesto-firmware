@@ -93,8 +93,27 @@ five times in a row, until monit's recovery rebooted the thermostat.
 | `0x0002` | temperature (signed, hundredths of a degree C), humidity (tenths of a percent) |
 | `0x000b` | state: at byte 6 the USB supply's voltage (thousandths of a volt), at 8 the input voltage from the heating's wires (hundredths), at 10 the operating voltage and at 12 the battery's (thousandths) |
 | `0x0005` | the far-field motion sensor (raw PIR), while someone moves in the room ([DEVICE.md](DEVICE.md)) |
-| `0x0007`, `0x000a` | near-field proximity and ambient light, about every second once running |
+| `0x0007` | near-field proximity, about every second once running |
+| `0x000a` | ambient light, about every second: bytes 0–1 the light (higher is brighter), byte 2 going the other way (the sensor's range, by the look of it, unused); the first after start-up, `00 00 64 00`, is no reading |
 | `0x000c`, `0x0022`, `0x0023`, `0x002b`, `0x0038` | among the buffered readings; not decoded yet |
+
+### The light sensor
+
+`dev.sh device-run HOST light-test` measured it on 2026-11-12, switching the
+backlight between off and full every 10 s
+(`device-reports/run-20261112-134841.txt`):
+
+| Room | Light (bytes 0–1) | Byte 2 |
+|---|---|---|
+| lights off | 98–112, in steps of 7 or 14 | 63–64 |
+| a hand over the screen, lights on | 170–240 | 47–54 |
+| lights on | 1950–2250 | 34–37 |
+| a torch at the glass, lights off | 16200–19800 | 20 |
+
+The backlight made no difference in any of them, so the screen doesn't light
+its own sensor. Readings follow the light within a second or two. Nesto scales
+the brightness on a logarithmic scale from 100 (dark) to 1500, a little below
+a lit room ([PROTOCOL.md](../PROTOCOL.md) section 12).
 
 ## What a thermostat showed
 
@@ -141,6 +160,7 @@ With the stock software stopped, as for any run:
 
 ```bash
 scripts/dev.sh device-run <nest-ip> backplate-test   # 3 minutes; every frame, decoded
+scripts/dev.sh device-run <nest-ip> light-test       # 3 minutes; light readings, backlight off/full every 10 s
 ```
 
 Nesto itself talks to the backplate in every run (`--no-backplate` turns

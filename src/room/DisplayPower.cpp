@@ -202,11 +202,27 @@ void BacklightFade::go(int target, Millis now) {
   from_ = level(now);
   to_ = target;
   start_ = now;
+  gliding_ = false;
+}
+
+void BacklightFade::glide(int target, Millis now) {
+  from_ = level(now);
+  to_ = target;
+  start_ = now;
+  gliding_ = true;
 }
 
 int BacklightFade::level(Millis now) const {
-  if (to_ >= from_) return to_;  // up: at once
   const Millis elapsed = now > start_ ? now - start_ : 0;
+  if (gliding_) {
+    if (elapsed >= kGlide) return to_;
+    // Rounded towards where it started, so it reaches the target only at
+    // the end.
+    const auto span = static_cast<long long>(to_ - from_) * static_cast<long long>(kGlide - elapsed);
+    const auto k = static_cast<long long>(kGlide);
+    return to_ - static_cast<int>(span >= 0 ? (span + k - 1) / k : -((-span + k - 1) / k));
+  }
+  if (to_ >= from_) return to_;  // up: at once
   if (elapsed >= kDuration) return to_;
   // The square of the time left, rounded up, so it reaches the target only
   // at the end.

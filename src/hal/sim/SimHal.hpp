@@ -56,6 +56,7 @@ class SimHal : public Hal {
 
   InputScript script_;
   std::size_t next_step_ = 0;
+  int light_step_ = 1;  // the L key: starts as a lit room
   bool screenshot_taken_ = false;
 
   std::vector<std::uint32_t> raw_;    // the last frame as LVGL drew it

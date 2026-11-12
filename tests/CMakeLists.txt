@@ -18,6 +18,7 @@ add_executable(nesto_tests
   test_room.cpp
   test_settings.cpp
   test_standby_clock.cpp
+  test_auto_brightness.cpp
 )
 target_link_libraries(nesto_tests PRIVATE nesto_core nesto_protocol nesto_net nesto_room nesto_fonts nesto_probe_checks
                                           doctest::doctest)

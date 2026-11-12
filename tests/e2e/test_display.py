@@ -148,3 +148,37 @@ def test_the_settings_and_offset_survive_a_restart(tmp_path: Path) -> None:
         panel.wait_for_log(r"standby clock shown", timeout=5)
     finally:
         panel.stop()
+
+
+def light(raw: int, seconds: int) -> str:
+    """The light sensor reading `raw` once a second for `seconds`, as the
+    thermostat's base sends it."""
+    return " ".join(f"l{raw} w1000" for _ in range(seconds))
+
+
+def test_a_dark_room_dims_the_controls_and_the_clock(tmp_path: Path) -> None:
+    # Readings start a little after Home Assistant connects; the timeout
+    # comes after them.
+    config = {"display": {"timeout_s": 6}}
+    room, lines = serve(tmp_path, light(100, 9), seconds=12, config=config)
+    assert any("auto brightness: 20% of 80% (light 100)" in line for line in lines)
+    # Standby is 20%, so a quarter would be less than the 5% minimum.
+    assert ("standby", 5, "timeout") in changes(room)
+    assert any(
+        "display standby at 20%, 5% for the room's light (timeout)" in line for line in lines
+    )
+
+
+def test_switching_the_lights_on_brightens_it_again(tmp_path: Path) -> None:
+    config = {"display": {"timeout_s": 0}}
+    _, lines = serve(tmp_path, f"{light(100, 3)} {light(2000, 7)}", seconds=13, config=config)
+    glides = [line for line in lines if "auto brightness:" in line]
+    assert "auto brightness: 20% of 80%" in glides[0]
+    assert "auto brightness: 80% of 80%" in glides[-1]
+
+
+def test_without_auto_brightness_the_light_changes_nothing(tmp_path: Path) -> None:
+    config = {"display": {"timeout_s": 2, "auto_brightness": False}}
+    room, lines = serve(tmp_path, light(100, 6), seconds=9, config=config)
+    assert ("standby", 20, "timeout") in changes(room)
+    assert not any("auto brightness:" in line or "room's light" in line for line in lines)

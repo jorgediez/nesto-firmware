@@ -11,6 +11,7 @@
 #include "hal/Hal.hpp"
 #include "lvgl.h"
 #include "protocol/PanelSession.hpp"
+#include "room/AutoBrightness.hpp"
 #include "room/Controller.hpp"
 #include "room/DisplayPower.hpp"
 #include "room/StandbyClock.hpp"
@@ -59,6 +60,10 @@ class App : private protocol::SessionEvents {
   void apply_display(bool report = true);
   /// Moves the backlight along its fade, and darkens the screen once it's dark.
   void update_backlight();
+  /// `brightness` as shown: scaled by the room's light with auto_brightness.
+  int shown_brightness(int brightness) const;
+  /// Glides the backlight to follow the room's light, between changes of state.
+  void update_auto_brightness();
   /// Shows the standby clock once standby is lit and the fade is over, moves
   /// it on, and hides it otherwise.
   void update_clock();
@@ -101,6 +106,7 @@ class App : private protocol::SessionEvents {
   room::Controller controller_;
   room::DisplayPower display_power_{0};
   room::BacklightFade backlight_;
+  room::AutoBrightness auto_brightness_;
   int backlight_level_ = -1;  // what the hardware was last set to
   // How the last fade went, logged at its end: steps written, the longest
   // gap between them and the longest write.

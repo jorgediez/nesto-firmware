@@ -37,7 +37,15 @@ scripts/dev.sh sim     # open the simulator
 
 In the simulator, the mouse wheel or arrow keys turn the ring, and the left
 mouse button, Space or Enter press the display. M stands for someone coming
-near, as the thermostat's proximity sensor would. Escape quits.
+near, as the thermostat's proximity sensor would. L sets the room's light
+in turn to dark, lit and bright, as the thermostat's light sensor would; until
+it's pressed there's no sensor. Escape quits.
+
+With Home Assistant's `auto_brightness` (on unless it's turned off), the
+light sensor scales the brightness: the configured one in a lit room, down to
+a quarter of it in the dark (5% at least), the standby clock too. It dims over
+about 10 s, so a hand or a shadow doesn't dim it, and comes back up within a
+few seconds.
 
 After 30 seconds without input (or what Home Assistant sets) the display
 fades to standby, a clock at 20% (analog or digital, as Home Assistant
@@ -147,6 +155,7 @@ scripts/dev.sh device-check <nest-ip>             # the report goes to device-re
 scripts/dev.sh device-screen <nest-ip> trial      # stop the stock software for 5 minutes, watch, restart it
 scripts/dev.sh device-run <nest-ip> input-test    # print what the ring and the press send
 scripts/dev.sh device-run <nest-ip> backplate-test  # talk to the backplate, printing every frame
+scripts/dev.sh device-run <nest-ip> light-test      # light sensor readings, backlight off and on
 scripts/dev.sh device-run <nest-ip>               # run Nesto for 10 minutes, then restart the stock software
 scripts/dev.sh client --host <nest-ip> pair       # meanwhile, pair with it (then: demo)
 scripts/dev.sh device-run <nest-ip> detach        # run Nesto for an hour, apart from SSH, watching the battery

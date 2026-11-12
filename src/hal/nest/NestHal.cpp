@@ -41,7 +41,7 @@ const char* type_name(std::uint16_t type) {
     case backplate::kPirRaw: return "PIR, raw";
     case 0x0007: return "proximity";
     case 0x0009: return "wire presence (more)";
-    case 0x000a: return "ambient light";
+    case backplate::kLight: return "ambient light";
     case backplate::kState: return "state";
     case 0x000c: return "sensor ADC";
     case 0x0010: return "TFE id";
@@ -230,7 +230,12 @@ void NestHal::service_backplate(bool verbose, std::vector<TimedInput>* inputs) {
       std::printf("\n");
     }
     backplate_.receive(t, frame);
-    if (frame.type == backplate::kProximity) {
+    if (frame.type == backplate::kLight) {
+      if (const auto light = backplate::decode_light(frame.payload)) {
+        light_ = light;
+        if (inputs) inputs->push_back({t, Light{light->value}});
+      }
+    } else if (frame.type == backplate::kProximity) {
       const auto near = backplate::decode_proximity(frame.payload);
       if (near) {
         ++near_readings_;
@@ -549,6 +554,60 @@ int NestHal::backplate_test() {
   }
   std::printf("stopped: handshakes %d, restarts %d, bad frames %zu\n", backplate_.handshakes(),
               backplate_.restarts(), backplate_reader_.bad_frames());
+  return backplate_.handshakes() > 0 ? 0 : 1;
+}
+
+int NestHal::light_test() {
+  catch_quit_signals();
+  if (!open_backplate()) return 1;
+  open_backlight();
+  std::printf(
+      "Light readings, about one a second; the backlight switches between 0%% and 100%%\n"
+      "every 10 s, to see whether it reaches the sensor. Try the room's lights on and off,\n"
+      "and a torch near the screen. Ctrl-C stops.\n");
+  std::fflush(stdout);
+  constexpr Millis kPhase = 10000;
+  const Millis start = now();
+  int level = 0;
+  int phase = -1;
+  long sum_value = 0, sum_extra = 0;
+  int count = 0, low = 0, high = 0;
+  auto summary = [&] {
+    if (count == 0) return;
+    std::printf("== backlight %3d%%: %d readings, value mean %ld (%d to %d), extra mean %ld\n", level, count,
+                sum_value / count, low, high, sum_extra / count);
+    std::fflush(stdout);
+  };
+  while (g_quit_signal == 0) {
+    const int now_phase = static_cast<int>((now() - start) / kPhase);
+    if (now_phase != phase) {
+      summary();
+      phase = now_phase;
+      level = phase % 2 == 0 ? 0 : 100;
+      set_backlight(level);
+      sum_value = sum_extra = 0;
+      count = 0;
+    }
+    fd_set readable;
+    FD_ZERO(&readable);
+    FD_SET(backplate_fd_, &readable);
+    timeval tv{0, 50000};
+    select(backplate_fd_ + 1, &readable, nullptr, nullptr, &tv);
+    light_.reset();
+    service_backplate(false);
+    if (light_) {
+      // The first reading after a switch may be from before it.
+      std::printf("%7.1f s  backlight %3d%%  value %5d  extra %3d\n", static_cast<double>(now() - start) / 1000.0, level,
+                  light_->value, light_->extra);
+      std::fflush(stdout);
+      if (count == 0 || light_->value < low) low = light_->value;
+      if (count == 0 || light_->value > high) high = light_->value;
+      sum_value += light_->value;
+      sum_extra += light_->extra;
+      ++count;
+    }
+  }
+  summary();
   return backplate_.handshakes() > 0 ? 0 : 1;
 }
 

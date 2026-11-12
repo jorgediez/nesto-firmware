@@ -520,6 +520,7 @@ flash so it can sleep, wake and show the clock before HA connects.
 | Field | Meaning |
 |---|---|
 | `display.brightness` | Active brightness, 0–100. With `auto_brightness`, this is the brightness in a bright room, scaled down using the light sensor. |
+| `display.auto_brightness` | Scale `display.brightness` and `standby.brightness` by the room's light. The Nest Gen 2 goes down to a quarter of them in the dark, but not below 5%. Without a light sensor, nothing changes. `display_state` reports the scaled brightness when the state changes, but not each adjustment to the light. |
 | `display.timeout_s` | Seconds without input before leaving the active state (section 13). 0 means never. |
 | `display.wake_on_motion` | Motion wakes the panel from standby. Ignored without sensors. |
 | `display.wake_on_input_when_off` | The ring or a press wakes the panel from **off**. If false, only HA can turn it back on. |

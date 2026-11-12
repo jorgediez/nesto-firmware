@@ -58,6 +58,12 @@ class NestHal : public Hal {
   /// screen, ring and press alone. Returns the exit code.
   int backplate_test();
 
+  /// For measuring the light sensor: talks to the backplate and prints each
+  /// light reading with the backlight's level, switching the backlight
+  /// between off and full every 10 s, and a summary of each 10 s. Leaves the
+  /// screen, ring and press alone. Returns the exit code.
+  int light_test();
+
  private:
   bool open_inputs();
   bool open_framebuffer();
@@ -106,6 +112,7 @@ class NestHal : public Hal {
   int reported_restarts_ = 0;
   Millis reported_readings_ = 0;
   // The motion sensors since the last report, to learn what they do.
+  std::optional<backplate::LightRaw> light_;  // the last light reading
   int near_readings_ = 0;   // proximity frames
   int near_highest_ = 0;
   int near_count_ = 0;      // at or above the threshold
