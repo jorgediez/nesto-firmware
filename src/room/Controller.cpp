@@ -234,6 +234,15 @@ void Controller::set_notifications(int count, int unread) {
   changed();
 }
 
+void Controller::go_home() {
+  click_ticks_ = 0;
+  selected_ = 0;
+  // Settings and its questions close too; without a room there's only the
+  // waiting screen.
+  screen_ = room_.has_layout() ? RoomView::Screen::Home : RoomView::Screen::Empty;
+  changed();
+}
+
 bool Controller::apply_layout(const Json& message, std::string& error) {
   if (!room_.apply_layout(message, error)) return false;
   click_ticks_ = 0;

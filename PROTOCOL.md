@@ -574,7 +574,9 @@ Until a panel has a standby screen to show, its `standby` is dark: brightness
 16) reports `standby` at `standby.brightness` with cause `"ha"` once the
 first `time` message arrives. Motion is the base's proximity sensor, on the
 thermostat; a press wakes the panel once it's recognised as a single press or
-a hold, so a double press can stay a trigger for HA.
+a hold, so a double press can stay a trigger for HA. Woken from `standby` or
+`off`, the panel shows the top of its home screen, which is the Notifications
+entry while there are any (section 14), whatever screen it rested on.
 
 ## 14. Notifications
 

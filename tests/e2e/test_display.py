@@ -182,3 +182,10 @@ def test_without_auto_brightness_the_light_changes_nothing(tmp_path: Path) -> No
     room, lines = serve(tmp_path, light(100, 6), seconds=9, config=config)
     assert ("standby", 20, "timeout") in changes(room)
     assert not any("auto brightness:" in line or "room's light" in line for line in lines)
+
+
+def test_waking_goes_back_to_the_top_of_the_home_screen(tmp_path: Path) -> None:
+    # On the third item when the display rests; woken, a long press acts on
+    # the first.
+    room, _ = serve(tmp_path, "r+2 w3500 p w300 h w500", seconds=11, config=QUICK)
+    assert [(i["key"], i["action"]) for i in room.intents] == [("l1", "turn_off")]

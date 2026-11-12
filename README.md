@@ -71,7 +71,8 @@ After 30 seconds without input (or what Home Assistant sets) the display
 fades to standby, a clock at 20% (analog or digital, as Home Assistant
 sets), once the panel knows the time; until then, dark. The ring, a press or
 someone near wakes it, and the input that wakes it does nothing else
-([PROTOCOL.md](PROTOCOL.md) section 13). Home Assistant's `wake_on_motion`
+([PROTOCOL.md](PROTOCOL.md) section 13). It wakes to the top of the home
+screen: the Notifications entry while there are any, else the first item. Home Assistant's `wake_on_motion`
 setting turns waking on someone near off; `client demo --no-motion` tries it.
 
 The simulator listens for Home Assistant on port 6170 and announces itself over

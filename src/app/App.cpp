@@ -548,6 +548,14 @@ PressContext App::press_context() const {
 void App::apply_display(bool report) {
   const auto change = display_power_.take_change();
   if (!change) return;
+  // Woken from rest: the top of the home screen, drawn before the backlight
+  // rises.
+  const bool active = change->state == room::DisplayState::Active;
+  if (active && !display_active_) {
+    controller_.go_home();
+    render();
+  }
+  display_active_ = active;
   // Lit: the screen first, then the backlight, at once. Dark: the backlight
   // fades, and update_backlight() darkens the screen at the end, as a dark
   // standby is as good as off for the screen itself.

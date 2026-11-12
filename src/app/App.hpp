@@ -120,6 +120,7 @@ class App : private protocol::SessionEvents {
   unsigned rendered_notices_ = 0;  // notifications_.version() last drawn
   bool notices_drawn_ = false;     // whether the screen shows a notification screen
   room::DisplayPower display_power_{0};
+  bool display_active_ = true;  // as last applied: it starts active
   room::BacklightFade backlight_;
   room::AutoBrightness auto_brightness_;
   room::Sensors sensors_;

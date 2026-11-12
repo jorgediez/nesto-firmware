@@ -140,6 +140,9 @@ class Controller {
   /// How many notifications are kept, and how many unread: with any, the
   /// home screen starts with a Notifications entry.
   void set_notifications(int count, int unread);
+  /// The display woke from rest: back to the top of the home screen, so the
+  /// Notifications entry, when there is one, is what shows first.
+  void go_home();
   bool apply_layout(const Json& message, std::string& error);
   void apply_states(const Json& message);
   /// Home Assistant couldn't carry out an intent: show its state again.
