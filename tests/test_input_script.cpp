@@ -37,11 +37,12 @@ TEST_CASE("steps run one after another with their own durations") {
 
 TEST_CASE("m: someone comes near") {
   std::string error;
-  auto script = parse_input_script("m w100 m", error);
+  auto script = parse_input_script("m w100 m f", error);
   REQUIRE(script);
-  REQUIRE(script->events.size() == 2);
-  CHECK(std::holds_alternative<nesto::Presence>(script->events[0].event));
+  REQUIRE(script->events.size() == 3);
+  CHECK_FALSE(std::get<nesto::Presence>(script->events[0].event).far);
   CHECK(script->events[1].offset == 150);
+  CHECK(std::get<nesto::Presence>(script->events[2].event).far);  // f: moving in the room
 }
 
 TEST_CASE("lN: a light sensor reading") {

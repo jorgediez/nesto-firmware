@@ -47,6 +47,8 @@ class NestHal : public Hal {
   void set_backlight(int percent) override;
   void set_screen_on(bool on) override;
   bool set_wall_clock(std::int64_t utc_ms) override;
+  bool has_base() const override { return options_.backplate; }
+  BaseReadings base() const override;
 
   /// Prints the ring's and the press's raw events, and the ticks the ring's
   /// make, until interrupted: for measuring the ring. Leaves the screen and

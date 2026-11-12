@@ -143,11 +143,16 @@ bool App::init() {
   }
   info_.firmware = NESTO_VERSION;
   info_.model = "nest-gen2";
-  // The base's sensors and firmware updates come later; until then the panel
-  // reports none (PROTOCOL.md section 5).
+  // The base's sensors, with one; firmware updates come later (PROTOCOL.md
+  // section 5).
+  protocol::Json sensors = protocol::Json::array();
+  if (hal_.has_base()) {
+    sensors = {"temperature",  "humidity",       "illuminance", "motion_near",
+               "motion_far",   "supply_voltage", "usb_voltage", "battery_voltage"};
+  }
   info_.caps = {{"display", {{"width", kScreenSize}, {"height", kScreenSize}, {"shape", "round"}}},
                 {"input", {"ring", "press"}},
-                {"sensors", protocol::Json::array()},
+                {"sensors", sensors},
                 {"beeper", false},
                 {"image_formats", protocol::Json::array()},
                 {"ota", false}};
@@ -195,6 +200,7 @@ int App::run() {
     update_auto_brightness();
     update_backlight();
     update_clock();
+    send_sensors();
     if (hal_.now() - status_checked_ >= kStatusInterval) update_status();
 
     controller_.tick(hal_.now());
@@ -233,6 +239,7 @@ void App::handle(const TimedInput& input) {
           handle(event.down ? gestures_.on_down(input.at, press_context()) : gestures_.on_up(input.at));
         } else if constexpr (std::is_same_v<T, Presence>) {
           const bool resting = display_power_.state() != room::DisplayState::Active;
+          sensors_.presence(event.far, input.at);
           display_power_.motion(input.at);
           if (resting && display_power_.state() == room::DisplayState::Active) {
             log::info("display woken by the %s sensor", event.far ? "far-field motion" : "proximity");
@@ -249,8 +256,9 @@ void App::handle(const TimedInput& input) {
 
 void App::handle(const std::vector<GestureEvent>& gestures) {
   for (const GestureEvent& g : gestures) {
-    // Reported to Home Assistant as an `input` event once the connection exists.
     log::info("gesture %s (%s)", name(g.gesture), name(g.context));
+    // For automations (PROTOCOL.md section 17), whatever it does here.
+    send_event({{"t", "input"}, {"gesture", name(g.gesture)}, {"context", name(g.context)}});
     if (g.context != PressContext::Ui) {
       // Pressed while resting: it only wakes the display, and a double press
       // not even that.
@@ -359,6 +367,20 @@ void App::on_ready(protocol::PanelSession& /*session*/) {
   // change from the synchronisation's config is part of it.
   apply_display(false);
   send_display_state(display_power_.state(), backlight_.target(), "sync");
+  sensors_.start();  // the readings, at once
+  send_sensors();
+}
+
+void App::send_event(const protocol::Json& event) {
+  protocol::PanelSession* session = server_ ? server_->active() : nullptr;
+  if (session && session->ready()) session->send(event);
+}
+
+void App::send_sensors() {
+  if (!hal_.has_base()) return;
+  protocol::PanelSession* session = server_ ? server_->active() : nullptr;
+  if (!session || !session->ready() || !sensors_.due(hal_.now())) return;
+  session->send(sensors_.message(hal_.base(), hal_.now()));
 }
 
 void App::on_unpaired() {
@@ -374,8 +396,9 @@ bool App::on_message(protocol::PanelSession& session, const protocol::Message& m
     result["wifi_rssi"] = nullptr;
     result["ip"] = net::primary_ipv4();
     result["fw"] = NESTO_VERSION;
-    result["base_connected"] = false;
-    result["base_fw"] = nullptr;
+    const BaseReadings base = hal_.base();
+    result["base_connected"] = base.connected;
+    result["base_fw"] = base.firmware.empty() ? protocol::Json(nullptr) : protocol::Json(base.firmware);
     session.send(result);
     return true;
   }

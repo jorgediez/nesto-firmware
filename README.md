@@ -37,9 +37,18 @@ scripts/dev.sh sim     # open the simulator
 
 In the simulator, the mouse wheel or arrow keys turn the ring, and the left
 mouse button, Space or Enter press the display. M stands for someone coming
-near, as the thermostat's proximity sensor would. L sets the room's light
-in turn to dark, lit and bright, as the thermostat's light sensor would; until
-it's pressed there's no sensor. Escape quits.
+near, as the thermostat's proximity sensor would, and F for someone moving
+in the room, as its motion sensor would. L sets the room's light in turn to
+dark, lit and bright, as the thermostat's light sensor would; until it's
+pressed there's no sensor. Escape quits.
+
+`scripts/dev.sh sim --fake-base` gives the simulator a base, as the thermostat has: fixed
+temperature, humidity and voltages, the light from L, and motion from M and F.
+The panel then sends Home Assistant its `sensors` messages, as it does on the
+thermostat ([PROTOCOL.md](PROTOCOL.md) section 17). It always sends each
+press gesture as an `input` event, including the double press in standby or
+off, which doesn't wake the display and is there for automations.
+`client demo` prints both.
 
 With Home Assistant's `auto_brightness` (on unless it's turned off), the
 light sensor scales the brightness: the configured one in a lit room, down to

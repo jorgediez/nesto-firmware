@@ -157,7 +157,8 @@ The direction of each message is marked **H→P** (HA to panel) or **P→H**
      "caps": {
        "display": {"width": 320, "height": 320, "shape": "round"},
        "input": ["ring", "press"],
-       "sensors": ["temperature", "humidity", "illuminance", "motion_near", "motion_far", "supply_voltage"],
+       "sensors": ["temperature", "humidity", "illuminance", "motion_near", "motion_far",
+                   "supply_voltage", "usb_voltage", "battery_voltage"],
        "beeper": true,
        "image_formats": ["jpeg", "png"],
        "ota": false
@@ -171,7 +172,7 @@ The direction of each message is marked **H→P** (HA to panel) or **P→H**
    | `paired` | The panel holds a pairing key. |
    | `pairing_open` | The panel will accept `pair_begin` (section 6.1). |
    | `nonce` | 16 random bytes, base64, fresh for every connection. |
-   | `caps` | What this panel can do. `sensors` lists only sensors that are actually working, so a panel off its base reports none. |
+   | `caps` | What this panel can do. `sensors` lists only sensors that are actually working, so a panel off its base reports none. The Nest Gen 2 lists the base's sensors whenever it talks to its base, even before the base has answered; until it does, `sensors` messages leave those readings out (section 17). |
    | `insecure` | Present and true only on development builds (section 7.4). |
 
 3. HA checks `proto` (section 22). Then:
@@ -694,19 +695,31 @@ keeps going while HA is offline. That needs no protocol change.
   "illuminance_raw": 312,
   "motion_near": false,
   "motion_far": true,
-  "supply_v": 12.1,
-  "battery_v": 3.95
+  "supply_v": 0.0,
+  "usb_v": 4.94,
+  "battery_v": 3.91
 }
 ```
 
-- Sent every 30 seconds, and immediately whenever `motion_near` or
-  `motion_far` changes.
+- Sent once right after synchronisation, then every 30 seconds, and
+  immediately whenever `motion_near` or `motion_far` changes.
+- `motion_near` is the proximity sensor: on at once when something is within
+  about a hand's width of the glass, off 5 s after the last close reading.
+  `motion_far` is the room's motion sensor: on at once when someone moves, off
+  30 s after the last movement, since that sensor sends nothing while the
+  room is still. HA can add its own delay on top.
+- The base measures its two supplies separately, and both are reported:
+  `supply_v` is the voltage from the heating's wires, and `usb_v` is from a
+  USB supply, as on a desk stand. Either can be 0 while the other powers the
+  panel. `battery_v` is the head unit's battery, as the base measures it.
+- Rounding: temperature to 0.01 °C, humidity to 0.1%, voltages to 0.01 V.
 - A field is left out when its sensor isn't available, for instance with no
   base attached.
 - `temperature_c` is the raw reading. The head unit warms itself and raises
   the reading; HA applies an offset the user can calibrate.
-- `illuminance_raw` is the light sensor's raw value. Mapping it to lux needs
-  measurement on real hardware.
+- `illuminance_raw` is the light sensor's raw value, higher brighter. On a Nest
+  Gen 2 it read about 100 in a dark room, 2000 in a lit one and 19000 with a
+  torch at the glass (docs/BACKPLATE.md); mapping it to lux needs a lux meter.
 
 **P→H `input`** (event) reports a press gesture:
 

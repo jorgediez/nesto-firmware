@@ -14,6 +14,7 @@
 #include "room/AutoBrightness.hpp"
 #include "room/Controller.hpp"
 #include "room/DisplayPower.hpp"
+#include "room/Sensors.hpp"
 #include "room/StandbyClock.hpp"
 
 namespace nesto {
@@ -72,6 +73,10 @@ class App : private protocol::SessionEvents {
   void load_time();
   void store_time() const;
   void send_display_state(room::DisplayState state, int brightness, const char* cause);
+  /// Sends an event to Home Assistant, if it's connected and synchronised.
+  void send_event(const protocol::Json& event);
+  /// Sends the base's readings when they're due (PROTOCOL.md section 17).
+  void send_sensors();
   void load_display_config();
   void store_display_config() const;
   void update_status();
@@ -107,6 +112,7 @@ class App : private protocol::SessionEvents {
   room::DisplayPower display_power_{0};
   room::BacklightFade backlight_;
   room::AutoBrightness auto_brightness_;
+  room::Sensors sensors_;
   int backlight_level_ = -1;  // what the hardware was last set to
   // How the last fade went, logged at its end: steps written, the longest
   // gap between them and the longest write.
