@@ -208,12 +208,28 @@ TEST_CASE("only a critical one interrupts one opened from the list") {
   f.n.add(make("alarm", Priority::Critical), true, 200);
   CHECK(f.n.view().item_name == "Title alarm");
   CHECK(f.take() == Events{"a shown", "alarm shown"});
-  // Answered: back to the list, not to the room.
+  // Answered: back to the one being read.
   f.n.press();
-  CHECK(f.n.view().screen == Screen::Notifications);
+  CHECK(f.n.view().screen == Screen::Notice);
+  CHECK(f.n.view().item_name == "Title a");
   CHECK(f.take() == Events{"alarm dismissed"});
   f.n.long_press();
+  CHECK(f.n.view().screen == Screen::Notifications);
+  f.n.long_press();
   CHECK_FALSE(f.n.active());
+
+  // If the one being read is cleared meanwhile, back to the list.
+  f.n.open_list();
+  f.n.press();  // b, the newest
+  REQUIRE(f.n.view().item_name == "Title b");
+  f.n.add(make("alarm2", Priority::Critical), true, 250);
+  REQUIRE(f.n.view().item_name == "Title alarm2");
+  f.n.clear("b");
+  f.n.press();
+  CHECK(f.n.view().screen == Screen::Notifications);
+  f.n.long_press();
+  CHECK_FALSE(f.n.active());
+  f.take();
 
   // A pop-up over the list goes back to it too.
   f.n.open_list();

@@ -149,8 +149,9 @@ void Notifications::pop_up(const std::string& nid, Millis now) {
     // Pushed aside without an answer: a timed one has had its time.
     if (Kept* old = current(); old && !untimed(old->n)) event(old->n.nid, "expired");
   }
-  // Over the list, or one opened from it: back to the list afterwards.
+  // Over the list, or one opened from it: back there afterwards.
   if (mode_ == Mode::List || mode_ == Mode::Open) back_to_list_ = true;
+  if (mode_ == Mode::Open && current_ != nid) back_to_open_ = current_;
   mode_ = Mode::Popup;
   current_ = nid;
   shown_at_ = now;
@@ -181,11 +182,19 @@ void Notifications::after_popup(Millis now) {
       return;
     }
   }
-  if (back_to_list_ && !kept_.empty()) {
+  if (!back_to_open_.empty() && find(back_to_open_)) {
+    // Back to the one being read, from its start.
+    mode_ = Mode::Open;
+    current_ = back_to_open_;
+    choice_ = 0;
+    scroll_ = 0;
+    scroll_limit_ = 0;
+  } else if (back_to_list_ && !kept_.empty()) {
     mode_ = Mode::List;
     selected_ = std::clamp(selected_, 0, count() - 1);
   }
   back_to_list_ = false;
+  back_to_open_.clear();
 }
 
 void Notifications::remove(const std::string& nid) {
@@ -333,6 +342,7 @@ void Notifications::display_rested() {
   }
   if (mode_ != Mode::None) close_current();
   back_to_list_ = false;
+  back_to_open_.clear();
 }
 
 void Notifications::display_woke(Millis now) {
