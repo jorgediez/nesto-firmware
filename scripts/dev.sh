@@ -143,7 +143,12 @@ case "${1:-}" in
       key="/build/client-${panel//[^A-Za-z0-9.-]/_}.key"
       shift 2
     fi
-    EXTRA_ARGS=(--add-host=host.docker.internal:host-gateway)
+    # The container's time zone is UTC: give it this computer's UTC offset, as
+    # a POSIX TZ (whose sign is the other way round), so the time sent to the
+    # panel is local. Daylight saving changes need a new run.
+    z=$(date +%z)
+    tz="<$z>$([ "${z:0:1}" = + ] && echo - || echo +)${z:1:2}:${z:3:2}"
+    EXTRA_ARGS=(--add-host=host.docker.internal:host-gateway -e "TZ=$tz")
     run python3 /src/tools/nesto_client.py "$panel" --key-file "$key" "$@"
     ;;
   screens)

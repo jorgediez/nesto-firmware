@@ -1,14 +1,17 @@
-"""End-to-end: display power (PROTOCOL.md sections 12 and 13).
+"""End-to-end: display power and the standby clock (PROTOCOL.md sections 12,
+13 and 16).
 
-The panel rests after the timeout Home Assistant sets, wakes on input or
-motion without passing the waking input on, answers the `display` request,
-reports every change, and keeps its settings across a restart.
+The panel rests after the timeout Home Assistant sets, on the clock once it
+knows the time, wakes on input or motion without passing the waking input on,
+answers the `display` request, reports every change, and keeps its settings
+and UTC offset across a restart.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -51,13 +54,15 @@ def changes(room: DemoRoom) -> list[tuple]:
 def test_the_timeout_rests_the_display_and_the_waking_press_only_wakes_it(tmp_path: Path) -> None:
     # Two long presses after the timeout: the first only wakes the display; the
     # second, on the home screen, switches the first light off.
-    room, _ = serve(tmp_path, "w3500 h w300 h w500", seconds=11, config=QUICK)
+    room, lines = serve(tmp_path, "w3500 h w300 h w500", seconds=11, config=QUICK)
     assert changes(room)[:3] == [
         ("active", 80, "sync"),
-        ("standby", 0, "timeout"),  # dark until there's a clock to show
+        ("standby", 20, "timeout"),  # the time is known: the clock shows
         ("active", 80, "input"),
     ]
     assert [(i["key"], i["action"]) for i in room.intents] == [("l1", "turn_off")]
+    assert any("standby clock shown, analog" in line for line in lines)
+    assert any("time from Home Assistant" in line for line in lines)
 
 
 def test_motion_wakes_it(tmp_path: Path) -> None:
@@ -99,15 +104,47 @@ def test_standby_off_and_home_assistant_s_display_request(tmp_path: Path) -> Non
         panel.stop()
 
 
-def test_the_settings_survive_a_restart(tmp_path: Path) -> None:
+def test_the_digital_clock(tmp_path: Path) -> None:
+    config = {
+        "display": {"timeout_s": 2},
+        "standby": {"brightness": 35, "clock": {"style": "digital", "seconds": True}},
+        "locale": {"hour12": True},
+    }
+    room, lines = serve(tmp_path, "w4000", seconds=7, config=config)
+    assert ("standby", 35, "timeout") in changes(room)
+    assert any(
+        re.search(r"standby clock shown, digital: \d{1,2}:\d\d:\d\d [AP]M", line) for line in lines
+    )
+
+
+def test_without_the_time_standby_is_dark(tmp_path: Path) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "display.json").write_text(json.dumps(QUICK))
+    panel = Panel(state, ["--no-mdns"])
+    panel.start()
+    try:
+        panel.wait_for_log(r"no stored UTC offset", timeout=5)
+        panel.wait_for_log(r"display standby at 0% \(timeout\)", timeout=10)
+        assert not any("standby clock shown" in line for line in panel.lines)
+    finally:
+        panel.stop()
+
+
+def test_the_settings_and_offset_survive_a_restart(tmp_path: Path) -> None:
     serve(tmp_path, "w100", seconds=6, config=QUICK)
     stored = json.loads((tmp_path / "state" / "display.json").read_text())
     assert stored["display"]["timeout_s"] == 2
+    offset = json.loads((tmp_path / "state" / "time.json").read_text())
+    assert isinstance(offset["utc_offset_min"], int)
 
-    # Without Home Assistant, the restarted panel rests on the stored timeout.
+    # Without Home Assistant, the restarted panel rests on the stored timeout,
+    # on the clock: the system clock and the stored offset give the time.
     panel = Panel(tmp_path / "state", ["--no-mdns"])
     panel.start()
     try:
-        panel.wait_for_log(r"display standby at 0% \(timeout\)", timeout=10)
+        panel.wait_for_log(r"time from the system clock", timeout=5)
+        panel.wait_for_log(r"display standby at 20% \(timeout\)", timeout=10)
+        panel.wait_for_log(r"standby clock shown", timeout=5)
     finally:
         panel.stop()

@@ -393,7 +393,14 @@ async def _demo(args: argparse.Namespace) -> None:
     room.log = True
     # Sent every time, as Home Assistant does, so a setting tried once doesn't
     # stay on the panel.
-    room.config = {"display": {"timeout_s": args.timeout, "wake_on_motion": not args.no_motion}}
+    room.config = {
+        "display": {"timeout_s": args.timeout, "wake_on_motion": not args.no_motion},
+        "standby": {
+            "brightness": args.standby_brightness,
+            "clock": {"style": args.clock, "seconds": args.seconds},
+        },
+        "locale": {"hour12": args.hour12},
+    }
     print(f"Serving the demo room '{DEMO_TITLE}' to panel {client.hello['panel_id']}")
     try:
         await room.serve(client)
@@ -421,6 +428,20 @@ def main() -> None:
         "--no-motion",
         action="store_true",
         help="don't wake the display when someone comes near",
+    )
+    demo.add_argument(
+        "--clock",
+        choices=["analog", "digital"],
+        default="analog",
+        help="the standby clock's style (default: analog)",
+    )
+    demo.add_argument("--seconds", action="store_true", help="show seconds on the standby clock")
+    demo.add_argument("--hour12", action="store_true", help="a 12-hour standby clock")
+    demo.add_argument(
+        "--standby-brightness",
+        type=int,
+        default=20,
+        help="the backlight in standby, 0 to 100 (default: 20)",
     )
     args = parser.parse_args()
     run = {"pair": _pair, "connect": _connect, "demo": _demo}[args.command]

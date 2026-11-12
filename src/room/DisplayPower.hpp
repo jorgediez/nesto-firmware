@@ -5,6 +5,7 @@
 
 #include "core/Input.hpp"
 #include "protocol/Message.hpp"
+#include "room/StandbyClock.hpp"
 
 namespace nesto::room {
 
@@ -27,11 +28,15 @@ struct DisplayConfig {
   bool wake_on_input_when_off = true;
   StandbyMode standby_mode = StandbyMode::Clock;
   int standby_brightness = 20;
+  ClockStyle clock_style = ClockStyle::Analog;
+  bool clock_seconds = false;
+  bool clock_date = true;
+  bool hour12 = false;  // locale.hour12
 
   /// From a whole `config` message; anything missing or out of range takes
   /// the default. Unknown fields are ignored.
   static DisplayConfig from_config(const protocol::Json& config);
-  /// The display and standby parts of a `config` message, to store.
+  /// The display, standby and clock parts of a `config` message, to store.
   protocol::Json to_config() const;
 
   bool operator==(const DisplayConfig& other) const;
@@ -46,9 +51,10 @@ std::optional<DisplayState> parse_display_state(const std::string& text);
 /// - Active shows the controls at `brightness`. After `timeout_s` without
 ///   input (or motion, with wake_on_motion) it goes to standby, or to off if
 ///   the standby mode is "off".
-/// - Standby shows the clock or carousel at `standby_brightness`; until
-///   there's a standby screen, it's dark (brightness 0). Input, or motion
-///   with wake_on_motion, makes it active.
+/// - Standby shows the clock (the carousel too, until there are images) at
+///   `standby_brightness`; while there's nothing to show, as before the time
+///   is known, it's dark (brightness 0). Input, or motion with
+///   wake_on_motion, makes it active.
 /// - Off has the backlight off. Input makes it active only with
 ///   wake_on_input_when_off; motion doesn't.
 ///
@@ -63,12 +69,16 @@ class DisplayPower {
     DisplayCause cause;
   };
 
-  /// Starts active. `has_standby_screen`: false until there is a clock to
+  /// Starts active. `has_standby_screen`: false while there is no clock to
   /// show, and standby is then dark.
   DisplayPower(Millis now, bool has_standby_screen = false);
 
   void configure(const DisplayConfig& config, Millis now);
   const DisplayConfig& config() const { return config_; }
+
+  /// The clock can be shown, or no longer: standby's brightness follows, as
+  /// a change caused by Home Assistant, whose time message makes it known.
+  void set_has_standby_screen(bool has);
 
   /// The ring turned or the display was pressed. Returns true if the display
   /// was active, so the input is meant for the controls.

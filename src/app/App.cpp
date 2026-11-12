@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <type_traits>
@@ -29,6 +30,11 @@ constexpr Millis kRestingWait = 100;
 
 // Where the display settings are kept, in the state directory.
 constexpr const char* kDisplayConfigFile = "display.json";
+// Where the last UTC offset is kept, so the clock shows before Home Assistant
+// connects.
+constexpr const char* kTimeFile = "time.json";
+// How far the system clock may be from Home Assistant's before it's set.
+constexpr std::int64_t kWallClockSlack = 2000;
 
 const char* name(Gesture gesture) {
   switch (gesture) {
@@ -122,6 +128,7 @@ bool App::init() {
   // The display settings Home Assistant sent last, so the panel dims and
   // sleeps as it should before Home Assistant connects.
   load_display_config();
+  load_time();
   hal_.set_screen_on(true);
   backlight_ = room::BacklightFade(display_power_.brightness());
   update_backlight();
@@ -183,6 +190,7 @@ int App::run() {
     display_power_.tick(hal_.now());
     apply_display();
     update_backlight();
+    update_clock();
     if (hal_.now() - status_checked_ >= kStatusInterval) update_status();
 
     controller_.tick(hal_.now());
@@ -421,8 +429,11 @@ bool App::on_message(protocol::PanelSession& session, const protocol::Message& m
     session.send(protocol::result_ok(*m.id));
     return true;
   }
-  // Time is accepted; the clock that uses it comes in a later version.
-  return m.type == "time";
+  if (m.type == "time") {
+    set_time(m.body);
+    return true;
+  }
+  return false;
 }
 
 PressContext App::press_context() const {
@@ -440,8 +451,10 @@ void App::apply_display(bool report) {
   // Lit: the screen first, then the backlight, at once. Dark: the backlight
   // fades, and update_backlight() darkens the screen at the end, as a dark
   // standby is as good as off for the screen itself.
-  if (change->brightness > 0) hal_.set_screen_on(true);
   backlight_.go(change->brightness, hal_.now());
+  // What the new state shows is drawn before the backlight rises.
+  update_clock();
+  if (change->brightness > 0) hal_.set_screen_on(true);
   if (backlight_.fading(hal_.now())) fade_stats_ = {true, hal_.now(), hal_.now(), 0, 0, 0};
   update_backlight();
   log::info("display %s at %d%% (%s)", room::name(change->state), change->brightness,
@@ -470,6 +483,105 @@ void App::update_backlight() {
               level, fade_stats_.steps, static_cast<unsigned long long>(hal_.now() - fade_stats_.started),
               static_cast<unsigned long long>(fade_stats_.longest_gap),
               static_cast<unsigned long long>(fade_stats_.longest_write));
+  }
+}
+
+void App::update_clock() {
+  const Millis now = hal_.now();
+  const auto local = wall_clock_.local(now);
+  const bool wanted = display_power_.state() == room::DisplayState::Standby && local &&
+                      backlight_.target() > 0 && !backlight_.fading(now);
+  if (!wanted) {
+    if (ui_->clock_shown()) {
+      ui_->hide_clock();
+      clock_drawn_.clear();
+      lv_refr_now(display_);  // gone before the backlight rises for the controls
+    }
+    return;
+  }
+  const room::DisplayConfig& c = display_power_.config();
+  const room::ClockFace face = room::clock_face(*local, c.hour12, c.clock_seconds);
+  const bool analog = c.clock_style == room::ClockStyle::Analog;
+  const std::string drawn = face.time + face.seconds + face.suffix + (c.clock_date ? face.date : "") +
+                            (analog ? "a" : "d");
+  if (drawn == clock_drawn_) return;
+  const bool appearing = !ui_->clock_shown();
+  ui_->show_clock(face, c.clock_style, c.clock_date);
+  clock_drawn_ = drawn;
+  if (appearing) {
+    lv_refr_now(display_);
+    log::info("standby clock shown, %s: %s%s%s%s", analog ? "analog" : "digital", face.time.c_str(),
+              face.seconds.c_str(), face.suffix.empty() ? "" : " ", face.suffix.c_str());
+  }
+}
+
+void App::set_time(const protocol::Json& body) {
+  const auto utc = body.find("utc_ms");
+  const auto offset = body.find("utc_offset_min");
+  if (utc == body.end() || !utc->is_number() || offset == body.end() || !offset->is_number_integer() ||
+      std::abs(offset->get<long long>()) > 18 * 60) {
+    log::warn("ignoring a time message without utc_ms and a utc_offset_min");
+    return;
+  }
+  const Millis now = hal_.now();
+  const auto utc_ms = static_cast<std::int64_t>(utc->get<double>());
+  const int offset_min = static_cast<int>(offset->get<long long>());
+  const bool first = !wall_clock_.known();
+  wall_clock_.set_time(utc_ms, now);
+  // The system clock too, so logs and anything else on the device agree.
+  const std::int64_t off_by = hal_.wall_clock_ms() - utc_ms;
+  const bool set = std::llabs(off_by) > kWallClockSlack && hal_.set_wall_clock(utc_ms);
+  if (!wall_clock_.has_offset() || wall_clock_.offset_min() != offset_min) {
+    wall_clock_.set_offset(offset_min);
+    store_time();
+  }
+  const room::LocalTime t = *wall_clock_.local(now);
+  log::info("time from Home Assistant: %04d-%02d-%02d %02d:%02d:%02d, UTC%+d min%s%s", t.year, t.month,
+            t.day, t.hour, t.minute, t.second, offset_min, set ? "; the system clock was off by " : "",
+            set ? (std::to_string(off_by) + " ms and is set").c_str() : "");
+  if (first) {
+    display_power_.set_has_standby_screen(true);
+    apply_display();
+  }
+}
+
+void App::load_time() {
+  std::ifstream file(options_.state_dir + "/" + kTimeFile);
+  const protocol::Json stored = file ? protocol::Json::parse(file, nullptr, false) : protocol::Json();
+  const auto offset = stored.is_object() ? stored.find("utc_offset_min") : stored.end();
+  const std::int64_t system = hal_.wall_clock_ms();
+  if (!stored.is_object() || offset == stored.end() || !offset->is_number_integer()) {
+    log::info("no stored UTC offset: no clock until Home Assistant sends the time");
+    return;
+  }
+  if (system < room::WallClock::kEarliestUtcMs) {
+    log::info("the system clock was never set: no clock until Home Assistant sends the time");
+    return;
+  }
+  // The system clock kept time (the hardware clock, or the stock firmware's
+  // network time): the clock shows before Home Assistant connects.
+  wall_clock_.set_offset(static_cast<int>(offset->get<long long>()));
+  wall_clock_.set_time(system, hal_.now());
+  const room::LocalTime t = *wall_clock_.local(hal_.now());
+  log::info("time from the system clock: %04d-%02d-%02d %02d:%02d, UTC%+d min stored", t.year, t.month,
+            t.day, t.hour, t.minute, wall_clock_.offset_min());
+  display_power_.set_has_standby_screen(true);
+  display_power_.take_change();  // still active: nothing to apply
+}
+
+void App::store_time() const {
+  const std::string path = options_.state_dir + "/" + kTimeFile;
+  const std::string temporary = path + ".new";
+  {
+    std::ofstream file(temporary, std::ios::trunc);
+    file << protocol::Json{{"utc_offset_min", wall_clock_.offset_min()}}.dump() << '\n';
+    if (!file.flush()) {
+      log::warn("can't store the UTC offset in %s", temporary.c_str());
+      return;
+    }
+  }
+  if (std::rename(temporary.c_str(), path.c_str()) != 0) {
+    log::warn("can't store the UTC offset in %s", path.c_str());
   }
 }
 

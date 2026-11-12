@@ -404,6 +404,34 @@ the latest back, then turns the backlight on at once. The ring, a press, or
 someone near wakes it (below); the input that wakes it does nothing else.
 Until there's a clock to show, standby is dark.
 
+### The standby clock
+
+Standby shows a clock, analog or digital, at the standby brightness (20%
+unless Home Assistant sets another). Going to standby, the controls fade down
+to that brightness and the clock replaces them at the end of the fade; waking,
+the controls are drawn before the backlight comes up. The carousel shows the
+clock too, until there are images.
+
+The time comes from Home Assistant's `time` message (PROTOCOL.md section 16),
+kept from the monotonic clock between messages. Nesto sets the system clock
+when it's over 2 s off, and stores the UTC offset in `time.json` in the state
+directory. At start, if the system clock reads 2025 or later and an offset is
+stored, the clock shows before Home Assistant connects; otherwise standby is
+dark until the first `time` message. On 2026-11-11 the thermostat, rebooted,
+showed the clock before the demo room connected: its clock keeps time across
+a reboot. The log says which:
+
+```
+time from the system clock: 2026-11-11 19:52, UTC+60 min stored
+no stored UTC offset: no clock until Home Assistant sends the time
+standby clock shown, analog: 19:52
+```
+
+`client demo` tries the clock's settings: `--clock digital`, `--seconds`,
+`--hour12` and `--standby-brightness N`. It sends this computer's UTC offset
+(`scripts/dev.sh client` passes it into its container, which is on UTC); the
+panel keeps the offset it was sent last.
+
 A 45-minute run on 2026-11-11 showed the battery level with the
 display resting most of the time: 3.93 V at the start, 3.96 V after a quarter
 of an hour, and 3.95 V at the end, by the backplate's reading.

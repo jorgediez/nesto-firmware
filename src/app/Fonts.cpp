@@ -30,6 +30,7 @@ Fonts Fonts::load() {
   f.body = make(fonts::text_ttf, fonts::text_ttf_size, 20);
   f.large = make(fonts::text_ttf, fonts::text_ttf_size, 28);
   f.huge = make(fonts::text_ttf, fonts::text_ttf_size, 48);
+  f.clock = make(fonts::text_ttf, fonts::text_ttf_size, 80);
   f.icon_small = make(fonts::icons_ttf, fonts::icons_ttf_size, 28);
   f.icon_large = make(fonts::icons_ttf, fonts::icons_ttf_size, 56);
   return f;
@@ -40,6 +41,7 @@ void Fonts::destroy() {
   release(body);
   release(large);
   release(huge);
+  release(clock);
   release(icon_small);
   release(icon_large);
 }

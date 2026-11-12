@@ -388,6 +388,17 @@ Millis NestHal::now() const {
   return static_cast<Millis>(ts.tv_sec) * 1000 + static_cast<Millis>(ts.tv_nsec / 1000000);
 }
 
+bool NestHal::set_wall_clock(std::int64_t utc_ms) {
+  timespec ts{};
+  ts.tv_sec = static_cast<time_t>(utc_ms / 1000);
+  ts.tv_nsec = static_cast<long>(utc_ms % 1000) * 1000000;
+  if (clock_settime(CLOCK_REALTIME, &ts) != 0) {
+    log::warn("can't set the wall clock: %s", std::strerror(errno));
+    return false;
+  }
+  return true;
+}
+
 void NestHal::read_inputs(std::vector<TimedInput>& out, bool verbose) {
   input_event events[32];
   for (int fd : {ring_fd_, press_fd_}) {
