@@ -174,6 +174,13 @@ void SimHal::poll_window(std::vector<TimedInput>& out) {
           case SDLK_m:  // someone comes near
             if (down) out.push_back({t, Presence{}});
             break;
+          case SDLK_l:  // the room's light: dark, lit, bright in turn
+            if (down && !e.key.repeat) {
+              static constexpr int kLevels[] = {100, 2000, 20000};
+              light_step_ = (light_step_ + 1) % 3;
+              out.push_back({t, Light{kLevels[light_step_]}});
+            }
+            break;
           case SDLK_ESCAPE:
             if (down) out.push_back({t, QuitRequest{}});
             break;

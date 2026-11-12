@@ -67,6 +67,7 @@ add_library(nesto_room STATIC
   src/room/Controller.cpp
   src/room/DisplayPower.cpp
   src/room/StandbyClock.cpp
+  src/room/AutoBrightness.cpp
   src/room/Room.cpp
 )
 target_include_directories(nesto_room PUBLIC src)

@@ -220,3 +220,27 @@ TEST_CASE("the backlight fades down on a curve and comes up at once") {
   CHECK(fade.level(2000) == 20);
   CHECK(fade.target() == 20);
 }
+
+TEST_CASE("a glide goes up or down in a straight line") {
+  using nesto::room::BacklightFade;
+  BacklightFade fade(80);
+  fade.glide(20, 0);
+  CHECK(fade.level(0) == 80);
+  CHECK(fade.moving(0));
+  CHECK_FALSE(fade.fading(0));  // not a change of state
+  CHECK(fade.level(1000) == 50);
+  CHECK(fade.level(1999) == 21);
+  CHECK(fade.level(2000) == 20);
+  CHECK_FALSE(fade.moving(2000));
+
+  fade.glide(60, 3000);
+  CHECK(fade.level(3000) == 20);
+  CHECK(fade.level(4000) == 40);
+  CHECK(fade.level(4999) == 59);
+  CHECK(fade.level(5000) == 60);
+
+  // A change of state after a glide fades as before.
+  fade.go(0, 6000);
+  CHECK(fade.fading(6000));
+  CHECK(fade.level(6800) == 0);
+}

@@ -231,7 +231,10 @@ void NestHal::service_backplate(bool verbose, std::vector<TimedInput>* inputs) {
     }
     backplate_.receive(t, frame);
     if (frame.type == backplate::kLight) {
-      if (const auto light = backplate::decode_light(frame.payload)) light_ = light;
+      if (const auto light = backplate::decode_light(frame.payload)) {
+        light_ = light;
+        if (inputs) inputs->push_back({t, Light{light->value}});
+      }
     } else if (frame.type == backplate::kProximity) {
       const auto near = backplate::decode_proximity(frame.payload);
       if (near) {

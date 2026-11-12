@@ -394,7 +394,11 @@ async def _demo(args: argparse.Namespace) -> None:
     # Sent every time, as Home Assistant does, so a setting tried once doesn't
     # stay on the panel.
     room.config = {
-        "display": {"timeout_s": args.timeout, "wake_on_motion": not args.no_motion},
+        "display": {
+            "timeout_s": args.timeout,
+            "wake_on_motion": not args.no_motion,
+            "auto_brightness": not args.no_auto_brightness,
+        },
         "standby": {
             "brightness": args.standby_brightness,
             "clock": {"style": args.clock, "seconds": args.seconds},
@@ -428,6 +432,11 @@ def main() -> None:
         "--no-motion",
         action="store_true",
         help="don't wake the display when someone comes near",
+    )
+    demo.add_argument(
+        "--no-auto-brightness",
+        action="store_true",
+        help="keep the configured brightness whatever the room's light",
     )
     demo.add_argument(
         "--clock",

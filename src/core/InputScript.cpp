@@ -48,6 +48,8 @@ std::optional<InputScript> parse_input_script(std::string_view script, std::stri
     } else if (kind == 'm' && arg.empty()) {
       out.events.push_back({t, Presence{}});
       t += kTurnTime;
+    } else if (kind == 'l' && parse_number(arg, value) && value >= 0) {
+      out.events.push_back({t, Light{static_cast<int>(value)}});
     } else if (kind == 'w' && parse_number(arg, value) && value >= 0) {
       t += static_cast<Millis>(value);
     } else {

@@ -44,8 +44,18 @@ TEST_CASE("m: someone comes near") {
   CHECK(script->events[1].offset == 150);
 }
 
+TEST_CASE("lN: a light sensor reading") {
+  std::string error;
+  auto script = parse_input_script("l100 w500 l2000", error);
+  REQUIRE(script);
+  REQUIRE(script->events.size() == 2);
+  CHECK(std::get<nesto::Light>(script->events[0].event).raw == 100);
+  CHECK(script->events[1].offset == 500);
+  CHECK(std::get<nesto::Light>(script->events[1].event).raw == 2000);
+}
+
 TEST_CASE("unknown steps are reported") {
-  for (const char* bad : {"x", "r1", "r+", "r+0", "r+a", "p2", "w", "w-5", "hh", "m2"}) {
+  for (const char* bad : {"x", "r1", "r+", "r+0", "r+a", "p2", "w", "w-5", "hh", "m2", "l", "l-1"}) {
     std::string error;
     CAPTURE(bad);
     CHECK_FALSE(parse_input_script(bad, error));

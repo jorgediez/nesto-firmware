@@ -37,7 +37,15 @@ scripts/dev.sh sim     # open the simulator
 
 In the simulator, the mouse wheel or arrow keys turn the ring, and the left
 mouse button, Space or Enter press the display. M stands for someone coming
-near, as the thermostat's proximity sensor would. Escape quits.
+near, as the thermostat's proximity sensor would. L sets the room's light
+in turn to dark, lit and bright, as the thermostat's light sensor would; until
+it's pressed there's no sensor. Escape quits.
+
+With Home Assistant's `auto_brightness` (on unless it's turned off), the
+light sensor scales the brightness: the configured one in a lit room, down to
+a quarter of it in the dark (5% at least), the standby clock too. It dims over
+about 10 s, so a hand or a shadow doesn't dim it, and comes back up within a
+few seconds.
 
 After 30 seconds without input (or what Home Assistant sets) the display
 fades to standby, a clock at 20% (analog or digital, as Home Assistant

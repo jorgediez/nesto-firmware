@@ -428,7 +428,9 @@ standby clock shown, analog: 19:52
 ```
 
 `client demo` tries the clock's settings: `--clock digital`, `--seconds`,
-`--hour12` and `--standby-brightness N`. It sends this computer's UTC offset
+`--hour12` and `--standby-brightness N`; `--no-auto-brightness` keeps the
+brightness whatever the room's light (see the light sensor in
+[BACKPLATE.md](BACKPLATE.md)). It sends this computer's UTC offset
 (`scripts/dev.sh client` passes it into its container, which is on UTC); the
 panel keeps the offset it was sent last.
 

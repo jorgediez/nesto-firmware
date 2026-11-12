@@ -22,7 +22,7 @@ enum class StandbyMode { Clock, Carousel, Off };
 /// own.
 struct DisplayConfig {
   int brightness = 80;          // active, 0 to 100
-  bool auto_brightness = true;  // not used yet: needs the light sensor
+  bool auto_brightness = true;  // scaled by the light sensor (room/AutoBrightness)
   unsigned timeout_s = 30;      // 0: never leave active
   bool wake_on_motion = true;
   bool wake_on_input_when_off = true;
@@ -118,22 +118,31 @@ class DisplayPower {
 class BacklightFade {
  public:
   static constexpr Millis kDuration = 800;
+  /// A glide's length: slow enough not to be noticed.
+  static constexpr Millis kGlide = 2000;
 
   explicit BacklightFade(int level = 0) : from_(level), to_(level) {}
 
-  /// Heads for `target` from where the backlight is at `now`.
+  /// Heads for `target` from where the backlight is at `now`: for a change of
+  /// state.
   void go(int target, Millis now);
+  /// Heads for `target` in a straight line over kGlide, up or down: for the
+  /// room's light changing.
+  void glide(int target, Millis now);
 
   /// The backlight's level at `now`.
   int level(Millis now) const;
   int target() const { return to_; }
-  /// Still on the way down at `now`.
-  bool fading(Millis now) const { return level(now) != to_; }
+  /// Still on the way down after go() at `now`.
+  bool fading(Millis now) const { return !gliding_ && level(now) != to_; }
+  /// Still on the way anywhere at `now`, after go() or glide().
+  bool moving(Millis now) const { return level(now) != to_; }
 
  private:
   int from_;
   int to_;
   Millis start_ = 0;
+  bool gliding_ = false;
 };
 
 }  // namespace nesto::room

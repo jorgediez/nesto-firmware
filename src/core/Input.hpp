@@ -29,13 +29,19 @@ struct Presence {
   bool far = false;  // the far-field sensor
 };
 
+/// A light sensor reading: on the thermostat, the base's, higher brighter
+/// (docs/BACKPLATE.md); about 100 dark, 2000 a lit room.
+struct Light {
+  int raw = 0;
+};
+
 /// The program should stop, for example because the simulator's window was
 /// closed. A non-zero exit code reports a failure to whoever started it.
 struct QuitRequest {
   int exit_code = 0;
 };
 
-using InputEvent = std::variant<RingTurn, ButtonEdge, Presence, QuitRequest>;
+using InputEvent = std::variant<RingTurn, ButtonEdge, Presence, Light, QuitRequest>;
 
 struct TimedInput {
   Millis at = 0;
