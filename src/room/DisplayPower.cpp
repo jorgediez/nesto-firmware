@@ -185,6 +185,13 @@ void DisplayPower::motion(Millis now) {
 
 void DisplayPower::set(DisplayState state, Millis now) { enter(state, DisplayCause::Ha, now); }
 
+void DisplayPower::notification(bool from_off, Millis now) {
+  if (state_ == DisplayState::Active || state_ == DisplayState::Standby ||
+      (state_ == DisplayState::Off && from_off)) {
+    enter(DisplayState::Active, DisplayCause::Notification, now);
+  }
+}
+
 void DisplayPower::tick(Millis now) {
   if (state_ != DisplayState::Active || config_.timeout_s == 0) return;
   if (now - last_activity_ >= static_cast<Millis>(config_.timeout_s) * 1000) {

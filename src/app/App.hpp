@@ -14,6 +14,7 @@
 #include "room/AutoBrightness.hpp"
 #include "room/Controller.hpp"
 #include "room/DisplayPower.hpp"
+#include "room/Notifications.hpp"
 #include "room/Sensors.hpp"
 #include "room/StandbyClock.hpp"
 
@@ -73,6 +74,11 @@ class App : private protocol::SessionEvents {
   void load_time();
   void store_time() const;
   void send_display_state(room::DisplayState state, int brightness, const char* cause);
+  /// Draws what changed: a notification screen while one is open, else the
+  /// room's.
+  void render();
+  /// Home Assistant's `notify` request (PROTOCOL.md section 14).
+  void notify(protocol::PanelSession& session, const protocol::Message& m);
   /// Sends an event to Home Assistant, if it's connected and synchronised.
   void send_event(const protocol::Json& event);
   /// Sends the base's readings when they're due (PROTOCOL.md section 17).
@@ -109,6 +115,10 @@ class App : private protocol::SessionEvents {
   Millis status_checked_ = 0;
 
   room::Controller controller_;
+  room::Notifications notifications_;
+  int notice_ticks_ = 0;  // ring ticks towards a click, on a notification screen
+  unsigned rendered_notices_ = 0;  // notifications_.version() last drawn
+  bool notices_drawn_ = false;     // whether the screen shows a notification screen
   room::DisplayPower display_power_{0};
   room::BacklightFade backlight_;
   room::AutoBrightness auto_brightness_;

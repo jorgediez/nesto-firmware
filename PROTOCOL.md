@@ -617,7 +617,29 @@ a hold, so a double press can stay a trigger for HA.
 | `critical` | Yes | Yes | Stays until dismissed; repeats the alert beep every 30 seconds |
 
 The panel keeps the 10 most recent notifications. When the list is full, the
-oldest non-critical one is dropped.
+oldest non-critical one is dropped. They are kept in memory only: a panel
+that restarts has none, and HA may send them again.
+
+On the panel:
+
+- A notification pops up only while the display is lit, after waking it as
+  the table says. One that arrives while the display stays dark, a `normal`
+  one while it's off, goes to the list unread.
+- The ring chooses among the actions and **Dismiss**, and a press sends the
+  choice. Either one removes the notification: an action sends `action` only,
+  not `dismissed` as well. With only Dismiss to choose, the ring scrolls a
+  message too long for the screen.
+- A long press closes the pop-up and keeps the notification in the list. A
+  critical one can't be closed that way: it has to be answered or dismissed.
+- A newer pop-up replaces the one on screen, except a critical one, which
+  stays until it's answered. A pop-up on a timer keeps the display lit for
+  its time. One without a time limit (critical, or `duration_s` 0) lets the
+  display rest as usual and pops up again when it wakes.
+- The home screen starts with a Notifications entry while any are kept,
+  showing how many are unread. It opens the list, newest first, where a press
+  opens one and a long press goes back.
+- `beep` is accepted, and ignored until the panel has sound (`hello.caps.beeper`
+  is false).
 
 **H→P `notify_clear`** (event) removes notifications:
 `{"t": "notify_clear", "nid": "door-1"}`, or `{"t": "notify_clear", "all": true}`.
@@ -629,6 +651,10 @@ oldest non-critical one is dropped.
 ```
 
 `event` is `"shown"`, `"dismissed"`, `"expired"` or `"action"` (with `action`).
+`shown` is sent once, when the notification first appears on screen, as a
+pop-up or opened from the list. `expired` is sent when a pop-up on a timer
+leaves the screen without an answer, because its time is up or the display
+rested; the notification stays in the list. `notify_clear` sends no events.
 HA turns these into events on an `event` entity, so automations can react to a
 button pressed on the panel.
 

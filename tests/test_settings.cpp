@@ -14,7 +14,8 @@ struct Menu {
   std::vector<Intent> sent;
   Controller controller{[this](const Intent& i) { sent.push_back(i); },
                         SettingsActions{[this] { ++pairing_opened; }, [this] { ++forgotten; },
-                                        [] { return std::vector<std::string>{"Nesto 0.1.0", "Panel x"}; }}};
+                                        [] { return std::vector<std::string>{"Nesto 0.1.0", "Panel x"}; },
+                                        {}}};
 
   void with_room() {
     std::string error;

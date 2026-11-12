@@ -224,15 +224,24 @@ void Controller::set_connected(bool connected) {
   changed();
 }
 
+void Controller::set_notifications(int count, int unread) {
+  if (count == notification_count_ && unread == notification_unread_) return;
+  // The entry comes or goes at the top: the selection stays on what it was.
+  const int before = notices_entry();
+  notification_count_ = count;
+  notification_unread_ = unread;
+  selected_ = std::clamp(selected_ + notices_entry() - before, 0, home_count() - 1);
+  changed();
+}
+
 bool Controller::apply_layout(const Json& message, std::string& error) {
   if (!room_.apply_layout(message, error)) return false;
   click_ticks_ = 0;
-  const auto& items = room_.layout().items;
   if (screen_ == RoomView::Screen::Empty) screen_ = RoomView::Screen::Home;
   if (screen_ == RoomView::Screen::Item && !room_.find(open_key_)) {
     screen_ = RoomView::Screen::Home;
   }
-  selected_ = std::clamp(selected_, 0, static_cast<int>(items.size()));  // the last is Settings
+  selected_ = std::clamp(selected_, 0, home_count() - 1);  // the last is Settings
   if (const Item* item = open_item()) {
     control_ = std::clamp(control_, 0, std::max(0, static_cast<int>(controls_for(*item).size()) - 1));
   }
@@ -276,12 +285,14 @@ const Item* Controller::open_item() const {
 
 const Item* Controller::selected_item() const {
   const auto& items = room_.layout().items;
-  if (selected_ >= static_cast<int>(items.size())) return nullptr;  // Settings
-  return &items[static_cast<std::size_t>(selected_)];
+  const int at = selected_ - notices_entry();
+  if (at < 0 || at >= static_cast<int>(items.size())) return nullptr;  // Notifications or Settings
+  return &items[static_cast<std::size_t>(at)];
 }
 
 int Controller::home_count() const {
-  return static_cast<int>(room_.layout().items.size()) + 1;  // the items, then Settings
+  // Notifications, if any, the items, then Settings.
+  return notices_entry() + static_cast<int>(room_.layout().items.size()) + 1;
 }
 
 void Controller::open_settings() {
@@ -383,10 +394,16 @@ void Controller::press(Millis now) {
       return;
     case RoomView::Screen::Home:
     case RoomView::Screen::Item:
+    case RoomView::Screen::Notifications:
+    case RoomView::Screen::Notice:
       break;
   }
 
   if (screen_ == RoomView::Screen::Home) {
+    if (notices_entry() && selected_ == 0) {
+      if (actions_.open_notifications) actions_.open_notifications();
+      return;
+    }
     const Item* item = selected_item();
     if (!item) {
       open_settings();
@@ -440,6 +457,8 @@ void Controller::long_press(Millis now) {
       return;
     case RoomView::Screen::Empty:
     case RoomView::Screen::Home:
+    case RoomView::Screen::Notifications:
+    case RoomView::Screen::Notice:
       break;
   }
   const Item* item = selected_item();
@@ -664,12 +683,20 @@ RoomView Controller::view() const {
     case RoomView::Screen::Empty:
     case RoomView::Screen::Home:
     case RoomView::Screen::Item:
+    case RoomView::Screen::Notifications:
+    case RoomView::Screen::Notice:
       break;
   }
 
   if (!room_.has_layout()) return v;
   v.title = room_.layout().title;
   v.selected = selected_;
+  if (notices_entry()) {
+    const std::string summary = notification_unread_ > 0 ? std::to_string(notification_unread_) + " unread"
+                                                         : std::to_string(notification_count_) + " kept";
+    v.entries.push_back({"Notifications", summary, true, "bell", "bell",
+                         notification_unread_ > 0 ? Tone::Heat : Tone::Neutral});
+  }
   for (const Item& item : room_.layout().items) {
     const ItemState s = shown(item.key);
     const char* fallback = default_icon(item.kind);

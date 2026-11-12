@@ -251,6 +251,11 @@ class DemoRoom:
         self.display_states: list[dict] = []  # what the panel reported (section 13)
         self.sensors: list[dict] = []  # the base's readings (section 17)
         self.inputs: list[dict] = []  # press gestures (section 17)
+        # Notifications to send, each after so many seconds (section 14), and
+        # what the panel answered and reported.
+        self.notices: list[tuple[float, dict]] = []
+        self.notify_results: list[dict] = []
+        self.notify_events: list[dict] = []
         self.log = False
 
     def apply(self, intent: dict) -> dict:
@@ -297,10 +302,39 @@ class DemoRoom:
                 await asyncio.sleep(20)
                 await client.send({"t": "ping", "seq": 0})
 
+        notify_ids: set[int] = set()
+
+        async def send_notices() -> None:
+            for i, (delay, notice) in enumerate(sorted(self.notices, key=lambda n: n[0])):
+                await asyncio.sleep(max(0.0, delay - (asyncio.get_running_loop().time() - start)))
+                if notice.get("t") == "notify_clear":  # an event, as it is
+                    await client.send(notice)
+                    continue
+                request_id = 9000 + i
+                notify_ids.add(request_id)
+                await client.send({"t": "notify", "id": request_id, **notice})
+                if self.log:
+                    print(f"notify: {notice.get('nid')}", flush=True)
+
+        start = asyncio.get_running_loop().time()
         pinger = asyncio.create_task(keep_alive())
+        notifier = asyncio.create_task(send_notices())
         try:
             while True:
                 message = await client.receive()
+                if message.get("t") == "result" and message.get("re") in notify_ids:
+                    self.notify_results.append(message)
+                    if self.log and not message.get("ok"):
+                        print(f"notify refused: {message.get('error')}", flush=True)
+                    continue
+                if message.get("t") == "notify_event":
+                    self.notify_events.append(message)
+                    if self.log:
+                        action = f" {message['action']}" if "action" in message else ""
+                        print(
+                            f"notification {message['nid']}: {message['event']}{action}", flush=True
+                        )
+                    continue
                 if message.get("t") == "display_state":
                     self.display_states.append(message)
                     if self.log:
@@ -339,6 +373,7 @@ class DemoRoom:
                     await client.send({"t": "states", "items": {message["key"]: changes}})
         finally:
             pinger.cancel()
+            notifier.cancel()
 
 
 # Command line ---------------------------------------------------------------
@@ -418,6 +453,21 @@ async def _demo(args: argparse.Namespace) -> None:
         },
         "locale": {"hour12": args.hour12},
     }
+    if args.notify:
+        notice: dict = {
+            "nid": args.nid,
+            "message": args.notify,
+            "priority": args.priority,
+            "duration_s": args.duration,
+            "actions": [
+                {"id": a.split("=", 1)[0], "label": a.split("=", 1)[-1]} for a in args.action
+            ],
+        }
+        if args.title:
+            notice["title"] = args.title
+        if args.icon:
+            notice["icon"] = args.icon
+        room.notices = [(args.notify_after, notice)]
     print(f"Serving the demo room '{DEMO_TITLE}' to panel {client.hello['panel_id']}")
     try:
         await room.serve(client)
@@ -464,6 +514,27 @@ def main() -> None:
         type=int,
         default=20,
         help="the backlight in standby, 0 to 100 (default: 20)",
+    )
+    notify = demo.add_argument_group("a notification, sent once while serving the room")
+    notify.add_argument("--notify", metavar="MESSAGE", help="its message")
+    notify.add_argument("--title")
+    notify.add_argument("--icon", help="a built-in icon, such as door or alert")
+    notify.add_argument(
+        "--priority", choices=["low", "normal", "high", "critical"], default="normal"
+    )
+    notify.add_argument(
+        "--duration", type=int, default=15, help="seconds on screen, 0 until answered"
+    )
+    notify.add_argument(
+        "--action", action="append", default=[], metavar="ID=LABEL", help="a button, up to 3"
+    )
+    notify.add_argument("--nid", default="demo", help="its id (default: demo)")
+    notify.add_argument(
+        "--notify-after",
+        type=float,
+        default=5,
+        metavar="SECONDS",
+        help="when to send it (default: 5)",
     )
     args = parser.parse_args()
     run = {"pair": _pair, "connect": _connect, "demo": _demo}[args.command]

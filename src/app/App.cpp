@@ -93,7 +93,9 @@ App::App(Hal& hal, AppOptions options)
       controller_([this](const room::Intent& intent) { send_intent(intent); },
                   room::SettingsActions{[this] { open_pairing(); },
                                         [this] { forget_home_assistant(); },
-                                        [this] { return about(); }}) {}
+                                        [this] { return about(); },
+                                        [this] { notifications_.open_list(); }}),
+      notifications_([this](const protocol::Json& event) { send_event(event); }) {}
 
 App::~App() {
   mdns_.reset();  // says goodbye on the network
@@ -204,14 +206,33 @@ int App::run() {
     if (hal_.now() - status_checked_ >= kStatusInterval) update_status();
 
     controller_.tick(hal_.now());
-    if (controller_.version() != rendered_version_) {
-      rendered_version_ = controller_.version();
-      ui_->render(controller_.view());
+    notifications_.tick(hal_.now());
+    // A pop-up on its timer keeps the display up until it's had its time.
+    if (notifications_.holds_display() && display_power_.state() == room::DisplayState::Active) {
+      display_power_.input(hal_.now());
     }
+    controller_.set_notifications(notifications_.count(), notifications_.unread());
+    render();
     if (auto message = controller_.take_message()) ui_->show_toast(*message);
   }
   log::info("stopping");
   return exit_code_;
+}
+
+void App::render() {
+  // A notification screen, over the room's, or the room's.
+  const bool notices = notifications_.active();
+  if (notices) {
+    if (!notices_drawn_ || notifications_.version() != rendered_notices_) {
+      rendered_notices_ = notifications_.version();
+      ui_->render(notifications_.view());
+      notifications_.set_scroll_limit(ui_->notice_scroll_limit());
+    }
+  } else if (notices_drawn_ || controller_.version() != rendered_version_) {
+    rendered_version_ = controller_.version();
+    ui_->render(controller_.view());
+  }
+  notices_drawn_ = notices;
 }
 
 void App::flush(lv_display_t* display, const lv_area_t* /*area*/, std::uint8_t* /*pixels*/) {
@@ -230,7 +251,18 @@ void App::handle(const TimedInput& input) {
         using T = std::decay_t<decltype(event)>;
         if constexpr (std::is_same_v<T, RingTurn>) {
           // A turn that wakes the display only wakes it.
-          if (display_power_.input(input.at)) controller_.rotate(event.ticks, input.at);
+          if (!display_power_.input(input.at)) return;
+          if (!notifications_.active()) {
+            notice_ticks_ = 0;
+            controller_.rotate(event.ticks, input.at);
+            return;
+          }
+          // A notification's choices, a click at a time.
+          if ((notice_ticks_ > 0 && event.ticks < 0) || (notice_ticks_ < 0 && event.ticks > 0)) notice_ticks_ = 0;
+          notice_ticks_ += event.ticks;
+          const int clicks = notice_ticks_ / kTicksPerClick;
+          notice_ticks_ -= clicks * kTicksPerClick;
+          notifications_.rotate(clicks);
         } else if constexpr (std::is_same_v<T, ButtonEdge>) {
           // While active, a press is activity. While resting, it's the
           // gesture that decides: a single press or a hold wakes the display,
@@ -263,6 +295,12 @@ void App::handle(const std::vector<GestureEvent>& gestures) {
       // Pressed while resting: it only wakes the display, and a double press
       // not even that.
       if (g.gesture != Gesture::Double) display_power_.input(hal_.now());
+      continue;
+    }
+    notice_ticks_ = 0;
+    if (notifications_.active()) {
+      if (g.gesture == Gesture::Single) notifications_.press();
+      if (g.gesture == Gesture::Long) notifications_.long_press();
       continue;
     }
     if (g.gesture == Gesture::Single) controller_.press(hal_.now());
@@ -371,6 +409,27 @@ void App::on_ready(protocol::PanelSession& /*session*/) {
   send_sensors();
 }
 
+void App::notify(protocol::PanelSession& session, const protocol::Message& m) {
+  room::Notification n;
+  std::string error;
+  if (!room::Notification::parse(m.body, n, error)) {
+    session.send(protocol::result_error(*m.id, protocol::ErrorCode::BadRequest, error));
+    return;
+  }
+  session.send(protocol::result_ok(*m.id));
+  log::info("notification %s (%s)", n.nid.c_str(),
+            n.priority == room::Priority::Low      ? "low"
+            : n.priority == room::Priority::Normal ? "normal"
+            : n.priority == room::Priority::High   ? "high"
+                                                   : "critical");
+  // Waking first (PROTOCOL.md section 14), so it can pop up.
+  if (n.priority != room::Priority::Low) {
+    display_power_.notification(n.priority != room::Priority::Normal, hal_.now());
+    apply_display();
+  }
+  notifications_.add(std::move(n), display_power_.state() == room::DisplayState::Active, hal_.now());
+}
+
 void App::send_event(const protocol::Json& event) {
   protocol::PanelSession* session = server_ ? server_->active() : nullptr;
   if (session && session->ready()) session->send(event);
@@ -400,6 +459,18 @@ bool App::on_message(protocol::PanelSession& session, const protocol::Message& m
     result["base_connected"] = base.connected;
     result["base_fw"] = base.firmware.empty() ? protocol::Json(nullptr) : protocol::Json(base.firmware);
     session.send(result);
+    return true;
+  }
+  if (m.type == "notify" && m.is_request()) {
+    notify(session, m);
+    return true;
+  }
+  if (m.type == "notify_clear") {
+    if (m.body.value("all", false)) {
+      notifications_.clear_all();
+    } else if (const auto it = m.body.find("nid"); it != m.body.end() && it->is_string()) {
+      notifications_.clear(it->get<std::string>());
+    }
     return true;
   }
   if (m.type == "identify" && m.is_request()) {
@@ -494,6 +565,13 @@ void App::apply_display(bool report) {
     log::info("display %s at %d%% (%s)", room::name(change->state), brightness, room::name(change->cause));
   }
   if (report) send_display_state(change->state, brightness, room::name(change->cause));
+  // A notification waiting for an answer comes back on waking; a pop-up on a
+  // timer doesn't outlast the display.
+  if (change->state == room::DisplayState::Active) {
+    notifications_.display_woke(hal_.now());
+  } else {
+    notifications_.display_rested();
+  }
 }
 
 int App::shown_brightness(int brightness) const {

@@ -432,7 +432,10 @@ standby clock shown, analog: 19:52
 brightness whatever the room's light (see the light sensor in
 [BACKPLATE.md](BACKPLATE.md)). It sends this computer's UTC offset
 (`scripts/dev.sh client` passes it into its container, which is on UTC); the
-panel keeps the offset it was sent last.
+panel keeps the offset it was sent last. `--notify MESSAGE` sends a
+notification 5 seconds in (`--notify-after S`), with `--title`, `--icon`,
+`--priority`, `--duration` and up to three `--action ID=LABEL`; the demo
+prints what became of it.
 
 A 45-minute run on 2026-11-11 showed the battery level with the
 display resting most of the time: 3.93 V at the start, 3.96 V after a quarter

@@ -27,6 +27,9 @@ constexpr int kCentre = kScreenSize / 2;
 
 constexpr std::uint32_t kToastTime = 1500;
 constexpr std::int32_t kArcScale = 1000;
+// A notification's message: four lines this wide fit inside the round screen.
+constexpr std::int32_t kNoticeWidth = 236;
+constexpr std::int32_t kNoticeLines = 4;
 
 lv_color_t colour(Tone tone) {
   switch (tone) {
@@ -166,6 +169,27 @@ Ui::Ui(const Fonts& fonts) : fonts_(fonts) {
   centre_ = make_label(screen, fonts_.body, kText);
   lv_obj_center(centre_);
 
+  // A notification: icon and title above, the message in a box of four lines
+  // that the ring scrolls, and the choice below.
+  notice_icon_ = make_label(screen, fonts_.icon_small, kText);
+  lv_obj_align(notice_icon_, LV_ALIGN_CENTER, 0, -86);
+  notice_title_ = make_label(screen, fonts_.body, kText, 220);
+  lv_obj_align(notice_title_, LV_ALIGN_CENTER, 0, -52);
+  const std::int32_t line = lv_font_get_line_height(fonts_.small);
+  notice_box_ = lv_obj_create(screen);
+  lv_obj_remove_style_all(notice_box_);
+  lv_obj_set_size(notice_box_, kNoticeWidth, line * kNoticeLines);
+  lv_obj_set_scrollable(notice_box_, false);
+  lv_obj_align(notice_box_, LV_ALIGN_CENTER, 0, 6);
+  notice_message_ = lv_label_create(notice_box_);
+  lv_obj_set_style_text_font(notice_message_, fonts_.small, 0);
+  lv_obj_set_style_text_color(notice_message_, kText, 0);
+  lv_obj_set_style_text_align(notice_message_, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_width(notice_message_, kNoticeWidth);
+  lv_label_set_long_mode(notice_message_, LV_LABEL_LONG_MODE_WRAP);
+  notice_choice_ = make_label(screen, fonts_.body, kAccent, 200);
+  lv_obj_align(notice_choice_, LV_ALIGN_CENTER, 0, 72);
+
   footer_ = make_label(screen, fonts_.small, kMuted, 200, 0);  // Confirm's prompt takes two lines
   lv_obj_align(footer_, LV_ALIGN_BOTTOM_MID, 0, -40);
 
@@ -208,9 +232,11 @@ Ui::~Ui() {
 
 void Ui::render(const room::RoomView& view) {
   view_ = view;
-  const bool list = (view.screen == Screen::Home || view.screen == Screen::Settings) &&
+  const bool list = (view.screen == Screen::Home || view.screen == Screen::Settings ||
+                     view.screen == Screen::Notifications) &&
                     !view.entries.empty();
   const bool item = view.screen == Screen::Item;
+  const bool notice = view.screen == Screen::Notice;
 
   // Title: the room, the item, or the menu.
   std::string title = "Nesto";
@@ -235,6 +261,12 @@ void Ui::render(const room::RoomView& view) {
     const bool live = view.available && !view.offline && view.tone != Tone::Off;
     lv_obj_set_style_text_color(value_, live ? kText : kMuted, 0);
   }
+
+  for (lv_obj_t* o : {notice_icon_, notice_title_, notice_box_, notice_choice_}) {
+    lv_obj_set_hidden(o, !notice);
+  }
+  notice_scroll_limit_ = 0;
+  if (notice) render_notice(view);
 
   // A message in the middle: waiting, a question, or About's lines.
   std::string centre;
@@ -261,12 +293,38 @@ void Ui::render(const room::RoomView& view) {
     lv_arc_set_value(arc_, static_cast<std::int32_t>(std::lround(view.fraction * kArcScale)));
     arc_tone = view.tone;
     arc_shown = true;
+  } else if (notice && view.choices.size() > 1) {
+    lv_arc_set_range(arc_, 0, static_cast<std::int32_t>(view.choices.size()) - 1);
+    lv_arc_set_value(arc_, view.choice);
+    arc_tone = view.tone;
+    arc_shown = true;
   }
   lv_obj_set_style_arc_opa(arc_, arc_shown ? LV_OPA_COVER : LV_OPA_TRANSP, LV_PART_INDICATOR);
   lv_obj_set_style_arc_color(arc_, view.offline ? kMuted : arc_colour(arc_tone),
                              LV_PART_INDICATOR);
 
   update_footer();
+}
+
+void Ui::render_notice(const room::RoomView& view) {
+  set_text(notice_icon_, icon_text(view.icon, view.default_icon));
+  lv_obj_set_style_text_color(notice_icon_, colour(view.tone), 0);
+  set_text(notice_title_, view.item_name);
+  lv_obj_set_hidden(notice_title_, view.item_name.empty());
+
+  // The message scrolls a line at a time inside its box.
+  set_text(notice_message_, view.message);
+  lv_obj_update_layout(notice_message_);
+  const std::int32_t line = lv_font_get_line_height(fonts_.small);
+  const std::int32_t lines = (lv_obj_get_height(notice_message_) + line - 1) / line;
+  notice_scroll_limit_ = std::max<std::int32_t>(0, lines - kNoticeLines);
+  const int scroll = std::min(view.scroll, notice_scroll_limit_);
+  // A short message sits in the middle of the box; a long one from its top.
+  const std::int32_t free = std::max<std::int32_t>(0, (kNoticeLines - lines) * line);
+  lv_obj_set_pos(notice_message_, 0, free / 2 - scroll * line);
+
+  const auto at = static_cast<std::size_t>(std::clamp<int>(view.choice, 0, static_cast<int>(view.choices.size()) - 1));
+  set_text(notice_choice_, view.choices.empty() ? "" : view.choices[at]);
 }
 
 void Ui::render_list(const room::RoomView& view) {
@@ -307,7 +365,11 @@ void Ui::update_footer() {
       text = "Hold to go back";
       break;
     case Screen::Confirm:
+    case Screen::Notice:
       text = view_.prompt;
+      break;
+    case Screen::Notifications:
+      text = "Hold to go back";
       break;
   }
   set_text(footer_, text);
