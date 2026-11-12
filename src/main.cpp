@@ -34,7 +34,8 @@ void print_usage(const char* program) {
       "  --headless          no window; use with --script and --screenshot\n"
       "  --scale N           window pixels per screen pixel, 1 to 4 (default 2)\n"
       "  --script STEPS      play input: r+N r-N (ring), p (press), h (long press), wN (wait ms)\n"
-      "  --screenshot FILE   save the screen as PNG after the script, then quit\n");
+      "  --screenshot FILE   save the screen as PNG after the script, then quit\n"
+      "  --fake-base         a base with fixed sensor readings, as on the thermostat\n");
 #elif defined(NESTO_PLATFORM_NEST)
   std::printf(
       "  --ring-counts N     the ring's sensor counts per tick (default %d)\n"
@@ -105,6 +106,10 @@ int main(int argc, char** argv) {
 #if defined(NESTO_PLATFORM_SIM)
     if (arg == "--headless") {
       options.headless = true;
+      continue;
+    }
+    if (arg == "--fake-base") {
+      options.fake_base = true;
       continue;
     }
     if (arg == "--scale" && has_value) {

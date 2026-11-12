@@ -21,12 +21,15 @@ struct SimOptions {
   int scale = 2;           // window pixels per screen pixel
   std::string script;      // input steps to play, see InputScript.hpp
   std::string screenshot;  // PNG to write once the script has played, then quit
+  bool fake_base = false;  // a base with fixed readings, the light from L
 };
 
 /// The desktop simulator. With SDL2 it opens a window showing the round screen:
 ///
 ///   mouse wheel, arrow keys      turn the ring
 ///   left button, Space, Enter    press the display
+///   M, F                         someone near; someone moving in the room
+///   L                            the room's light: dark, lit, bright in turn
 ///   Escape, closing the window   quit
 ///
 /// Headless, or with a script, it plays scripted input and can save the screen
@@ -44,6 +47,8 @@ class SimHal : public Hal {
   void poll(std::vector<TimedInput>& out, Millis timeout) override;
   void present(const std::uint32_t* pixels) override;
   void set_backlight(int percent) override;
+  bool has_base() const override { return options_.fake_base; }
+  BaseReadings base() const override;
 
  private:
   void play_script(std::vector<TimedInput>& out);
@@ -57,6 +62,7 @@ class SimHal : public Hal {
   InputScript script_;
   std::size_t next_step_ = 0;
   int light_step_ = 1;  // the L key: starts as a lit room
+  int light_ = 2000;    // the last light reading, for the fake base
   bool screenshot_taken_ = false;
 
   std::vector<std::uint32_t> raw_;    // the last frame as LVGL drew it

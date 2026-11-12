@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "core/BaseReadings.hpp"
 #include "core/Input.hpp"
 
 namespace nesto {
@@ -49,6 +50,13 @@ class Hal {
   /// Sets the system's wall clock where Nesto owns it: the thermostat's, not
   /// the simulator's host. Returns false if it couldn't.
   virtual bool set_wall_clock(std::int64_t /*utc_ms*/) { return true; }
+
+  /// Whether this panel has a base with sensors: the thermostat talking to
+  /// its base. Home Assistant is told so once, at connection, even if the
+  /// base hasn't answered yet.
+  virtual bool has_base() const { return false; }
+  /// What the base reports now.
+  virtual BaseReadings base() const { return {}; }
 };
 
 }  // namespace nesto

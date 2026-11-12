@@ -106,10 +106,27 @@ void SimHal::poll(std::vector<TimedInput>& out, Millis timeout) {
   for (;;) {
     play_script(out);
     poll_window(out);
+    for (const TimedInput& input : out) {
+      if (const auto* light = std::get_if<Light>(&input.event)) light_ = light->raw;
+    }
     const Millis t = now();
     if (!out.empty() || t >= deadline) return;
     std::this_thread::sleep_for(std::chrono::milliseconds(std::min<Millis>(5, deadline - t)));
   }
+}
+
+BaseReadings SimHal::base() const {
+  BaseReadings out;
+  if (!options_.fake_base) return out;
+  out.connected = true;
+  out.firmware = "simulated";
+  out.celsius = 21.5;
+  out.humidity = 45.0;
+  out.light_raw = light_;
+  out.supply_v = 0.0;  // on a stand, as the thermostat measured
+  out.usb_v = 4.94;
+  out.battery_v = 3.91;
+  return out;
 }
 
 void SimHal::play_script(std::vector<TimedInput>& out) {
@@ -173,6 +190,9 @@ void SimHal::poll_window(std::vector<TimedInput>& out) {
             break;
           case SDLK_m:  // someone comes near
             if (down) out.push_back({t, Presence{}});
+            break;
+          case SDLK_f:  // someone moves in the room
+            if (down) out.push_back({t, Presence{true}});
             break;
           case SDLK_l:  // the room's light: dark, lit, bright in turn
             if (down && !e.key.repeat) {

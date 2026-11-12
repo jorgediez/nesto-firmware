@@ -249,6 +249,8 @@ class DemoRoom:
         self.fail_actions: set[str] = set()  # actions to answer with an error, for tests
         self.config: dict | None = None  # the panel's settings (section 12)
         self.display_states: list[dict] = []  # what the panel reported (section 13)
+        self.sensors: list[dict] = []  # the base's readings (section 17)
+        self.inputs: list[dict] = []  # press gestures (section 17)
         self.log = False
 
     def apply(self, intent: dict) -> dict:
@@ -307,6 +309,17 @@ class DemoRoom:
                             f" ({message['cause']})",
                             flush=True,
                         )
+                    continue
+                if message.get("t") == "sensors":
+                    self.sensors.append(message)
+                    if self.log:
+                        readings = {k: v for k, v in message.items() if k != "t"}
+                        print(f"sensors: {json.dumps(readings)}", flush=True)
+                    continue
+                if message.get("t") == "input":
+                    self.inputs.append(message)
+                    if self.log:
+                        print(f"input: {message['gesture']} ({message['context']})", flush=True)
                     continue
                 if message.get("t") != "intent":
                     continue

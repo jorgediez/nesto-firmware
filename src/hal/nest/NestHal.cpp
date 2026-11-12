@@ -484,6 +484,24 @@ void NestHal::set_backlight(int percent) {
   if (!write_int(backlight_, level)) log::warn("%s: can't set it to %d", backlight_.c_str(), level);
 }
 
+BaseReadings NestHal::base() const {
+  BaseReadings out;
+  if (!options_.backplate) return out;
+  out.connected = backplate_.running();
+  out.firmware = backplate_.version();
+  if (const auto& c = backplate_.climate()) {
+    out.celsius = c->celsius;
+    out.humidity = c->humidity;
+  }
+  if (const auto& p = backplate_.power()) {
+    out.supply_v = p->input;
+    out.usb_v = p->usb;
+    out.battery_v = p->battery;
+  }
+  if (light_) out.light_raw = light_->value;
+  return out;
+}
+
 void NestHal::set_screen_on(bool on) {
   if (on == !dark_ || !fb_) return;
   dark_ = !on;
