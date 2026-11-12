@@ -90,6 +90,10 @@ class DisplayPower {
   /// Home Assistant's `display` request.
   void set(DisplayState state, Millis now);
 
+  /// A notification arrived (PROTOCOL.md section 14): wakes the display from
+  /// standby, and from off with `from_off`; while active, it's activity.
+  void notification(bool from_off, Millis now);
+
   /// Leaves active once the timeout passes.
   void tick(Millis now);
 

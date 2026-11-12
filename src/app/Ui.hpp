@@ -27,6 +27,9 @@ class Ui {
 
   /// Redraws everything from `view`.
   void render(const room::RoomView& view);
+  /// On a notification, how many lines its message can scroll: those that
+  /// don't fit the box.
+  int notice_scroll_limit() const { return notice_scroll_limit_; }
 
   /// The connection state, shown at the bottom while not connected.
   void set_status(const std::string& text);
@@ -51,6 +54,7 @@ class Ui {
   void set_hand(lv_obj_t* line, Hand& points, int angle, int length);
 
   void render_list(const room::RoomView& view);
+  void render_notice(const room::RoomView& view);
   void update_footer();
   static void hide_toast(lv_timer_t* timer);
 
@@ -95,6 +99,14 @@ class Ui {
   lv_obj_t* clock_date_ = nullptr;
   lv_obj_t* pairing_ = nullptr;
   lv_obj_t* pairing_code_ = nullptr;
+  // A notification: its icon, title, message (in a box that scrolls) and
+  // the choice the ring is on.
+  lv_obj_t* notice_icon_ = nullptr;
+  lv_obj_t* notice_title_ = nullptr;
+  lv_obj_t* notice_box_ = nullptr;
+  lv_obj_t* notice_message_ = nullptr;
+  lv_obj_t* notice_choice_ = nullptr;
+  int notice_scroll_limit_ = 0;
 };
 
 }  // namespace nesto

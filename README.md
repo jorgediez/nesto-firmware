@@ -50,6 +50,17 @@ press gesture as an `input` event, including the double press in standby or
 off, which doesn't wake the display and is there for automations.
 `client demo` prints both.
 
+Home Assistant's notifications pop up on the panel, waking it as their
+priority says, and wait in a list the home screen opens
+([PROTOCOL.md](PROTOCOL.md) section 14). The ring chooses an action or
+Dismiss, a press sends it, and a long press keeps the notification for later.
+`client demo` sends one to try:
+
+```bash
+scripts/dev.sh client demo --notify "Someone is at the door" --title "Front door" \
+  --icon door --priority high --action open=Open --action ignore=Ignore
+```
+
 With Home Assistant's `auto_brightness` (on unless it's turned off), the
 light sensor scales the brightness: the configured one in a lit room, down to
 a quarter of it in the dark (5% at least), the standby clock too. It dims over
@@ -60,7 +71,8 @@ After 30 seconds without input (or what Home Assistant sets) the display
 fades to standby, a clock at 20% (analog or digital, as Home Assistant
 sets), once the panel knows the time; until then, dark. The ring, a press or
 someone near wakes it, and the input that wakes it does nothing else
-([PROTOCOL.md](PROTOCOL.md) section 13). Home Assistant's `wake_on_motion`
+([PROTOCOL.md](PROTOCOL.md) section 13). It wakes to the top of the home
+screen: the Notifications entry while there are any, else the first item. Home Assistant's `wake_on_motion`
 setting turns waking on someone near off; `client demo --no-motion` tries it.
 
 The simulator listens for Home Assistant on port 6170 and announces itself over

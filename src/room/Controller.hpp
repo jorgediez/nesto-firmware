@@ -59,7 +59,9 @@ struct Intent {
 
 /// Everything the screens need to draw, rebuilt after each change.
 struct RoomView {
-  enum class Screen { Empty, Home, Item, Settings, Confirm, About };
+  // Notifications and Notice come from room/Notifications: the list, and one
+  // notification, popped up or opened from the list.
+  enum class Screen { Empty, Home, Item, Settings, Confirm, About, Notifications, Notice };
   struct Entry {
     std::string name;
     std::string summary;
@@ -89,9 +91,15 @@ struct RoomView {
   int control_count = 0;
   bool available = true;
 
-  // Confirm: how to answer. About: the lines to show.
+  // Confirm and Notice: how to answer. About: the lines to show.
   std::string prompt;
   std::vector<std::string> lines;
+
+  // Notice: the title is item_name, with icon and tone.
+  std::string message;
+  std::vector<std::string> choices;  // the actions, then Dismiss
+  int choice = 0;
+  int scroll = 0;  // lines of the message scrolled past
 };
 
 /// What the Settings menu asks of the rest of the panel.
@@ -99,6 +107,7 @@ struct SettingsActions {
   std::function<void()> open_pairing;  // Pair with Home Assistant
   std::function<void()> forget;        // Forget Home Assistant, once confirmed
   std::function<std::vector<std::string>()> about;
+  std::function<void()> open_notifications;  // the home screen's Notifications entry
 };
 
 /// The panel's controls for a room: which screen is shown, what the ring and
@@ -128,6 +137,12 @@ class Controller {
   explicit Controller(Send send, SettingsActions actions = {});
 
   void set_connected(bool connected);
+  /// How many notifications are kept, and how many unread: with any, the
+  /// home screen starts with a Notifications entry.
+  void set_notifications(int count, int unread);
+  /// The display woke from rest: back to the top of the home screen, so the
+  /// Notifications entry, when there is one, is what shows first.
+  void go_home();
   bool apply_layout(const Json& message, std::string& error);
   void apply_states(const Json& message);
   /// Home Assistant couldn't carry out an intent: show its state again.
@@ -164,6 +179,8 @@ class Controller {
   void open_settings();
   void leave_settings();
   int home_count() const;
+  /// 1 while the home screen starts with the Notifications entry, else 0.
+  int notices_entry() const { return notification_count_ > 0 ? 1 : 0; }
   const Item* open_item() const;
   const Item* selected_item() const;
   ItemState shown(const std::string& key) const;
@@ -184,6 +201,8 @@ class Controller {
   SettingsActions actions_;
   Room room_;
   bool connected_ = false;
+  int notification_count_ = 0;
+  int notification_unread_ = 0;
 
   RoomView::Screen screen_ = RoomView::Screen::Empty;
   int selected_ = 0;

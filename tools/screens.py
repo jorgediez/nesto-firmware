@@ -40,6 +40,12 @@ SCREENS = {
     "standby-analog": f"{SETTLE} w3500",
     "standby-digital": f"{SETTLE} w3500",
     "standby-digital-12h": f"{SETTLE} w3500",
+    # Notifications, sent right after synchronising (NOTICES below).
+    "notice": f"{SETTLE} r+1 w300",
+    "notice-critical": f"{SETTLE} w300",
+    # The selection stays on the light it was on; the entry is just above.
+    "home-notifications": f"{SETTLE} r-1 w300",
+    "notifications": f"{SETTLE} r-1 p r+1 w300",
 }
 
 # Settings for the screens that need some, as Home Assistant sends them.
@@ -54,6 +60,41 @@ CONFIGS = {
         "standby": {"clock": {"style": "digital", "seconds": True}},
         "locale": {"hour12": True},
     },
+}
+
+DOOR = {
+    "nid": "door",
+    "title": "Front door",
+    "message": "Someone is at the door",
+    "icon": "door",
+    "priority": "high",
+    "duration_s": 0,
+    "actions": [{"id": "open", "label": "Open"}, {"id": "ignore", "label": "Ignore"}],
+}
+LEAK = {
+    "nid": "leak",
+    "title": "Water leak",
+    "message": "The sensor under the kitchen sink is wet. Turn the water off at the main valve"
+    " and check the pipes under the sink before using it again.",
+    "icon": "water",
+    "priority": "critical",
+}
+LOW = [
+    {
+        "nid": "wash",
+        "title": "Washing machine",
+        "message": "The wash has finished",
+        "priority": "low",
+    },
+    {"nid": "bins", "message": "Bins go out tonight", "priority": "low"},
+]
+
+# Notifications for the screens that need some: each after so many seconds.
+NOTICES = {
+    "notice": [(0, DOOR)],
+    "notice-critical": [(0, LEAK)],
+    "home-notifications": [(0, n) for n in LOW],
+    "notifications": [(0, n) for n in LOW],
 }
 
 # The "accents" screen gets a room of its own, named with letters beyond ASCII,
@@ -106,6 +147,7 @@ async def serve_demo(port: int, process: subprocess.Popen, name: str) -> None:
                 await client.receive()
         room = DemoRoom()
         room.config = CONFIGS.get(name)
+        room.notices = NOTICES.get(name, [])
         await room.serve(client)
     except (asyncio.IncompleteReadError, ConnectionError):
         pass  # the panel saved its screenshot and quit

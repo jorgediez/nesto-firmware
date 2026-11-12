@@ -87,6 +87,27 @@ TEST_CASE("the home screen lists every item with its state") {
   CHECK(v.entries[5].summary == "612 ppm");
 }
 
+TEST_CASE("waking goes back to the top of the home screen") {
+  Fixture f;
+  f.select(3);
+  f.press();  // a scene: stays on the home screen
+  f.select(1);
+  f.press();  // the climate's screen
+  REQUIRE(f.view().screen == RoomView::Screen::Item);
+  f.controller.go_home();
+  CHECK(f.view().screen == RoomView::Screen::Home);
+  CHECK(f.view().selected == 0);
+
+  // With notifications, their entry is the top.
+  f.select(7);
+  f.press();  // Settings
+  f.controller.set_notifications(2, 1);
+  f.controller.go_home();
+  CHECK(f.view().screen == RoomView::Screen::Home);
+  CHECK(f.view().selected == 0);
+  CHECK(f.view().entries[0].name == "Notifications");
+}
+
 TEST_CASE("before any layout the screen is empty") {
   Controller c([](const Intent&) {});
   CHECK(c.view().screen == RoomView::Screen::Empty);
