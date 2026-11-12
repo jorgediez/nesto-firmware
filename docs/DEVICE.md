@@ -141,7 +141,7 @@ line. The backlight is `/sys/class/backlight/3-0036`, from 0 to 120.
 
 | Device | Name | What it is |
 |---|---|---|
-| `/dev/input/event0` | `pwm-beeper` | The beeper: sound events, so Nesto could click |
+| `/dev/input/event0` | `pwm-beeper` | The beeper: tone events, one tone at a time, no volume |
 | `/dev/input/event1` | `avago-adbs-a330` | The ring: an optical sensor, relative `REL_X` |
 | `/dev/input/event2` | `twl4030_pwrbutton` | The press: `KEY_POWER` (116) |
 
@@ -403,6 +403,21 @@ controls faintly in room light. While dark, new frames wait, and waking puts
 the latest back, then turns the backlight on at once. The ring, a press, or
 someone near wakes it (below); the input that wakes it does nothing else.
 Until there's a clock to show, standby is dark.
+
+### Sound
+
+The beeper is an input device, `pwm-beeper` (`/dev/input/event0`), taking
+tone events: a frequency in Hz starts a tone, 0 stops it. It plays one tone
+at a time and has no volume control. Nesto finds it by name, stops any tone
+when it exits, and runs silent without it.
+
+`scripts/dev.sh device-run <nest-ip> sound-test` plays candidate sounds,
+naming each. Chosen by ear on 2026-11-12:
+
+- the click: 2000 Hz for 2 ms, on each tick of the ring and, if turned on,
+  on pressing the display;
+- `short`: 2500 Hz for 150 ms;
+- `alert`: 3200 and 2400 Hz in turn, five tones of 150 ms.
 
 ### The standby clock
 

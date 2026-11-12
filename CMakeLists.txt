@@ -70,6 +70,7 @@ add_library(nesto_room STATIC
   src/room/AutoBrightness.cpp
   src/room/Sensors.cpp
   src/room/Notifications.cpp
+  src/room/Sound.cpp
   src/room/Room.cpp
 )
 target_include_directories(nesto_room PUBLIC src)

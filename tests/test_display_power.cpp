@@ -41,6 +41,9 @@ TEST_CASE("the config's defaults are the protocol's example, and missing fields 
   CHECK_FALSE(empty.clock_seconds);
   CHECK(empty.clock_date);
   CHECK_FALSE(empty.hour12);
+  CHECK(empty.ring_click);
+  CHECK_FALSE(empty.press_click);
+  CHECK(empty.notification_sound);
 
   const DisplayConfig c = DisplayConfig::from_config(Json::parse(R"({
     "t": "config",
@@ -48,7 +51,8 @@ TEST_CASE("the config's defaults are the protocol's example, and missing fields 
                 "wake_on_input_when_off": false, "auto_brightness": false},
     "standby": {"mode": "off", "brightness": 5,
                 "clock": {"style": "digital", "seconds": true, "date": false}},
-    "locale": {"language": "es", "hour12": true}
+    "locale": {"language": "es", "hour12": true},
+    "sound": {"ring_click": false, "press_click": true, "notifications": false}
   })"));
   CHECK(c.brightness == 55);
   CHECK(c.timeout_s == 12);
@@ -61,6 +65,9 @@ TEST_CASE("the config's defaults are the protocol's example, and missing fields 
   CHECK(c.clock_seconds);
   CHECK_FALSE(c.clock_date);
   CHECK(c.hour12);
+  CHECK_FALSE(c.ring_click);
+  CHECK(c.press_click);
+  CHECK_FALSE(c.notification_sound);
   CHECK(DisplayConfig::from_config(c.to_config()) == c);  // stored and read back
 }
 

@@ -61,6 +61,14 @@ scripts/dev.sh client demo --notify "Someone is at the door" --title "Front door
   --icon door --priority high --action open=Open --action ignore=Ignore
 ```
 
+The thermostat's beeper clicks on each tick of the ring and, if Home
+Assistant turns it on, on pressing the display; notifications beep, a
+critical one every 30 seconds until it's answered, and `identify` beeps
+three times while the backlight pulses ([PROTOCOL.md](PROTOCOL.md) sections
+12, 14 and 18). The simulator logs its tones instead. `client demo
+--press-click`, `--no-ring-click` and `--no-notification-sound` try the
+settings.
+
 With Home Assistant's `auto_brightness` (on unless it's turned off), the
 light sensor scales the brightness: the configured one in a lit room, down to
 a quarter of it in the dark (5% at least), the standby clock too. It dims over

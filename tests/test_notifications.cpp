@@ -50,6 +50,7 @@ TEST_CASE("notify requests are checked") {
   CHECK(Notification::parse(Json{{"nid", "door-1"}, {"message", "Someone is at the door"}}, n, error));
   CHECK(n.priority == Priority::Normal);
   CHECK(n.duration_s == 15);
+  CHECK(n.beep == Notification::Beep::Short);
 
   const Json full = Json::parse(R"({"nid": "door-1", "title": "Front door", "message": "Hi", "icon": "door",
       "priority": "critical", "duration_s": 0, "beep": "alert",
@@ -57,12 +58,14 @@ TEST_CASE("notify requests are checked") {
   REQUIRE(Notification::parse(full, n, error));
   CHECK(n.priority == Priority::Critical);
   CHECK(n.duration_s == 0);
+  CHECK(n.beep == Notification::Beep::Alert);
   REQUIRE(n.actions.size() == 2);
   CHECK(n.actions[1].label == "Ignore");
 
   for (const char* bad : {R"({"message": "no nid"})", R"({"nid": "a"})", R"({"nid": "a", "message": ""})",
                           R"({"nid": "a", "message": "m", "priority": "urgent"})",
                           R"({"nid": "a", "message": "m", "duration_s": -1})",
+                          R"({"nid": "a", "message": "m", "beep": "loud"})",
                           R"({"nid": "a", "message": "m", "actions": [{"id": "x"}]})",
                           R"({"nid": "a", "message": "m", "actions": [{"id": "1", "label": "1"},
                              {"id": "2", "label": "2"}, {"id": "3", "label": "3"}, {"id": "4", "label": "4"}]})"}) {
@@ -255,6 +258,20 @@ TEST_CASE("the same nid replaces, and the list keeps ten") {
   // "a" went first; the critical one, older than the rest, stayed.
   CHECK(entries.back().name == "Title alarm");
   for (const auto& e : entries) CHECK(e.name != "Title a");
+}
+
+TEST_CASE("a critical one with a beep waits for an answer") {
+  Fixture f;
+  f.n.add(make("a"), true, 0);
+  CHECK_FALSE(f.n.critical_waiting());
+  Notification quiet = make("quiet", Priority::Critical);
+  quiet.beep = Notification::Beep::None;
+  f.n.add(quiet, true, 0);
+  CHECK_FALSE(f.n.critical_waiting());
+  f.n.add(make("alarm", Priority::Critical), true, 0);
+  CHECK(f.n.critical_waiting());
+  f.n.press();  // dismissed
+  CHECK_FALSE(f.n.critical_waiting());
 }
 
 TEST_CASE("clearing removes without events") {

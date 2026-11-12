@@ -30,6 +30,10 @@ constexpr Millis kRestingWait = 100;
 // Auto brightness waits for a change of this many points, so the screen
 // doesn't keep shifting.
 constexpr int kAutoStep = 5;
+// How long identify pulses the backlight; its beeps take as long.
+constexpr Millis kIdentifyTime = 3000;
+// A critical notification's alert repeats this often (PROTOCOL.md section 14).
+constexpr Millis kAlertRepeat = 30000;
 
 // Where the display settings are kept, in the state directory.
 constexpr const char* kDisplayConfigFile = "display.json";
@@ -155,7 +159,7 @@ bool App::init() {
   info_.caps = {{"display", {{"width", kScreenSize}, {"height", kScreenSize}, {"shape", "round"}}},
                 {"input", {"ring", "press"}},
                 {"sensors", sensors},
-                {"beeper", false},
+                {"beeper", hal_.has_beeper()},
                 {"image_formats", protocol::Json::array()},
                 {"ota", false}};
 
@@ -186,7 +190,8 @@ int App::run() {
     // and waking takes at most that long. Not while it fades, which would
     // then go in steps.
     const bool resting = display_power_.state() != room::DisplayState::Active && !gestures_.busy() &&
-                         !backlight_.moving(hal_.now());
+                         !backlight_.moving(hal_.now()) && !sound_.playing() &&
+                         hal_.now() >= identify_until_;
     const Millis wait = std::min<Millis>(next_timer, resting ? kRestingWait : kMaxWait);
 
     // The network waits; the hardware is only checked, so neither delays
@@ -212,11 +217,28 @@ int App::run() {
       display_power_.input(hal_.now());
     }
     controller_.set_notifications(notifications_.count(), notifications_.unread());
+    update_sound();
     render();
     if (auto message = controller_.take_message()) ui_->show_toast(*message);
   }
   log::info("stopping");
   return exit_code_;
+}
+
+void App::click(Millis now) {
+  if (now - last_click_ < room::sounds::kClickGap && last_click_ != 0) return;
+  last_click_ = now;
+  hal_.click(room::sounds::kClickHz, room::sounds::kClickUs);
+}
+
+void App::update_sound() {
+  const Millis now = hal_.now();
+  // A critical notification's alert, again every 30 s until it's answered.
+  if (notifications_.critical_waiting() && now - last_alert_ >= kAlertRepeat) {
+    sound_.play(room::sounds::alert(), now);
+    last_alert_ = now;
+  }
+  if (const auto hz = sound_.tick(now)) hal_.tone(*hz);
 }
 
 void App::render() {
@@ -250,8 +272,9 @@ void App::handle(const TimedInput& input) {
       [&](const auto& event) {
         using T = std::decay_t<decltype(event)>;
         if constexpr (std::is_same_v<T, RingTurn>) {
-          // A turn that wakes the display only wakes it.
+          // A turn that wakes the display only wakes it, without a click.
           if (!display_power_.input(input.at)) return;
+          if (display_power_.config().ring_click) click(input.at);
           if (!notifications_.active()) {
             notice_ticks_ = 0;
             controller_.rotate(event.ticks, input.at);
@@ -267,7 +290,10 @@ void App::handle(const TimedInput& input) {
           // While active, a press is activity. While resting, it's the
           // gesture that decides: a single press or a hold wakes the display,
           // a double press doesn't (PROTOCOL.md section 13).
-          if (display_power_.state() == room::DisplayState::Active) display_power_.input(input.at);
+          if (display_power_.state() == room::DisplayState::Active) {
+            display_power_.input(input.at);
+            if (event.down && display_power_.config().press_click) click(input.at);
+          }
           handle(event.down ? gestures_.on_down(input.at, press_context()) : gestures_.on_up(input.at));
         } else if constexpr (std::is_same_v<T, Presence>) {
           const bool resting = display_power_.state() != room::DisplayState::Active;
@@ -427,6 +453,13 @@ void App::notify(protocol::PanelSession& session, const protocol::Message& m) {
     display_power_.notification(n.priority != room::Priority::Normal, hal_.now());
     apply_display();
   }
+  // Its beep, unless notifications are silenced; a critical one always.
+  const bool critical = n.priority == room::Priority::Critical;
+  if (n.beep != room::Notification::Beep::None && (display_power_.config().notification_sound || critical)) {
+    sound_.play(n.beep == room::Notification::Beep::Alert ? room::sounds::alert() : room::sounds::short_beep(),
+                hal_.now());
+    if (critical) last_alert_ = hal_.now();
+  }
   notifications_.add(std::move(n), display_power_.state() == room::DisplayState::Active, hal_.now());
 }
 
@@ -474,7 +507,12 @@ bool App::on_message(protocol::PanelSession& session, const protocol::Message& m
     return true;
   }
   if (m.type == "identify" && m.is_request()) {
+    // Lit, pulsing and beeping for a few seconds, to find which panel it is.
+    display_power_.set(room::DisplayState::Active, hal_.now());
+    apply_display();
     ui_->show_toast("Hello from Home Assistant");
+    identify_until_ = hal_.now() + kIdentifyTime;
+    sound_.play(room::sounds::identify(), hal_.now());
     session.send(protocol::result_ok(*m.id));
     return true;
   }
@@ -604,7 +642,9 @@ void App::update_auto_brightness() {
 
 void App::update_backlight() {
   const Millis t = hal_.now();
-  const int level = backlight_.level(t);
+  int level = backlight_.level(t);
+  // Identifying: between full and a third, four times a second.
+  if (t < identify_until_ && level > 0 && (t / 250) % 2 == 1) level = std::max(1, level / 3);
   if (level != backlight_level_) {
     hal_.set_backlight(level);
     backlight_level_ = level;

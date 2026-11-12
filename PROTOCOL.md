@@ -514,7 +514,7 @@ flash so it can sleep, wake and show the clock before HA connects.
     "carousel": {"interval_s": 15}
   },
   "locale": {"language": "es", "hour12": false},
-  "sound": {"click": true, "notifications": true}
+  "sound": {"ring_click": true, "press_click": false, "notifications": true}
 }
 ```
 
@@ -531,8 +531,9 @@ flash so it can sleep, wake and show the clock before HA connects.
 | `standby.carousel.interval_s` | Seconds per image, minimum 5. |
 | `locale.language` | Language for the panel's own texts (`"en"`, `"es"`, …), falling back to English. |
 | `locale.hour12` | 12-hour clock. |
-| `sound.click` | Click when the ring turns or the display is pressed. |
-| `sound.notifications` | Allow notifications to beep. |
+| `sound.ring_click` | Click on each tick of the ring while the display is active. Default true. The turn that wakes the display doesn't click, and a fast turn clicks at most every 15 ms. |
+| `sound.press_click` | Click when the display is pressed down while it's active. Default false. |
+| `sound.notifications` | Allow notifications to beep. Default true. |
 
 ## 13. Display power
 
@@ -643,8 +644,10 @@ On the panel:
   interrupted only by a critical one, and is back on screen once that's
   answered. A pop-up that comes over the list goes back to the list once it's
   answered or its time is up.
-- `beep` is accepted, and ignored until the panel has sound (`hello.caps.beeper`
-  is false).
+- `beep` plays when the notification arrives, unless `sound.notifications` is
+  false; a critical one beeps regardless. A critical notification whose
+  `beep` isn't `"none"` plays its alert again every 30 seconds until it's
+  answered or dismissed, also while the display rests.
 
 **H→P `notify_clear`** (event) removes notifications:
 `{"t": "notify_clear", "nid": "door-1"}`, or `{"t": "notify_clear", "all": true}`.
@@ -780,7 +783,7 @@ them to anything.
 |---|---|---|---|
 | `ping` / `pong` | Both | Event | `{"t": "ping", "seq": 5}` answered by `{"t": "pong", "seq": 5}`. HA pings every 20 seconds. In an authenticated session, either side closes the connection after 60 seconds without receiving any frame. Before authentication the timeouts in sections 5 and 6 apply instead. |
 | `info` | H→P | Request | Result carries `uptime_s`, `free_ram_kb`, `wifi_rssi`, `ip`, `fw`, `base_connected` and `base_fw`, for HA's diagnostic entities. |
-| `identify` | H→P | Request | Flashes the screen and beeps for a few seconds. |
+| `identify` | H→P | Request | Wakes the display, pulses the backlight and beeps three times, over about 3 seconds. |
 | `reboot` | H→P | Request | The panel answers, then reboots. |
 | `unpair` | H→P | Request | See section 6.3. |
 
