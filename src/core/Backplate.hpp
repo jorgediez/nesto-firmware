@@ -25,6 +25,7 @@ enum Type : std::uint16_t {
   kFetPresence = 0x0004,    // which terminals have wires
   kPirRaw = 0x0005,         // the far-field motion sensor, while someone moves; all zero after
   kProximity = 0x0007,      // how near someone is, about every second
+  kLight = 0x000a,          // the ambient light sensor, about every second
   kState = 0x000b,          // voltages: input, operating, battery
   kTfeVersion = 0x0018,
   kTfeBuildInfo = 0x0019,
@@ -100,6 +101,15 @@ std::optional<Climate> decode_climate(const std::vector<std::uint8_t>& payload);
 /// "near pir msg N, threshold 15", so 15 or more means someone is near.
 std::optional<int> decode_proximity(const std::vector<std::uint8_t>& payload);
 constexpr int kNearThreshold = 15;
+
+/// A kLight payload, 4 bytes: a 16-bit value and a byte, meanings still to
+/// measure (docs/BACKPLATE.md). The first after start-up, 00 00 64 00, is no
+/// reading: empty.
+struct LightRaw {
+  int value = 0;  // bytes 0-1
+  int extra = 0;  // byte 2
+};
+std::optional<LightRaw> decode_light(const std::vector<std::uint8_t>& payload);
 
 /// A frame's payload as text, for kAscii and the version replies.
 std::string text(const Frame& frame);

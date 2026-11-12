@@ -131,6 +131,13 @@ std::optional<int> decode_proximity(const std::vector<std::uint8_t>& payload) {
   return static_cast<int>(u16(&payload[0]));
 }
 
+std::optional<LightRaw> decode_light(const std::vector<std::uint8_t>& payload) {
+  if (payload.size() < 4) return std::nullopt;
+  LightRaw light{static_cast<int>(u16(&payload[0])), payload[2]};
+  if (light.value == 0 && light.extra == 100) return std::nullopt;
+  return light;
+}
+
 std::string text(const Frame& frame) {
   std::string out;
   for (std::uint8_t c : frame.payload) {

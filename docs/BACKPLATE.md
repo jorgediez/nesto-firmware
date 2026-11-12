@@ -141,6 +141,7 @@ With the stock software stopped, as for any run:
 
 ```bash
 scripts/dev.sh device-run <nest-ip> backplate-test   # 3 minutes; every frame, decoded
+scripts/dev.sh device-run <nest-ip> light-test       # 3 minutes; light readings, backlight off/full every 10 s
 ```
 
 Nesto itself talks to the backplate in every run (`--no-backplate` turns

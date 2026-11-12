@@ -147,6 +147,7 @@ scripts/dev.sh device-check <nest-ip>             # the report goes to device-re
 scripts/dev.sh device-screen <nest-ip> trial      # stop the stock software for 5 minutes, watch, restart it
 scripts/dev.sh device-run <nest-ip> input-test    # print what the ring and the press send
 scripts/dev.sh device-run <nest-ip> backplate-test  # talk to the backplate, printing every frame
+scripts/dev.sh device-run <nest-ip> light-test      # light sensor readings, backlight off and on
 scripts/dev.sh device-run <nest-ip>               # run Nesto for 10 minutes, then restart the stock software
 scripts/dev.sh client --host <nest-ip> pair       # meanwhile, pair with it (then: demo)
 scripts/dev.sh device-run <nest-ip> detach        # run Nesto for an hour, apart from SSH, watching the battery
