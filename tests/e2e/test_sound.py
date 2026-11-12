@@ -43,6 +43,12 @@ def test_the_ring_clicks_but_not_when_it_wakes(tmp_path: Path) -> None:
     assert "click 2000 Hz, 2000 us" in "\n".join(lines)
 
 
+def test_the_ring_clicks_only_when_the_screen_changes(tmp_path: Path) -> None:
+    # Up from the first item: nothing to move to. Then down one, a click.
+    _, lines = serve(tmp_path, [], "r-1 w200 r+1 w300", seconds=6)
+    assert clicks(lines) == 1
+
+
 def test_pressing_clicks_only_when_turned_on(tmp_path: Path) -> None:
     _, lines = serve(tmp_path, [], "p w300", seconds=6)
     assert clicks(lines) == 0

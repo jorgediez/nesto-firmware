@@ -414,8 +414,9 @@ when it exits, and runs silent without it.
 `scripts/dev.sh device-run <nest-ip> sound-test` plays candidate sounds,
 naming each. Chosen by ear on 2026-11-12:
 
-- the click: 2000 Hz for 2 ms, on each tick of the ring and, if turned on,
-  on pressing the display;
+- the click: 2000 Hz for 2 ms, when a turn of the ring changes the screen
+  (as the stock software does: none at either end of a list or a value)
+  and, if turned on, on pressing the display;
 - `short`: 2500 Hz for 150 ms;
 - `alert`: 3200 and 2400 Hz in turn, five tones of 150 ms.
 

@@ -61,7 +61,8 @@ scripts/dev.sh client demo --notify "Someone is at the door" --title "Front door
   --icon door --priority high --action open=Open --action ignore=Ignore
 ```
 
-The thermostat's beeper clicks on each tick of the ring and, if Home
+The thermostat's beeper clicks when a turn of the ring changes the screen
+(the next item, the next value; nothing at either end) and, if Home
 Assistant turns it on, on pressing the display; notifications beep, a
 critical one every 30 seconds until it's answered, and `identify` beeps
 three times while the backlight pulses ([PROTOCOL.md](PROTOCOL.md) sections

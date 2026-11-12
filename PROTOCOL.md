@@ -531,7 +531,7 @@ flash so it can sleep, wake and show the clock before HA connects.
 | `standby.carousel.interval_s` | Seconds per image, minimum 5. |
 | `locale.language` | Language for the panel's own texts (`"en"`, `"es"`, …), falling back to English. |
 | `locale.hour12` | 12-hour clock. |
-| `sound.ring_click` | Click on each tick of the ring while the display is active. Default true. The turn that wakes the display doesn't click, and a fast turn clicks at most every 15 ms. |
+| `sound.ring_click` | Click when a turn of the ring changes what the screen shows, while the display is active: the next item in a list, the next value. Default true. Nothing changes at either end of a list or a value, so no click there either. The turn that wakes the display doesn't click, and a fast turn clicks at most every 15 ms. |
 | `sound.press_click` | Click when the display is pressed down while it's active. Default false. |
 | `sound.notifications` | Allow notifications to beep. Default true. |
 

@@ -77,6 +77,8 @@ class App : private protocol::SessionEvents {
   void send_display_state(room::DisplayState state, int brightness, const char* cause);
   /// A click, unless one just played.
   void click(Millis now);
+  /// What the ring changes on screen, to click only when a turn changes it.
+  std::string ring_view() const;
   /// Moves the beeper along the pattern playing, and repeats a critical
   /// notification's alert.
   void update_sound();

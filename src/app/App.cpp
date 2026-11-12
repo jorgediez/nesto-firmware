@@ -225,6 +225,12 @@ int App::run() {
   return exit_code_;
 }
 
+std::string App::ring_view() const {
+  const room::RoomView v = notifications_.active() ? notifications_.view() : controller_.view();
+  return std::to_string(static_cast<int>(v.screen)) + "|" + std::to_string(v.selected) + "|" + v.value +
+         "|" + std::to_string(v.choice) + "|" + std::to_string(v.scroll);
+}
+
 void App::click(Millis now) {
   if (now - last_click_ < room::sounds::kClickGap && last_click_ != 0) return;
   last_click_ = now;
@@ -274,18 +280,24 @@ void App::handle(const TimedInput& input) {
         if constexpr (std::is_same_v<T, RingTurn>) {
           // A turn that wakes the display only wakes it, without a click.
           if (!display_power_.input(input.at)) return;
-          if (display_power_.config().ring_click) click(input.at);
+          // A click only when the turn changes what the screen shows, so
+          // it's felt as much as heard: none at either end of a list or a
+          // value.
+          const std::string before = ring_view();
           if (!notifications_.active()) {
             notice_ticks_ = 0;
             controller_.rotate(event.ticks, input.at);
-            return;
+          } else {
+            // A notification's choices, a click at a time.
+            if ((notice_ticks_ > 0 && event.ticks < 0) || (notice_ticks_ < 0 && event.ticks > 0)) {
+              notice_ticks_ = 0;
+            }
+            notice_ticks_ += event.ticks;
+            const int clicks = notice_ticks_ / kTicksPerClick;
+            notice_ticks_ -= clicks * kTicksPerClick;
+            notifications_.rotate(clicks);
           }
-          // A notification's choices, a click at a time.
-          if ((notice_ticks_ > 0 && event.ticks < 0) || (notice_ticks_ < 0 && event.ticks > 0)) notice_ticks_ = 0;
-          notice_ticks_ += event.ticks;
-          const int clicks = notice_ticks_ / kTicksPerClick;
-          notice_ticks_ -= clicks * kTicksPerClick;
-          notifications_.rotate(clicks);
+          if (display_power_.config().ring_click && ring_view() != before) click(input.at);
         } else if constexpr (std::is_same_v<T, ButtonEdge>) {
           // While active, a press is activity. While resting, it's the
           // gesture that decides: a single press or a hold wakes the display,
