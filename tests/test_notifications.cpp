@@ -197,6 +197,32 @@ TEST_CASE("newer pop-ups come first, but don't push a critical one aside") {
   CHECK(f.n.unread() == 1);  // c, in the list
 }
 
+TEST_CASE("only a critical one interrupts one opened from the list") {
+  Fixture f;
+  f.n.add(make("a", Priority::Low), true, 0);
+  f.n.open_list();
+  f.n.press();  // opened
+  REQUIRE(f.n.view().screen == Screen::Notice);
+  f.n.add(make("b"), true, 100);
+  CHECK(f.n.view().item_name == "Title a");  // still reading
+  f.n.add(make("alarm", Priority::Critical), true, 200);
+  CHECK(f.n.view().item_name == "Title alarm");
+  CHECK(f.take() == Events{"a shown", "alarm shown"});
+  // Answered: back to the list, not to the room.
+  f.n.press();
+  CHECK(f.n.view().screen == Screen::Notifications);
+  CHECK(f.take() == Events{"alarm dismissed"});
+  f.n.long_press();
+  CHECK_FALSE(f.n.active());
+
+  // A pop-up over the list goes back to it too.
+  f.n.open_list();
+  f.n.add(make("c"), true, 300);
+  CHECK(f.n.view().screen == Screen::Notice);
+  f.n.tick(300 + 15000);
+  CHECK(f.n.view().screen == Screen::Notifications);
+}
+
 TEST_CASE("the same nid replaces, and the list keeps ten") {
   Fixture f;
   f.n.add(make("a"), false, 0);

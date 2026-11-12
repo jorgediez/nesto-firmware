@@ -637,7 +637,9 @@ On the panel:
   display rest as usual and pops up again when it wakes.
 - The home screen starts with a Notifications entry while any are kept,
   showing how many are unread. It opens the list, newest first, where a press
-  opens one and a long press goes back.
+  opens one and a long press goes back. A notification opened there is
+  interrupted only by a critical one. A pop-up that comes over the list goes
+  back to the list once it's answered or its time is up.
 - `beep` is accepted, and ignored until the panel has sound (`hello.caps.beeper`
   is false).
 

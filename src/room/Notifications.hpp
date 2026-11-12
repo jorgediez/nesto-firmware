@@ -43,7 +43,9 @@ struct Notification {
 ///   actions and Dismiss, and a press sends the choice: either removes it.
 ///   A long press closes it, keeping it in the list, except a critical one.
 /// - The list, newest first, opens from the home screen; a press opens a
-///   notification, a long press goes back.
+///   notification, a long press goes back. A notification opened from it is
+///   interrupted only by a critical one; a pop-up over the list goes back to
+///   the list once it's done.
 class Notifications {
  public:
   static constexpr std::size_t kKept = 10;
@@ -118,6 +120,7 @@ class Notifications {
   int scroll_ = 0;
   int scroll_limit_ = 0;
   Millis now_ = 0;  // the last time seen, for pop-ups that follow others
+  bool back_to_list_ = false;  // the pop-up came over the list
   unsigned version_ = 1;
 };
 

@@ -130,7 +130,9 @@ void Notifications::add(Notification n, bool lit, Millis now) {
     Kept* shown = mode_ == Mode::Popup ? current() : nullptr;
     const bool keep_shown = shown && shown->n.nid != nid && shown->n.priority == Priority::Critical &&
                             k.n.priority != Priority::Critical;
-    if (!keep_shown && mode_ != Mode::Open) pop_up(nid, now);
+    // One opened from the list isn't interrupted, except by a critical one.
+    const bool reading = mode_ == Mode::Open && current_ != nid;
+    if (!keep_shown && (!reading || k.n.priority == Priority::Critical)) pop_up(nid, now);
   }
   if (current_ == nid) {
     // Replaced while on screen: the new one, from the start.
@@ -147,6 +149,8 @@ void Notifications::pop_up(const std::string& nid, Millis now) {
     // Pushed aside without an answer: a timed one has had its time.
     if (Kept* old = current(); old && !untimed(old->n)) event(old->n.nid, "expired");
   }
+  // Over the list, or one opened from it: back to the list afterwards.
+  if (mode_ == Mode::List || mode_ == Mode::Open) back_to_list_ = true;
   mode_ = Mode::Popup;
   current_ = nid;
   shown_at_ = now;
@@ -177,6 +181,11 @@ void Notifications::after_popup(Millis now) {
       return;
     }
   }
+  if (back_to_list_ && !kept_.empty()) {
+    mode_ = Mode::List;
+    selected_ = std::clamp(selected_, 0, count() - 1);
+  }
+  back_to_list_ = false;
 }
 
 void Notifications::remove(const std::string& nid) {
@@ -323,6 +332,7 @@ void Notifications::display_rested() {
     }
   }
   if (mode_ != Mode::None) close_current();
+  back_to_list_ = false;
 }
 
 void Notifications::display_woke(Millis now) {
