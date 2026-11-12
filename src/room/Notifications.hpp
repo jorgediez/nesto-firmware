@@ -24,6 +24,7 @@ struct Notification {
   std::string icon;
   Priority priority = Priority::Normal;
   unsigned duration_s = 15;  // 0: on screen until answered
+  enum class Beep { None, Short, Alert } beep = Beep::Short;
   std::vector<Action> actions;
 
   /// From a `notify` request; false with `error` set if it's not valid.
@@ -84,6 +85,9 @@ class Notifications {
   void set_scroll_limit(int lines);
 
   int count() const { return static_cast<int>(kept_.size()); }
+  /// A critical notification with a beep is waiting for an answer: its alert
+  /// repeats every 30 s (PROTOCOL.md section 14).
+  bool critical_waiting() const;
   int unread() const;
   /// The screen to draw while active().
   RoomView view() const;

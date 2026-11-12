@@ -32,6 +32,9 @@ struct DisplayConfig {
   bool clock_seconds = false;
   bool clock_date = true;
   bool hour12 = false;  // locale.hour12
+  bool ring_click = true;           // sound.ring_click: a click on each tick of the ring
+  bool press_click = false;         // sound.press_click: a click on pressing the display
+  bool notification_sound = true;   // sound.notifications: notifications may beep
 
   /// From a whole `config` message; anything missing or out of range takes
   /// the default. Unknown fields are ignored.

@@ -179,7 +179,7 @@ run_max() {
   local arg
   for arg in "$@"; do
     case "$arg" in
-      --no-backplate | --input-test)
+      --no-backplate | --input-test | --sound-test)
         echo "$TAKE_MAX"
         return
         ;;

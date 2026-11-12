@@ -89,7 +89,19 @@ bool Notification::parse(const protocol::Json& body, Notification& out, std::str
       out.actions.push_back(std::move(action));
     }
   }
-  // `beep` is accepted and ignored: the panel doesn't beep yet.
+  if (const auto it = body.find("beep"); it != body.end() && !it->is_null()) {
+    const std::string b = it->is_string() ? it->get<std::string>() : "";
+    if (b == "none") {
+      out.beep = Beep::None;
+    } else if (b == "short") {
+      out.beep = Beep::Short;
+    } else if (b == "alert") {
+      out.beep = Beep::Alert;
+    } else {
+      error = "beep must be none, short or alert";
+      return false;
+    }
+  }
   return true;
 }
 
@@ -101,6 +113,12 @@ Notifications::Kept* Notifications::find(const std::string& nid) {
 }
 
 Notifications::Kept* Notifications::current() { return current_.empty() ? nullptr : find(current_); }
+
+bool Notifications::critical_waiting() const {
+  return std::any_of(kept_.begin(), kept_.end(), [](const Kept& k) {
+    return k.n.priority == Priority::Critical && k.n.beep != Notification::Beep::None;
+  });
+}
 
 int Notifications::unread() const {
   return static_cast<int>(std::count_if(kept_.begin(), kept_.end(), [](const Kept& k) { return !k.read; }));

@@ -43,6 +43,7 @@ void print_usage(const char* program) {
       "  --input-test        print the ring's and the press's events, for measuring the ring\n"
       "  --backplate-test    talk to the backplate alone, printing every frame\n"
       "  --light-test        print the light sensor's readings, switching the backlight\n"
+      "  --sound-test        play candidate clicks and beeps, saying which is which\n"
       "  --no-backplate      don't talk to the backplate (it resets the thermostat after ~30 min)\n"
       "  --power-steal       set the backplate's power steal mode after the handshake\n",
       nesto::NestOptions{}.ring.counts_per_tick);
@@ -69,6 +70,7 @@ int main(int argc, char** argv) {
   bool input_test = false;
   bool backplate_test = false;
   bool light_test = false;
+  bool sound_test = false;
 #endif
 
   for (int i = 1; i < argc; ++i) {
@@ -146,6 +148,10 @@ int main(int argc, char** argv) {
       light_test = true;
       continue;
     }
+    if (arg == "--sound-test") {
+      sound_test = true;
+      continue;
+    }
     if (arg == "--backplate-test") {
       backplate_test = true;
       continue;
@@ -171,6 +177,7 @@ int main(int argc, char** argv) {
   auto hal = std::make_unique<nesto::NestHal>(options);
   if (input_test) return hal->input_test();
   if (backplate_test) return hal->backplate_test();
+  if (sound_test) return hal->sound_test();
   if (light_test) return hal->light_test();
 #endif
 

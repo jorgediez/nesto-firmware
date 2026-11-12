@@ -49,6 +49,10 @@ class SimHal : public Hal {
   void set_backlight(int percent) override;
   bool has_base() const override { return options_.fake_base; }
   BaseReadings base() const override;
+  // No speaker: tones and clicks go to the log, for tests.
+  bool has_beeper() const override { return true; }
+  void tone(int hz) override;
+  void click(int hz, int us) override;
 
  private:
   void play_script(std::vector<TimedInput>& out);

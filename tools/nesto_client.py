@@ -312,7 +312,8 @@ class DemoRoom:
                     continue
                 request_id = 9000 + i
                 notify_ids.add(request_id)
-                await client.send({"t": "notify", "id": request_id, **notice})
+                # A notify, or another request such as identify.
+                await client.send({"t": "notify", **notice, "id": request_id})
                 if self.log:
                     print(f"notify: {notice.get('nid')}", flush=True)
 
@@ -452,6 +453,11 @@ async def _demo(args: argparse.Namespace) -> None:
             "clock": {"style": args.clock, "seconds": args.seconds},
         },
         "locale": {"hour12": args.hour12},
+        "sound": {
+            "ring_click": not args.no_ring_click,
+            "press_click": args.press_click,
+            "notifications": not args.no_notification_sound,
+        },
     }
     if args.notify:
         notice: dict = {
@@ -514,6 +520,13 @@ def main() -> None:
         type=int,
         default=20,
         help="the backlight in standby, 0 to 100 (default: 20)",
+    )
+    demo.add_argument("--no-ring-click", action="store_true", help="no click on turning the ring")
+    demo.add_argument("--press-click", action="store_true", help="a click on pressing the display")
+    demo.add_argument(
+        "--no-notification-sound",
+        action="store_true",
+        help="notifications don't beep, except critical ones",
     )
     notify = demo.add_argument_group("a notification, sent once while serving the room")
     notify.add_argument("--notify", metavar="MESSAGE", help="its message")

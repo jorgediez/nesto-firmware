@@ -115,6 +115,16 @@ void SimHal::poll(std::vector<TimedInput>& out, Millis timeout) {
   }
 }
 
+void SimHal::tone(int hz) {
+  if (hz > 0) {
+    log::info("tone %d Hz", hz);
+  } else {
+    log::info("tone off");
+  }
+}
+
+void SimHal::click(int hz, int us) { log::info("click %d Hz, %d us", hz, us); }
+
 BaseReadings SimHal::base() const {
   BaseReadings out;
   if (!options_.fake_base) return out;

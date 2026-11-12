@@ -57,6 +57,14 @@ class Hal {
   virtual bool has_base() const { return false; }
   /// What the base reports now.
   virtual BaseReadings base() const { return {}; }
+
+  /// Whether there's a beeper: a single tone at a time, no volume.
+  virtual bool has_beeper() const { return false; }
+  /// Starts a tone of `hz`, or stops it with 0.
+  virtual void tone(int /*hz*/) {}
+  /// A click: a tone of `hz` for `us` microseconds, played at once, as the
+  /// main loop's step is too coarse for something this short.
+  virtual void click(int /*hz*/, int /*us*/) {}
 };
 
 }  // namespace nesto

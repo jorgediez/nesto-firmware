@@ -65,6 +65,10 @@ DisplayConfig DisplayConfig::from_config(const protocol::Json& config) {
   out.clock_seconds = flag(clock, "seconds", out.clock_seconds);
   out.clock_date = flag(clock, "date", out.clock_date);
   out.hour12 = flag(section(config, "locale"), "hour12", out.hour12);
+  const protocol::Json& sound = section(config, "sound");
+  out.ring_click = flag(sound, "ring_click", out.ring_click);
+  out.press_click = flag(sound, "press_click", out.press_click);
+  out.notification_sound = flag(sound, "notifications", out.notification_sound);
   return out;
 }
 
@@ -83,7 +87,9 @@ protocol::Json DisplayConfig::to_config() const {
          {{"style", clock_style == ClockStyle::Digital ? "digital" : "analog"},
           {"seconds", clock_seconds},
           {"date", clock_date}}}}},
-      {"locale", {{"hour12", hour12}}}};
+      {"locale", {{"hour12", hour12}}},
+      {"sound",
+       {{"ring_click", ring_click}, {"press_click", press_click}, {"notifications", notification_sound}}}};
 }
 
 bool DisplayConfig::operator==(const DisplayConfig& o) const {
@@ -91,7 +97,9 @@ bool DisplayConfig::operator==(const DisplayConfig& o) const {
          timeout_s == o.timeout_s && wake_on_motion == o.wake_on_motion &&
          wake_on_input_when_off == o.wake_on_input_when_off && standby_mode == o.standby_mode &&
          standby_brightness == o.standby_brightness && clock_style == o.clock_style &&
-         clock_seconds == o.clock_seconds && clock_date == o.clock_date && hour12 == o.hour12;
+         clock_seconds == o.clock_seconds && clock_date == o.clock_date && hour12 == o.hour12 &&
+         ring_click == o.ring_click && press_click == o.press_click &&
+         notification_sound == o.notification_sound;
 }
 
 const char* name(DisplayState state) {

@@ -28,6 +28,7 @@ constexpr const char* kBacklights = "/sys/class/backlight";
 // The input devices' names, as the kernel reports them (docs/DEVICE.md).
 constexpr const char* kRingName = "avago-adbs-a330";
 constexpr const char* kPressName = "twl4030_pwrbutton";
+constexpr const char* kBeeperName = "pwm-beeper";
 constexpr const char* kBackplate = "/dev/ttyO2";
 // How often a run logs the backplate's readings.
 constexpr Millis kBackplateReport = 60000;
@@ -114,6 +115,10 @@ NestHal::NestHal(NestOptions options)
     : options_(options), ring_ticks_(options.ring), backplate_(options.session) {}
 
 NestHal::~NestHal() {
+  if (beeper_fd_ >= 0) {
+    tone(0);  // never left sounding
+    close(beeper_fd_);
+  }
   hand_back_backplate();
   if (!backlight_.empty() && backlight_before_ >= 0) write_int(backlight_, backlight_before_);
   if (fb_) munmap(fb_, fb_size_);
@@ -126,6 +131,7 @@ bool NestHal::init() {
   catch_quit_signals();
   if (!open_framebuffer() || !open_inputs()) return false;
   open_backlight();
+  open_beeper();
   const RingTicks::Config& ring = ring_ticks_.config();
   log::info("the ring: %d counts per tick, clockwise %s", ring.counts_per_tick,
             ring.reverse ? "negative" : "positive");
@@ -317,6 +323,92 @@ void NestHal::report_backplate(bool verbose) {
               near_readings_, near_highest_, near_count_, backplate::kNearThreshold, far_frames_, far_moving_);
     near_readings_ = near_highest_ = near_count_ = far_frames_ = far_moving_ = 0;
   }
+}
+
+void NestHal::open_beeper() {
+  for (int i = 0; i < 16 && beeper_fd_ < 0; ++i) {
+    char path[32];
+    std::snprintf(path, sizeof path, "/dev/input/event%d", i);
+    const int fd = open(path, O_RDWR | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0) continue;
+    char found[64] = "";
+    ioctl(fd, EVIOCGNAME(sizeof found - 1), found);
+    if (std::strcmp(found, kBeeperName) == 0) {
+      log::info("%s is %s", path, kBeeperName);
+      beeper_fd_ = fd;
+    } else {
+      close(fd);
+    }
+  }
+  if (beeper_fd_ < 0) log::warn("no %s: no sound", kBeeperName);
+}
+
+void NestHal::tone(int hz) {
+  if (beeper_fd_ < 0) return;
+  input_event events[2]{};
+  events[0].type = EV_SND;
+  events[0].code = SND_TONE;
+  events[0].value = std::max(0, hz);
+  events[1].type = EV_SYN;
+  events[1].code = SYN_REPORT;
+  if (write(beeper_fd_, events, sizeof events) != static_cast<ssize_t>(sizeof events)) {
+    log::warn("%s: %s", kBeeperName, std::strerror(errno));
+  }
+}
+
+void NestHal::click(int hz, int us) {
+  if (beeper_fd_ < 0) return;
+  tone(hz);
+  usleep(static_cast<useconds_t>(std::clamp(us, 0, 10000)));
+  tone(0);
+}
+
+int NestHal::sound_test() {
+  open_beeper();
+  if (beeper_fd_ < 0) return 1;
+  auto say = [](const char* text) {
+    std::printf("%s\n", text);
+    std::fflush(stdout);
+  };
+  auto pause = [](int ms) { usleep(static_cast<useconds_t>(ms) * 1000); };
+  // Clicks, ten in a row as a turn of the ring makes them.
+  struct Click {
+    const char* name;
+    int hz;
+    int us;
+  };
+  const Click clicks[] = {{"click A: 4000 Hz, 1 ms", 4000, 1000}, {"click B: 4000 Hz, 3 ms", 4000, 3000},
+                          {"click C: 2000 Hz, 2 ms", 2000, 2000}, {"click D: 6000 Hz, 1 ms", 6000, 1000},
+                          {"click E: 3000 Hz, 5 ms", 3000, 5000}};
+  for (const Click& c : clicks) {
+    say(c.name);
+    for (int i = 0; i < 10; ++i) {
+      click(c.hz, c.us);
+      pause(70);
+    }
+    pause(1500);
+  }
+  // Beeps: on for so long, then off for so long, in turn.
+  struct Beep {
+    const char* name;
+    std::vector<int> steps;  // hz, ms, hz, ms...; 0 Hz is silence
+  };
+  const Beep beeps[] = {{"short A: 2000 Hz, 100 ms", {2000, 100}},
+                        {"short B: 2500 Hz, 150 ms", {2500, 150}},
+                        {"alert A: 2700 Hz, 3 x 150 ms", {2700, 150, 0, 100, 2700, 150, 0, 100, 2700, 150}},
+                        {"alert B: 3200/2400 Hz, 3 x 150 ms",
+                         {3200, 150, 2400, 150, 3200, 150, 2400, 150, 3200, 150}}};
+  for (const Beep& b : beeps) {
+    say(b.name);
+    for (std::size_t i = 0; i + 1 < b.steps.size(); i += 2) {
+      tone(b.steps[i]);
+      pause(b.steps[i + 1]);
+    }
+    tone(0);
+    pause(2000);
+  }
+  say("done");
+  return 0;
 }
 
 bool NestHal::open_inputs() {

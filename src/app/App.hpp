@@ -16,6 +16,7 @@
 #include "room/DisplayPower.hpp"
 #include "room/Notifications.hpp"
 #include "room/Sensors.hpp"
+#include "room/Sound.hpp"
 #include "room/StandbyClock.hpp"
 
 namespace nesto {
@@ -74,6 +75,13 @@ class App : private protocol::SessionEvents {
   void load_time();
   void store_time() const;
   void send_display_state(room::DisplayState state, int brightness, const char* cause);
+  /// A click, unless one just played.
+  void click(Millis now);
+  /// What the ring changes on screen, to click only when a turn changes it.
+  std::string ring_view() const;
+  /// Moves the beeper along the pattern playing, and repeats a critical
+  /// notification's alert.
+  void update_sound();
   /// Draws what changed: a notification screen while one is open, else the
   /// room's.
   void render();
@@ -124,6 +132,10 @@ class App : private protocol::SessionEvents {
   room::BacklightFade backlight_;
   room::AutoBrightness auto_brightness_;
   room::Sensors sensors_;
+  room::SoundPlayer sound_;
+  Millis last_click_ = 0;
+  Millis last_alert_ = 0;      // a critical notification's last alert
+  Millis identify_until_ = 0;  // identify pulses the backlight until then
   int backlight_level_ = -1;  // what the hardware was last set to
   // How the last fade went, logged at its end: steps written, the longest
   // gap between them and the longest write.

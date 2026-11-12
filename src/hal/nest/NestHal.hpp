@@ -49,6 +49,14 @@ class NestHal : public Hal {
   bool set_wall_clock(std::int64_t utc_ms) override;
   bool has_base() const override { return options_.backplate; }
   BaseReadings base() const override;
+  bool has_beeper() const override { return beeper_fd_ >= 0; }
+  void tone(int hz) override;
+  void click(int hz, int us) override;
+
+  /// For choosing the sounds: plays candidate clicks and beeps on the
+  /// beeper, saying which is which, then exits. Leaves the screen, ring,
+  /// press and backlight alone. Returns the exit code.
+  int sound_test();
 
   /// Prints the ring's and the press's raw events, and the ticks the ring's
   /// make, until interrupted: for measuring the ring. Leaves the screen and
@@ -68,6 +76,8 @@ class NestHal : public Hal {
 
  private:
   bool open_inputs();
+  /// The beeper, if there is one: without it Nesto runs silent.
+  void open_beeper();
   bool open_framebuffer();
   void open_backlight();
   bool open_backplate();
@@ -87,6 +97,7 @@ class NestHal : public Hal {
   RingTicks ring_ticks_;
   long ring_total_ = 0;  // raw counts since the start, for input_test()
 
+  int beeper_fd_ = -1;
   int fb_fd_ = -1;
   std::uint8_t* fb_ = nullptr;
   std::size_t fb_size_ = 0;
