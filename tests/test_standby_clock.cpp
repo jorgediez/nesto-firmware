@@ -86,7 +86,7 @@ TEST_CASE("the face's text: 24 and 12 hours, seconds, the date") {
   CHECK(clock_face(at(7, 0), false, false).time == "07:00");
 
   face = clock_face(at(14, 5, 9), true, false);
-  CHECK(face.time == "2:05");
+  CHECK(face.time == "02:05");
   CHECK(face.suffix == "PM");
   CHECK(clock_face(at(0, 30), true, false).time == "12:30");
   CHECK(clock_face(at(0, 30), true, false).suffix == "AM");

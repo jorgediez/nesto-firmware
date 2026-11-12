@@ -112,7 +112,7 @@ lv_obj_t* make_cells(lv_obj_t* parent, const lv_font_t* font, lv_color_t colour,
 /// Shows `text` in the cells: each digit centred in a cell as wide as the
 /// widest digit, other characters at their own width. The font's digits
 /// differ in width ("1" is narrow), so with this nothing moves as the time
-/// changes, only when it gains or loses a digit.
+/// changes.
 template <std::size_t N>
 void set_cells(std::array<lv_obj_t*, N>& cells, const lv_font_t* font, const std::string& text) {
   const std::int32_t digit = widest_digit(font);

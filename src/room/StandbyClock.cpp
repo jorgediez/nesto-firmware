@@ -66,10 +66,9 @@ ClockFace clock_face(const LocalTime& t, bool hour12, bool seconds) {
   if (hour12) {
     face.suffix = t.hour < 12 ? "AM" : "PM";
     hour = t.hour % 12 == 0 ? 12 : t.hour % 12;
-    std::snprintf(text, sizeof text, "%d:%02d", hour, t.minute);
-  } else {
-    std::snprintf(text, sizeof text, "%02d:%02d", hour, t.minute);
   }
+  // Two digits for the hour on a 12-hour clock too: it never changes width.
+  std::snprintf(text, sizeof text, "%02d:%02d", hour, t.minute);
   face.time = text;
   if (seconds) {
     std::snprintf(text, sizeof text, ":%02d", t.second);

@@ -56,7 +56,7 @@ enum class ClockStyle { Analog, Digital };
 
 /// The clock face's text and hands for one local time.
 struct ClockFace {
-  std::string time;     // "14:05", or "2:05" on a 12-hour clock
+  std::string time;     // "14:05", or "02:05" on a 12-hour clock
   std::string seconds;  // ":09" with seconds, else empty
   std::string suffix;   // "AM" or "PM" on a 12-hour clock, else empty
   std::string date;     // "Wed 11 Nov"
