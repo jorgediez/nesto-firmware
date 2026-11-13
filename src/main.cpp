@@ -53,6 +53,7 @@ void print_usage(const char* program) {
       "  --state-dir DIR     where the pairing key is kept (default %s)\n"
       "  --panel-id ID       panel ID instead of the network interface's MAC address\n"
       "  --no-mdns           don't announce the panel on the network\n"
+      "  --hold-for-stock    held in the first 3 s, exit with 3 (for the boot script)\n"
       "  --version           print the version and exit\n"
       "  --help              print this and exit\n",
       default_state_dir().c_str());
@@ -99,6 +100,10 @@ int main(int argc, char** argv) {
     }
     if (arg == "--no-mdns") {
       app_options.mdns = false;
+      continue;
+    }
+    if (arg == "--hold-for-stock") {
+      app_options.hold_for_stock = true;
       continue;
     }
     if (arg == "--panel-id" && has_value) {

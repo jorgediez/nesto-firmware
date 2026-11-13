@@ -33,7 +33,14 @@ struct AppOptions {
   std::string state_dir;      // where the pairing key is kept
   std::string panel_id;       // empty: the network interface's MAC address
   bool mdns = true;           // announce the panel for Home Assistant's discovery
+  // Holding the display in the first seconds exits with kHeldExit, for the
+  // boot script to give the thermostat back to the stock software
+  // (scripts/nesto-boot.sh).
+  bool hold_for_stock = false;
 };
+
+/// The exit code when the display was held as Nesto started.
+constexpr int kHeldExit = 3;
 
 /// Ties the hardware, LVGL, the screens and the connection to Home Assistant
 /// together, and runs the main loop.
@@ -75,6 +82,9 @@ class App : private protocol::SessionEvents {
   void load_time();
   void store_time() const;
   void send_display_state(room::DisplayState state, int brightness, const char* cause);
+  /// With hold_for_stock: quits with kHeldExit once the display has been
+  /// held long enough.
+  void check_hold();
   /// A click, unless one just played.
   void click(Millis now);
   /// What the ring changes on screen, to click only when a turn changes it.
@@ -136,6 +146,8 @@ class App : private protocol::SessionEvents {
   Millis last_click_ = 0;
   Millis last_alert_ = 0;      // a critical notification's last alert
   Millis identify_until_ = 0;  // identify pulses the backlight until then
+  Millis hold_window_until_ = 0;  // with hold_for_stock: holding counts until then
+  Millis held_since_ = 0;         // the display has been held since then, 0 if not
   int backlight_level_ = -1;  // what the hardware was last set to
   // How the last fade went, logged at its end: steps written, the longest
   // gap between them and the longest write.

@@ -35,7 +35,7 @@ class Ui {
   void set_status(const std::string& text);
 
   /// A short message at the bottom, for a moment.
-  void show_toast(const std::string& text);
+  void show_toast(const std::string& text, std::uint32_t ms = 0);  // 0: the usual time
 
   /// Full screen, over everything else, while Home Assistant pairs.
   void show_pairing_code(const std::string& code);

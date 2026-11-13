@@ -62,6 +62,15 @@ class Panel:
                 self._process.kill()
         self._process = None
 
+    def wait_exit(self, timeout: float = 10) -> int | None:
+        """The exit code once the panel exits by itself, or None if it's still
+        running after `timeout` seconds."""
+        assert self._process
+        try:
+            return self._process.wait(timeout)
+        except subprocess.TimeoutExpired:
+            return None
+
     def restart(self) -> None:
         self.stop()
         self.start()

@@ -45,6 +45,15 @@ TEST_CASE("m: someone comes near") {
   CHECK(std::get<nesto::Presence>(script->events[2].event).far);  // f: moving in the room
 }
 
+TEST_CASE("hN: a hold of N milliseconds") {
+  std::string error;
+  auto script = parse_input_script("h2000", error);
+  REQUIRE(script);
+  REQUIRE(script->events.size() == 2);
+  CHECK(script->events[1].offset == 2000);
+  CHECK(script->duration == 2120);
+}
+
 TEST_CASE("lN: a light sensor reading") {
   std::string error;
   auto script = parse_input_script("l100 w500 l2000", error);

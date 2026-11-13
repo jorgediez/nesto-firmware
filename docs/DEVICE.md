@@ -485,3 +485,51 @@ scripts/dev.sh device-run <nest-ip> detach 2700
 scripts/dev.sh client --host <nest-ip> demo     # in another terminal
 scripts/dev.sh device-log <nest-ip> follow      # and the log in a third
 ```
+
+## Installing Nesto for good
+
+`scripts/dev.sh device-install <nest-ip>` copies Nesto and two scripts to
+`/nesto` (on `/`, where programs may run and stay: `/media/scratch` is
+emptied at boot), and adds one line to `/etc/inittab`, keeping a copy of it
+as `/etc/inittab.nesto-backup`:
+
+```
+::respawn:/bin/sh /nesto/nesto-boot.sh
+```
+
+No other stock file changes. busybox `init` runs the line once the stock
+start-up is done (`rcS`, which ends by starting monit, which starts
+`nlclient`), and again whenever it exits. `nesto-boot.sh` waits for
+`nlclient`, has monit stop watching it and stops it, as a run does, then runs
+Nesto. monit forgets that on every boot (its state is in RAM), which is why
+it's done at each one.
+
+Getting the stock software back:
+
+- **For good, or until said otherwise:** `scripts/dev.sh device-mode
+  <nest-ip> stock`, kept on the flash (`/media/data/nesto/stock`) across
+  reboots; `device-mode <nest-ip> nesto` undoes it.
+- **Without the network:** hold the display while "Hold to start Nest" shows,
+  in the first 3 seconds after Nesto starts (1.5 s of holding): the stock
+  software until the next boot. A reboot is the way back to Nesto then.
+- **By itself:** if Nesto exits 3 times within 10 minutes, the stock software
+  runs until the next boot, so a broken Nesto doesn't keep the thermostat
+  from working.
+- **Uninstalled:** `scripts/dev.sh device-uninstall <nest-ip>` takes the line
+  out, gives back, and removes `/nesto`; Nesto's settings and log stay in
+  `/media/data/nesto`.
+
+`scripts/dev.sh device-install <nest-ip> update` puts a new Nesto in place in
+one step and restarts it. `device-run` and its tests still work with Nesto
+installed: the service gives way first and comes back afterwards (after a
+detached run, with `device-mode <nest-ip> nesto`).
+
+Nesto's log is `/media/data/nesto/nesto.log`, with the boot script's own
+lines; to spare the flash it's kept under 256 KB, the older part in
+`nesto.log.1`. `scripts/dev.sh device-status <nest-ip>` shows the mode, what
+runs, Nesto's exits this boot, the memory, the battery and the log's end.
+
+Before calling it done, it runs a day on the base: no reboots, no exits,
+memory steady and the battery holding, which also answers whether
+`nlsleepd` ever suspends the thermostat without `nlclient`.
+
