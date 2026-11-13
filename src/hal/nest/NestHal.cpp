@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <linux/fb.h>
 #include <linux/input.h>
+#include <linux/kd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/select.h>
@@ -122,6 +123,7 @@ NestHal::~NestHal() {
   hand_back_backplate();
   if (!backlight_.empty() && backlight_before_ >= 0) write_int(backlight_, backlight_before_);
   if (fb_) munmap(fb_, fb_size_);
+  release_console();
   for (int fd : {fb_fd_, ring_fd_, press_fd_, backplate_fd_}) {
     if (fd >= 0) close(fd);
   }
@@ -130,6 +132,11 @@ NestHal::~NestHal() {
 bool NestHal::init() {
   catch_quit_signals();
   if (!open_framebuffer() || !open_inputs()) return false;
+  claim_console();
+  // If the console had blanked it already, as after 10 minutes in text mode.
+  if (ioctl(fb_fd_, FBIOBLANK, FB_BLANK_UNBLANK) != 0) {
+    log::warn("%s: can't unblank: %s", kFramebuffer, std::strerror(errno));
+  }
   open_backlight();
   open_beeper();
   const RingTicks::Config& ring = ring_ticks_.config();
@@ -415,6 +422,40 @@ bool NestHal::open_inputs() {
   ring_fd_ = open_input(kRingName);
   press_fd_ = open_input(kPressName);
   return ring_fd_ >= 0 && press_fd_ >= 0;
+}
+
+void NestHal::claim_console() {
+  // The kernel's text console shares the screen: without this it blanks it
+  // after 10 minutes without console input (consoleblank=600), which this
+  // LCD shows as a white flash and then black, whatever Nesto draws. In
+  // graphics mode it neither blanks nor draws, as for the stock software
+  // ("arm display: VT Mode: 1").
+  for (const char* path : {"/dev/tty0", "/dev/tty1"}) {
+    tty_fd_ = open(path, O_RDWR | O_NOCTTY | O_CLOEXEC);
+    if (tty_fd_ >= 0) break;
+  }
+  if (tty_fd_ < 0) {
+    log::warn("no console to put in graphics mode: %s", std::strerror(errno));
+    return;
+  }
+  int mode = KD_TEXT;
+  if (ioctl(tty_fd_, KDGETMODE, &mode) == 0) tty_mode_before_ = mode;
+  if (ioctl(tty_fd_, KDSETMODE, KD_GRAPHICS) != 0) {
+    log::warn("console: can't set graphics mode: %s", std::strerror(errno));
+    // Blanking off, at least: setterm -blank 0.
+    const char off[] = "\033[9;0]";
+    if (write(tty_fd_, off, sizeof off - 1) < 0) log::warn("console: %s", std::strerror(errno));
+  } else {
+    log::info("console in graphics mode (was %s)", tty_mode_before_ == KD_TEXT ? "text" : "graphics");
+  }
+}
+
+void NestHal::release_console() {
+  if (tty_fd_ < 0) return;
+  // As it was found, for the stock software, which sets it again itself.
+  if (tty_mode_before_ >= 0) ioctl(tty_fd_, KDSETMODE, tty_mode_before_);
+  close(tty_fd_);
+  tty_fd_ = -1;
 }
 
 bool NestHal::open_framebuffer() {

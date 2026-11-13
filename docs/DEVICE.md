@@ -529,6 +529,15 @@ lines; to spare the flash it's kept under 256 KB, the older part in
 `nesto.log.1`. `scripts/dev.sh device-status <nest-ip>` shows the mode, what
 runs, Nesto's exits this boot, the memory, the battery and the log's end.
 
+The kernel's text console shares the screen. Left in text mode, it blanks
+the screen after 10 minutes without console input (`consoleblank` is 600),
+which the LCD shows as a white flash, then black, while Nesto goes on drawing
+and lighting it: the first long installed run showed exactly that. The stock
+software puts the console in graphics mode as it starts (its log says
+`arm display: VT Mode: 1`), and so does Nesto now (`console in graphics
+mode`), unblanking the screen once in case it was already blanked, and
+putting the console back as it found it on exit.
+
 Before calling it done, it runs a day on the base: no reboots, no exits,
 memory steady and the battery holding, which also answers whether
 `nlsleepd` ever suspends the thermostat without `nlclient`.

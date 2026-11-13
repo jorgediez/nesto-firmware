@@ -79,6 +79,10 @@ class NestHal : public Hal {
   /// The beeper, if there is one: without it Nesto runs silent.
   void open_beeper();
   bool open_framebuffer();
+  /// Puts the kernel's console in graphics mode, so it neither blanks the
+  /// screen nor draws on it; release_console() puts it back.
+  void claim_console();
+  void release_console();
   void open_backlight();
   bool open_backplate();
   /// Reads what the backplate sent, moves the session on, and sends what it
@@ -98,6 +102,8 @@ class NestHal : public Hal {
   long ring_total_ = 0;  // raw counts since the start, for input_test()
 
   int beeper_fd_ = -1;
+  int tty_fd_ = -1;
+  int tty_mode_before_ = -1;  // the console's mode as found
   int fb_fd_ = -1;
   std::uint8_t* fb_ = nullptr;
   std::size_t fb_size_ = 0;
