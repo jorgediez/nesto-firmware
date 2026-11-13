@@ -58,10 +58,20 @@ case "$1" in
   monit_stop) kill $(pidof nlclient) ;;
 esac
 EOF
+# monit: watches nlclient or not; refuses while busy, as the real one does
+# while it starts nlclient at boot ("Other action already in progress").
 cat > /usr/sbin/monit << 'EOF'
 #!/bin/sh
+state=/tmp/monit-nlclient
+[ -f $state ] || echo Running > $state
+busy() { [ -f /tmp/monit-busy-until ] && [ "$(cut -d. -f1 /proc/uptime)" -lt "$(cat /tmp/monit-busy-until)" ]; }
 case "$1" in
+  unmonitor)
+    if busy; then echo "monit: Other action already in progress" >&2; exit 1; fi
+    echo "Not monitored" > $state ;;
+  monitor) echo Running > $state ;;
   start) pidof nlclient > /dev/null || /etc/init.d/nestlabs monit_start ;;
+  summary) echo "Process 'nlclient'                   $(cat $state)" ;;
 esac
 EOF
 # Nesto: runs until TERM, or exits at once with 1 (a crash) or 3 (held).
@@ -90,11 +100,31 @@ grep -q "^::respawn:/bin/sh /nesto/nesto-boot.sh$" /etc/inittab && ok "install: 
 [ "$(cat /etc/inittab.nesto-backup)" = "$(printf '::sysinit:/etc/init.d/rcS\n::shutdown:/etc/init.d/rcH')" ] &&
   ok "install: the copy is the original" || fail "install: the copy isn't the original"
 
-# --- init's respawn, standing in ---
+# --- monit's daemon, standing in: it starts nlclient while it watches it ---
+(while [ ! -f /tmp/stop-init ]; do
+  if [ "$(cat /tmp/monit-nlclient 2> /dev/null)" != "Not monitored" ] && ! pidof nlclient > /dev/null; then
+    /etc/init.d/nestlabs monit_start
+  fi
+  sleep 2
+done) > /dev/null 2>&1 &
+
+# --- init's respawn, standing in, at a boot with monit busy for 8 s ---
+echo $(( $(cut -d. -f1 /proc/uptime) + 8 )) > /tmp/monit-busy-until
 (while [ ! -f /tmp/stop-init ]; do sh $BOOT; sleep 1; done) > /dev/null 2>&1 &
 
-check "boot: Nesto runs" nesto_running
+within 25 nesto_running && ok "boot, monit busy: Nesto runs" || fail "boot, monit busy: Nesto runs"
 check "boot: nlclient stopped" nlclient_stopped
+# monit agreed before nlclient stopped, so it doesn't start it again.
+sleep 5
+nlclient_stopped && ok "boot, monit busy: nlclient stays stopped" ||
+  fail "boot, monit busy: monit started nlclient again"
+
+# --- nlclient back anyway, while Nesto runs: stopped again ---
+echo Running > /tmp/monit-nlclient
+within 5 nlclient_running && ok "comeback: monit starts nlclient" || fail "comeback: monit didn't start it"
+within 15 nlclient_stopped && ok "comeback: stopped again" || fail "comeback: nlclient still running"
+check "comeback: logged" logged "nlclient came back while Nesto runs"
+nesto_running && ok "comeback: Nesto still runs" || fail "comeback: Nesto stopped"
 logged "fake nesto: --hold-for-stock" && ok "boot: Nesto may be held for the stock software" ||
   fail "boot: no --hold-for-stock"
 

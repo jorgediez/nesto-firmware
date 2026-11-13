@@ -90,8 +90,30 @@ wait_for_nlclient() {
   return 1
 }
 
+# Whether monit says it no longer watches nlclient.
+unwatched() {
+  "$MONIT" summary 2> /dev/null | grep "'nlclient'" | grep -qi "not monitored"
+}
+
+# Asks monit to stop watching nlclient until it says it has: while it's busy,
+# starting nlclient at boot, it refuses ("Other action already in progress"),
+# and a refusal unnoticed means monit starts nlclient again after it stops.
+unwatch() {
+  local i=0
+  while [ "$i" -lt "${NESTO_UNWATCH_TRIES:-45}" ]; do
+    "$MONIT" unmonitor nlclient > /dev/null 2>&1
+    unwatched && return 0
+    sleep 2
+    i=$((i + 1))
+  done
+  return 1
+}
+
 take() {
-  "$MONIT" unmonitor nlclient > /dev/null 2>&1
+  if ! unwatch; then
+    log "monit kept watching nlclient"
+    return 1
+  fi
   nlclient_pid > /dev/null || return 0
   "$NESTLABS" monit_stop > /dev/null 2>&1
   local i
@@ -156,12 +178,23 @@ service() {
   rm -f "$PID_FILE"
   touch "$STARTED"
   log "starting Nesto"
-  # The log stays small while Nesto runs.
-  (while sleep 600; do trim_log; done) &
-  local trimmer=$! code
+  # While Nesto runs: the log stays small, and if nlclient comes back anyway,
+  # monit is told again and it's stopped, so they never share the screen.
+  (
+    n=0
+    while sleep 10; do
+      if nlclient_pid > /dev/null; then
+        log "nlclient came back while Nesto runs: stopping it"
+        take || log "couldn't stop nlclient"
+      fi
+      n=$((n + 1))
+      [ $((n % 60)) = 0 ] && trim_log
+    done
+  ) &
+  local keeper=$! code
   "$NESTO" --hold-for-stock >> "$LOG" 2>&1
   code=$?
-  kill $trimmer 2> /dev/null
+  kill $keeper 2> /dev/null
   log "Nesto exited with $code"
   if [ -f "$STOCK" ] || [ -f "$GIVEN" ]; then
     give
