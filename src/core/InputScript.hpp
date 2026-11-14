@@ -27,6 +27,7 @@ struct InputScript {
 ///   r+N / r-N  turn the ring N steps clockwise / anticlockwise (50 ms)
 ///   p          press and release (80 ms down, then 120 ms)
 ///   h          hold for a long press (900 ms down, then 120 ms)
+///   hN         hold for N milliseconds (then 120 ms)
 ///   m          someone comes near (50 ms)
 ///   f          someone moves in the room, for the far-field sensor (50 ms)
 ///   lN         the light sensor reads N: 100 dark, 2000 a lit room (no time)

@@ -40,9 +40,10 @@ std::optional<InputScript> parse_input_script(std::string_view script, std::stri
       const int steps = static_cast<int>(arg.front() == '-' ? -value : value);
       out.events.push_back({t, RingTurn{steps * kTicksPerClick}});
       t += kTurnTime;
-    } else if ((kind == 'p' || kind == 'h') && arg.empty()) {
+    } else if ((kind == 'p' && arg.empty()) ||
+               (kind == 'h' && (arg.empty() || (parse_number(arg, value) && value > 0)))) {
       out.events.push_back({t, ButtonEdge{true}});
-      t += kind == 'p' ? kPressDown : kHoldDown;
+      t += kind == 'p' ? kPressDown : (arg.empty() ? kHoldDown : static_cast<Millis>(value));
       out.events.push_back({t, ButtonEdge{false}});
       t += kAfterRelease;
     } else if ((kind == 'm' || kind == 'f') && arg.empty()) {

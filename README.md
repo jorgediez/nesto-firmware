@@ -193,6 +193,21 @@ scripts/dev.sh device-log <nest-ip> [follow]      # that run's log, into device-
 scripts/dev.sh check-report                       # run the device scripts in busybox, as CI does
 ```
 
+To keep Nesto on the thermostat for good, started at every boot
+([docs/DEVICE.md](docs/DEVICE.md), "Installing Nesto for good"):
+
+```bash
+scripts/dev.sh device-install <nest-ip>           # install it, and start it
+scripts/dev.sh device-install <nest-ip> update    # a new Nesto, after a change
+scripts/dev.sh device-status <nest-ip>            # the mode, what runs, Nesto's log
+scripts/dev.sh device-mode <nest-ip> stock        # the stock software from now on (nesto: back)
+scripts/dev.sh device-uninstall <nest-ip>         # the stock software back for good
+```
+
+Holding the display while "Hold to start Nest" shows, in the first seconds
+after Nesto starts, gives the thermostat to the stock software until the next
+boot.
+
 `nesto-probe` (`src/probe/`), the check's program, is built with the rest and
 tested natively and under QEMU. What a real thermostat showed is in
 [docs/DEVICE.md](docs/DEVICE.md).

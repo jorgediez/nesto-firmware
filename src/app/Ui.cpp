@@ -513,15 +513,17 @@ bool Ui::clock_shown() const {
   return !lv_obj_is_hidden(clock_);
 }
 
-void Ui::show_toast(const std::string& text) {
+void Ui::show_toast(const std::string& text, std::uint32_t ms) {
+  if (ms == 0) ms = kToastTime;
   set_text(toast_, text);
   lv_obj_set_hidden(toast_, false);
   lv_obj_set_hidden(footer_, true);
   if (toast_timer_) {
+    lv_timer_set_period(toast_timer_, ms);
     lv_timer_reset(toast_timer_);
     return;
   }
-  toast_timer_ = lv_timer_create(&Ui::hide_toast, kToastTime, this);
+  toast_timer_ = lv_timer_create(&Ui::hide_toast, ms, this);
   lv_timer_set_repeat_count(toast_timer_, 1);
 }
 

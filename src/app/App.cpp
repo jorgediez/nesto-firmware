@@ -30,6 +30,10 @@ constexpr Millis kRestingWait = 100;
 // Auto brightness waits for a change of this many points, so the screen
 // doesn't keep shifting.
 constexpr int kAutoStep = 5;
+// With --hold-for-stock: how long after starting a hold counts, and how long
+// the display must be held.
+constexpr Millis kHoldWindow = 3000;
+constexpr Millis kHoldTime = 1500;
 // How long identify pulses the backlight; its beeps take as long.
 constexpr Millis kIdentifyTime = 3000;
 // A critical notification's alert repeats this often (PROTOCOL.md section 14).
@@ -179,7 +183,20 @@ bool App::init() {
   log::info("Nesto %s started: panel %s, %s, state in %s", NESTO_VERSION, info_.panel_id.c_str(),
             pairing_->paired() ? "paired" : "not paired", options_.state_dir.c_str());
   update_status();
+  if (options_.hold_for_stock) {
+    hold_window_until_ = hal_.now() + kHoldWindow;
+    ui_->show_toast("Hold to start Nest", static_cast<std::uint32_t>(kHoldWindow));
+  }
   return true;
+}
+
+void App::check_hold() {
+  if (held_since_ == 0 || hal_.now() - held_since_ < kHoldTime) return;
+  log::info("the display was held as Nesto started: exiting for the stock software");
+  ui_->show_toast("Starting Nest");
+  lv_refr_now(display_);
+  quit_ = true;
+  exit_code_ = kHeldExit;
 }
 
 int App::run() {
@@ -201,6 +218,7 @@ int App::run() {
     inputs.clear();
     hal_.poll(inputs, 0);
     for (const TimedInput& input : inputs) handle(input);
+    check_hold();
     handle(gestures_.tick(hal_.now()));
     display_power_.tick(hal_.now());
     apply_display();
@@ -299,6 +317,12 @@ void App::handle(const TimedInput& input) {
           }
           if (display_power_.config().ring_click && ring_view() != before) click(input.at);
         } else if constexpr (std::is_same_v<T, ButtonEdge>) {
+          // Just started, with --hold-for-stock: a press is only a hold
+          // that may mean the stock software.
+          if (input.at < hold_window_until_ || held_since_ != 0) {
+            held_since_ = event.down && input.at < hold_window_until_ ? input.at : 0;
+            return;
+          }
           // While active, a press is activity. While resting, it's the
           // gesture that decides: a single press or a hold wakes the display,
           // a double press doesn't (PROTOCOL.md section 13).
