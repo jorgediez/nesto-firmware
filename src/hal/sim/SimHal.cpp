@@ -130,6 +130,8 @@ BaseReadings SimHal::base() const {
   if (!options_.fake_base) return out;
   out.connected = true;
   out.firmware = "simulated";
+  out.model = "Backplate-sim";
+  out.serial = "SIM0000000000000";
   out.celsius = 21.5;
   out.humidity = 45.0;
   out.light_raw = light_;

@@ -622,6 +622,8 @@ BaseReadings NestHal::base() const {
   if (!options_.backplate) return out;
   out.connected = backplate_.running();
   out.firmware = backplate_.version();
+  out.model = backplate_.model();
+  out.serial = backplate_.serial();
   if (const auto& c = backplate_.climate()) {
     out.celsius = c->celsius;
     out.humidity = c->humidity;

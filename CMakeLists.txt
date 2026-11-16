@@ -38,6 +38,7 @@ endfunction()
 # Platform-independent logic, linked into both the program and the tests.
 add_library(nesto_core STATIC
   src/core/Backplate.cpp
+  src/core/DeviceIdentity.cpp
   src/core/InputScript.cpp
   src/core/Log.cpp
   src/core/PressGestures.cpp
@@ -72,6 +73,7 @@ add_library(nesto_room STATIC
   src/room/Notifications.cpp
   src/room/Sound.cpp
   src/room/Room.cpp
+  src/room/TechInfo.cpp
 )
 target_include_directories(nesto_room PUBLIC src)
 target_link_libraries(nesto_room PUBLIC nesto_core nesto_protocol)
@@ -83,6 +85,7 @@ add_library(nesto_net STATIC
   src/net/Mdns.cpp
   src/net/NetInfo.cpp
   src/net/Server.cpp
+  src/net/Wireless.cpp
 )
 target_include_directories(nesto_net PUBLIC src)
 target_link_libraries(nesto_net PUBLIC nesto_protocol PRIVATE mdns)

@@ -110,7 +110,13 @@ the last entry on the home screen (or a press on the waiting screen), has:
   `client.key` is lost or to move to another Home Assistant;
 - **Forget**: after a confirming press, forgets Home Assistant and drops the
   connection (holding cancels);
-- **About**: version, panel ID, address and whether it's paired.
+- **Technical info**, like the stock software's, scrolled with the ring:
+  - **Nesto**: version, panel ID, port, pairing, how long it's been running, free memory;
+  - **Home Assistant**: whether it's connected, its version, the integration's version and the round trip;
+  - **Network**: Wi-Fi name, security, signal, frequency, interface, IPv4 and IPv6 addresses and routers, name servers, search domains, MAC address;
+  - **Power** and **Sensors**, with a base: battery, USB and supply voltages, temperature, humidity, light;
+  - **Display**: hardware, serial number, time zone;
+  - **Base**, with one: whether it's connected, its software, model and serial number.
 
 Hold to go back from any of them.
 

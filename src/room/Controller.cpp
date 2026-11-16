@@ -68,14 +68,14 @@ double fraction_of(double value, double lo, double hi) {
 
 // The Settings menu, in order: short names for the list, what each does
 // (shown below it), and icons.
-const char* const kSettings[] = {"Pair", "Forget", "About"};
+const char* const kSettings[] = {"Pair", "Forget", "Technical info"};
 const char* const kSettingsIcons[] = {"pair", "forget", "info"};
 const char* const kSettingsSummaries[] = {"Pair with Home Assistant", "Forget Home Assistant",
-                                          "Version and address"};
+                                          "Versions, network, sensors"};
 constexpr int kSettingsCount = 3;
 constexpr int kPair = 0;
 constexpr int kForget = 1;
-constexpr int kAbout = 2;
+constexpr int kInfo = 2;
 
 const char* label(Control control) {
   switch (control) {
@@ -366,6 +366,12 @@ void Controller::rotate(int ticks, Millis now) {
       setting_ = next;
       changed();
     }
+  } else if (screen_ == RoomView::Screen::Info) {
+    const int next = std::clamp(info_scroll_ + steps, 0, info_scroll_limit_);
+    if (next != info_scroll_) {
+      info_scroll_ = next;
+      changed();
+    }
   }
 }
 
@@ -381,9 +387,12 @@ void Controller::press(Millis now) {
         screen_ = RoomView::Screen::Confirm;
         changed();
       }
-      if (setting_ == kAbout) {
-        screen_ = RoomView::Screen::About;
+      if (setting_ == kInfo) {
+        screen_ = RoomView::Screen::Info;
+        info_scroll_ = 0;
         changed();
+        // Gathered as it opens, and then kept up to date (set_info).
+        if (actions_.open_info) actions_.open_info();
       }
       return;
     case RoomView::Screen::Confirm:
@@ -397,7 +406,7 @@ void Controller::press(Millis now) {
       screen_ = RoomView::Screen::Empty;
       changed();
       return;
-    case RoomView::Screen::About:
+    case RoomView::Screen::Info:
       screen_ = RoomView::Screen::Settings;
       changed();
       return;
@@ -460,7 +469,7 @@ void Controller::long_press(Millis now) {
       leave_settings();
       return;
     case RoomView::Screen::Confirm:
-    case RoomView::Screen::About:
+    case RoomView::Screen::Info:
       screen_ = RoomView::Screen::Settings;
       changed();
       return;
@@ -666,6 +675,20 @@ void Controller::adjust(const Item& item, Control control, int steps, Millis now
   }
 }
 
+void Controller::set_info(std::vector<InfoLine> lines) {
+  if (lines == info_) return;
+  info_ = std::move(lines);
+  if (screen_ == RoomView::Screen::Info) changed();
+}
+
+void Controller::set_info_scroll_limit(int limit) {
+  info_scroll_limit_ = std::max(0, limit);
+  if (info_scroll_ > info_scroll_limit_) {
+    info_scroll_ = info_scroll_limit_;
+    changed();
+  }
+}
+
 RoomView Controller::view() const {
   RoomView v;
   v.offline = !connected_;
@@ -685,9 +708,10 @@ RoomView Controller::view() const {
       v.item_name = "Forget Home Assistant?";
       v.prompt = "Press to forget it,\nhold to keep it";
       return v;
-    case RoomView::Screen::About:
-      v.title = "About";
-      if (actions_.about) v.lines = actions_.about();
+    case RoomView::Screen::Info:
+      v.title = "Technical info";
+      v.info = info_;
+      v.scroll = info_scroll_;
       return v;
     case RoomView::Screen::Empty:
     case RoomView::Screen::Home:
@@ -712,7 +736,7 @@ RoomView Controller::view() const {
     v.entries.push_back({item.name, summary(item, s), s.available,
                          item.icon.empty() ? fallback : item.icon, fallback, tone_for(item, s)});
   }
-  v.entries.push_back({"Settings", "Pairing and about", true, "settings", "settings",
+  v.entries.push_back({"Settings", "Pairing, technical info", true, "settings", "settings",
                        Tone::Neutral});
 
   const Item* item = open_item();

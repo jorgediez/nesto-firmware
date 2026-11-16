@@ -22,6 +22,8 @@ add_executable(nesto_tests
   test_sensors.cpp
   test_notifications.cpp
   test_sound.cpp
+  test_tech_info.cpp
+  test_wireless.cpp
 )
 target_link_libraries(nesto_tests PRIVATE nesto_core nesto_protocol nesto_net nesto_room nesto_fonts nesto_probe_checks
                                           doctest::doctest)

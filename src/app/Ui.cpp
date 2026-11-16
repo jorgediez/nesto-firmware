@@ -30,6 +30,10 @@ constexpr std::int32_t kArcScale = 1000;
 // A notification's message: four lines this wide fit inside the round screen.
 constexpr std::int32_t kNoticeWidth = 236;
 constexpr std::int32_t kNoticeLines = 4;
+// Technical info's box: this wide and tall, it stays inside the round screen
+// between the title and the footer.
+constexpr std::int32_t kInfoWidth = 220;
+constexpr std::int32_t kInfoHeight = 196;
 
 lv_color_t colour(Tone tone) {
   switch (tone) {
@@ -169,6 +173,19 @@ Ui::Ui(const Fonts& fonts) : fonts_(fonts) {
   centre_ = make_label(screen, fonts_.body, kText);
   lv_obj_center(centre_);
 
+  info_box_ = lv_obj_create(screen);
+  lv_obj_remove_style_all(info_box_);
+  lv_obj_set_size(info_box_, kInfoWidth, kInfoHeight);
+  lv_obj_set_scrollable(info_box_, false);
+  lv_obj_align(info_box_, LV_ALIGN_CENTER, 0, 6);
+  info_list_ = lv_obj_create(info_box_);
+  lv_obj_remove_style_all(info_list_);
+  lv_obj_set_size(info_list_, kInfoWidth, LV_SIZE_CONTENT);
+  lv_obj_set_scrollable(info_list_, false);
+  lv_obj_set_flex_flow(info_list_, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_row(info_list_, 6, 0);
+  lv_obj_set_hidden(info_box_, true);
+
   // A notification: icon and title above, the message in a box of four lines
   // that the ring scrolls, and the choice below.
   notice_icon_ = make_label(screen, fonts_.icon_small, kText);
@@ -268,16 +285,16 @@ void Ui::render(const room::RoomView& view) {
   notice_scroll_limit_ = 0;
   if (notice) render_notice(view);
 
-  // A message in the middle: waiting, a question, or About's lines.
+  const bool info = view.screen == Screen::Info;
+  lv_obj_set_hidden(info_box_, !info);
+  info_scroll_limit_ = 0;
+  if (info) render_info(view);
+
+  // A message in the middle: waiting, or a question.
   std::string centre;
   if (view.screen == Screen::Empty) centre = "Waiting for\nHome Assistant";
   if (view.screen == Screen::Confirm) centre = view.item_name;
-  if (view.screen == Screen::About) {
-    for (const auto& line : view.lines) centre += (centre.empty() ? "" : "\n") + line;
-  }
   lv_obj_set_hidden(centre_, centre.empty());
-  lv_obj_set_style_text_font(centre_, view.screen == Screen::About ? fonts_.small : fonts_.body,
-                             0);
   set_text(centre_, centre);
 
   // The arc: the position in the list, or the item's value as a gauge.
@@ -292,6 +309,10 @@ void Ui::render(const room::RoomView& view) {
     lv_arc_set_range(arc_, 0, kArcScale);
     lv_arc_set_value(arc_, static_cast<std::int32_t>(std::lround(view.fraction * kArcScale)));
     arc_tone = view.tone;
+    arc_shown = true;
+  } else if (info && info_scroll_limit_ > 0) {
+    lv_arc_set_range(arc_, 0, info_scroll_limit_);
+    lv_arc_set_value(arc_, std::min(view.scroll, info_scroll_limit_));
     arc_shown = true;
   } else if (notice && view.choices.size() > 1) {
     lv_arc_set_range(arc_, 0, static_cast<std::int32_t>(view.choices.size()) - 1);
@@ -325,6 +346,49 @@ void Ui::render_notice(const room::RoomView& view) {
 
   const auto at = static_cast<std::size_t>(std::clamp<int>(view.choice, 0, static_cast<int>(view.choices.size()) - 1));
   set_text(notice_choice_, view.choices.empty() ? "" : view.choices[at]);
+}
+
+void Ui::render_info(const room::RoomView& view) {
+  // The entries are made again only when they change: every few seconds at
+  // most, while the screen is open.
+  if (view.info != info_drawn_ || lv_obj_get_child_count(info_list_) == 0) {
+    info_drawn_ = view.info;
+    lv_obj_clean(info_list_);
+    for (const room::InfoLine& line : view.info) {
+      lv_obj_t* entry = lv_obj_create(info_list_);
+      lv_obj_remove_style_all(entry);
+      lv_obj_set_size(entry, kInfoWidth, LV_SIZE_CONTENT);
+      lv_obj_set_scrollable(entry, false);
+      lv_obj_set_flex_flow(entry, LV_FLEX_FLOW_COLUMN);
+      lv_obj_set_flex_align(entry, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+      if (line.heading) {
+        lv_obj_set_style_pad_top(entry, 8, 0);
+        lv_obj_t* heading = make_label(entry, fonts_.body, kAccent, kInfoWidth);
+        set_text(heading, line.label);
+        continue;
+      }
+      lv_obj_t* label = make_label(entry, fonts_.small, kMuted, kInfoWidth);
+      set_text(label, line.label);
+      lv_obj_t* value = make_label(entry, fonts_.small, kText);
+      lv_obj_set_width(value, kInfoWidth);
+      lv_label_set_long_mode(value, LV_LABEL_LONG_MODE_WRAP);
+      set_text(value, line.value);
+    }
+  }
+  lv_obj_update_layout(info_list_);
+
+  // Scrolled an entry at a time, until the last one is in the box.
+  const std::uint32_t count = lv_obj_get_child_count(info_list_);
+  const std::int32_t total = lv_obj_get_height(info_list_);
+  int limit = 0;
+  while (static_cast<std::uint32_t>(limit) + 1 < count &&
+         total - lv_obj_get_y(lv_obj_get_child(info_list_, limit)) > kInfoHeight) {
+    ++limit;
+  }
+  info_scroll_limit_ = limit;
+  const int scroll = std::clamp(view.scroll, 0, limit);
+  const std::int32_t top = count > 0 ? lv_obj_get_y(lv_obj_get_child(info_list_, scroll)) : 0;
+  lv_obj_set_y(info_list_, -top);
 }
 
 void Ui::render_list(const room::RoomView& view) {
@@ -361,9 +425,8 @@ void Ui::update_footer() {
       break;
     case Screen::Settings:
       break;  // each entry's description is already below it
-    case Screen::About:
-      text = "Hold to go back";
-      break;
+    case Screen::Info:
+      break;  // the box reaches the bottom
     case Screen::Confirm:
     case Screen::Notice:
       text = view_.prompt;
