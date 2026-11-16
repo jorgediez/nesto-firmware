@@ -189,6 +189,8 @@ class NestoClient:
 # A demo room ------------------------------------------------------------------
 
 DEMO_TITLE = "Living room"
+DEMO_HA_VERSION = "2026.11.1"
+DEMO_INTEGRATION = "0.1.0"
 
 DEMO_ITEMS = [
     {
@@ -296,6 +298,10 @@ class DemoRoom:
     async def serve(self, client: NestoClient, title: str = DEMO_TITLE) -> None:
         """Synchronises the room, then answers intents until the connection ends."""
         await client.synchronise(title, DEMO_ITEMS, self.states, self.config)
+        # The versions Technical info shows (PROTOCOL.md section 18).
+        await client.send(
+            {"t": "ha_info", "ha_version": DEMO_HA_VERSION, "integration_version": DEMO_INTEGRATION}
+        )
 
         async def keep_alive() -> None:
             while True:
@@ -323,6 +329,10 @@ class DemoRoom:
         try:
             while True:
                 message = await client.receive()
+                if message.get("t") == "ping":
+                    # The panel's own pings, from Technical info.
+                    await client.send({"t": "pong", "seq": message.get("seq", 0)})
+                    continue
                 if message.get("t") == "result" and message.get("re") in notify_ids:
                     self.notify_results.append(message)
                     if self.log and not message.get("ok"):

@@ -10,6 +10,8 @@ namespace nesto {
 struct BaseReadings {
   bool connected = false;  // the base's session is running
   std::string firmware;    // the base's firmware version, empty if unknown
+  std::string model;       // such as "Backplate-3.2", empty if unknown
+  std::string serial;      // empty if unknown
   std::optional<double> celsius;
   std::optional<double> humidity;   // percent
   std::optional<int> light_raw;     // higher is brighter (docs/BACKPLATE.md)

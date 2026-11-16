@@ -49,6 +49,7 @@ class NestHal : public Hal {
   bool set_wall_clock(std::int64_t utc_ms) override;
   bool has_base() const override { return options_.backplate; }
   BaseReadings base() const override;
+  DeviceIdentity identity() const override { return read_device_identity(); }
   bool has_beeper() const override { return beeper_fd_ >= 0; }
   void tone(int hz) override;
   void click(int hz, int us) override;

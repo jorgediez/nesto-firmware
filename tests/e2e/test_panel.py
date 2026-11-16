@@ -67,6 +67,16 @@ def test_pair_authenticate_and_talk(panel: Panel) -> None:
         info = await client.request({"t": "info"})
         assert info["fw"] == "0.1.0"
         assert info["free_ram_kb"] > 0
+        # No Wi-Fi in the container: the fields are there, and null.
+        assert info["wifi_rssi"] is None
+        assert info["wifi_ssid"] is None
+        assert info["wifi_freq_mhz"] is None
+
+        # Home Assistant's versions, logged as they arrive.
+        await client.send(
+            {"t": "ha_info", "ha_version": "2026.11.1", "integration_version": "0.1.0"}
+        )
+        panel.wait_for_log(r"Home Assistant 2026\.11\.1, ha-nesto 0\.1\.0")
 
         await client.request({"t": "identify"})
 

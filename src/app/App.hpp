@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -10,6 +11,7 @@
 #include "core/PressGestures.hpp"
 #include "hal/Hal.hpp"
 #include "lvgl.h"
+#include "net/Wireless.hpp"
 #include "protocol/PanelSession.hpp"
 #include "room/AutoBrightness.hpp"
 #include "room/Controller.hpp"
@@ -107,7 +109,17 @@ class App : private protocol::SessionEvents {
   void send_intent(const room::Intent& intent);
   void open_pairing();
   void forget_home_assistant();
-  std::vector<std::string> about() const;
+  /// Technical info opened: everything gathered at once, and a ping for the
+  /// round trip.
+  void open_info();
+  /// While it's open: the readings every few seconds, connman's view now and
+  /// then, and a ping.
+  void update_info();
+  /// Gathers Technical info for the controller; with `network`, asks
+  /// connman again too, which takes a moment.
+  void gather_info(bool network);
+  /// Pings Home Assistant, to time its pong.
+  void ping(Millis now);
 
   // protocol::SessionEvents
   void on_pairing_code(const std::string& code) override;
@@ -163,6 +175,17 @@ class App : private protocol::SessionEvents {
   std::string clock_drawn_;  // what the clock shows, to redraw only on a change
   unsigned rendered_version_ = 0;
   std::map<std::uint32_t, std::string> intent_requests_;  // request id to item key
+
+  // Technical info.
+  std::string ha_version_;           // from Home Assistant's ha_info
+  std::string integration_version_;
+  std::optional<Millis> round_trip_;  // the last ping's, this session
+  std::uint32_t ping_seq_ = 0;
+  Millis ping_sent_ = 0;              // when the last ping went
+  bool ping_pending_ = false;         // waiting for its pong
+  Millis info_gathered_ = 0;
+  Millis network_gathered_ = 0;
+  std::vector<net::NetService> services_;  // connman's, as last asked
   std::uint32_t next_request_id_ = 1;
 
   bool quit_ = false;

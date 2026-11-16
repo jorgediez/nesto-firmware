@@ -75,6 +75,17 @@ constexpr Millis kStatusInterval = 500;
 // Intents whose results are still awaited; older ones are forgotten.
 constexpr std::size_t kMaxOpenIntents = 64;
 
+// Technical info, while it's open: the readings and a ping this often, and
+// connman's view of the network (which takes a moment to ask) less often.
+constexpr Millis kInfoInterval = 3000;
+constexpr Millis kNetworkInterval = 30000;
+// A ping unanswered for this long is given up on.
+constexpr Millis kPingTimeout = 5000;
+// The Wi-Fi interface on the thermostat.
+constexpr const char* kWifiInterface = "wlan0";
+// Home Assistant's versions are short; anything longer is cut.
+constexpr std::size_t kMaxVersion = 32;
+
 /// Free memory in KiB from /proc/meminfo. Linux 2.6.37 has no MemAvailable, so
 /// this adds free memory and the caches the kernel can drop.
 long free_ram_kb() {
@@ -101,7 +112,7 @@ App::App(Hal& hal, AppOptions options)
       controller_([this](const room::Intent& intent) { send_intent(intent); },
                   room::SettingsActions{[this] { open_pairing(); },
                                         [this] { forget_home_assistant(); },
-                                        [this] { return about(); },
+                                        [this] { open_info(); },
                                         [this] { notifications_.open_list(); }}),
       notifications_([this](const protocol::Json& event) { send_event(event); }) {}
 
@@ -229,6 +240,7 @@ int App::run() {
     if (hal_.now() - status_checked_ >= kStatusInterval) update_status();
 
     controller_.tick(hal_.now());
+    update_info();
     notifications_.tick(hal_.now());
     // A pop-up on its timer keeps the display up until it's had its time.
     if (notifications_.holds_display() && display_power_.state() == room::DisplayState::Active) {
@@ -277,6 +289,7 @@ void App::render() {
   } else if (notices_drawn_ || controller_.version() != rendered_version_) {
     rendered_version_ = controller_.version();
     ui_->render(controller_.view());
+    controller_.set_info_scroll_limit(ui_->info_scroll_limit());
   }
   notices_drawn_ = notices;
 }
@@ -433,12 +446,87 @@ void App::forget_home_assistant() {
   update_status();
 }
 
-std::vector<std::string> App::about() const {
-  const std::string ip = net::primary_ipv4();
-  return {std::string("Nesto ") + NESTO_VERSION,
-          "Panel " + info_.panel_id,
-          ip.empty() ? "No network" : ip + ":" + std::to_string(options_.port),
-          pairing_->paired() ? "Paired" : "Not paired"};
+void App::open_info() {
+  gather_info(true);
+  ping_pending_ = false;
+  ping(hal_.now());
+}
+
+void App::ping(Millis now) {
+  protocol::PanelSession* session = server_ ? server_->active() : nullptr;
+  if (!session || !session->ready()) return;
+  // Home Assistant answers pings too (PROTOCOL.md section 18).
+  ping_sent_ = now;
+  ping_pending_ = true;
+  session->send(protocol::Json{{"t", "ping"}, {"seq", ++ping_seq_}});
+}
+
+void App::update_info() {
+  if (!controller_.info_open()) return;
+  const Millis now = hal_.now();
+  if (ping_pending_ && now - ping_sent_ >= kPingTimeout) ping_pending_ = false;
+  if (!ping_pending_ && now - ping_sent_ >= kInfoInterval) ping(now);
+  if (now - info_gathered_ >= kInfoInterval) gather_info(now - network_gathered_ >= kNetworkInterval);
+}
+
+void App::gather_info(bool network) {
+  const Millis now = hal_.now();
+  info_gathered_ = now;
+  if (network) {
+    services_ = net::connman_services();
+    network_gathered_ = now;
+  }
+  const protocol::PanelSession* session = server_ ? server_->active() : nullptr;
+  const bool connected = session && session->ready();
+
+  room::TechInfoInput in;
+  in.version = NESTO_VERSION;
+  in.panel_id = info_.panel_id;
+  in.port = options_.port;
+  in.paired = pairing_->paired();
+  in.uptime_ms = now;
+  in.free_ram_kb = free_ram_kb();
+  in.ha_status = status_;
+  in.ha_connected = connected;
+  in.ha_version = ha_version_;
+  in.integration_version = integration_version_;
+  in.round_trip_ms = round_trip_;
+
+  room::TechInfoInput::Network& n = in.network;
+  const net::WifiLink link = net::read_wifi_link(kWifiInterface);
+  n.ssid = link.ssid;
+  n.rssi_dbm = link.rssi_dbm;
+  n.freq_mhz = link.freq_mhz;
+  if (const auto s = net::current_service(services_)) {
+    // connman knows it all, Wi-Fi or Ethernet.
+    if (n.ssid.empty() && s->type == "wifi") n.ssid = s->name;
+    n.security = s->type == "wifi" ? net::security_name(s->security) : "";
+    if (s->type == "wifi") n.strength = s->strength;
+    n.interface = s->interface;
+    n.ipv4 = s->ipv4_address;
+    n.netmask = s->ipv4_netmask;
+    n.ipv4_router = s->ipv4_gateway;
+    if (!s->ipv6_address.empty()) n.ipv6 = {s->ipv6_address + "/" + std::to_string(s->ipv6_prefix)};
+    n.ipv6_router = s->ipv6_gateway;
+    n.nameservers = s->nameservers;
+    n.domains = s->domains;
+    n.mac = s->mac;
+  } else if (const auto ip = net::primary_ipv4_info()) {
+    // No connman, as in the simulator: what the kernel says.
+    n.interface = ip->interface;
+    n.ipv4 = ip->address;
+    n.netmask = ip->netmask;
+    n.ipv4_router = net::default_ipv4_router();
+    n.mac = net::mac_address(ip->interface);
+  }
+
+  in.has_base = hal_.has_base();
+  in.base = hal_.base();
+  const DeviceIdentity identity = hal_.identity();
+  in.hardware = identity.hardware;
+  in.serial = identity.serial;
+  if (wall_clock_.has_offset()) in.utc_offset_min = wall_clock_.offset_min();
+  controller_.set_info(room::tech_info(in));
 }
 
 void App::on_pairing_code(const std::string& code) {
@@ -457,6 +545,11 @@ void App::on_pairing_finished(bool paired) {
 void App::on_authenticated(protocol::PanelSession& session) {
   log::info("Home Assistant authenticated");
   server_->close_others(session);
+  // What the last Home Assistant said no longer holds.
+  ha_version_.clear();
+  integration_version_.clear();
+  round_trip_.reset();
+  ping_pending_ = false;
   update_status();
 }
 
@@ -521,7 +614,10 @@ bool App::on_message(protocol::PanelSession& session, const protocol::Message& m
     protocol::Json result = protocol::result_ok(*m.id);
     result["uptime_s"] = hal_.now() / 1000;
     result["free_ram_kb"] = free_ram_kb();
-    result["wifi_rssi"] = nullptr;
+    const net::WifiLink link = net::read_wifi_link(kWifiInterface);
+    result["wifi_rssi"] = link.rssi_dbm ? protocol::Json(*link.rssi_dbm) : protocol::Json(nullptr);
+    result["wifi_ssid"] = link.ssid.empty() ? protocol::Json(nullptr) : protocol::Json(link.ssid);
+    result["wifi_freq_mhz"] = link.freq_mhz ? protocol::Json(*link.freq_mhz) : protocol::Json(nullptr);
     result["ip"] = net::primary_ipv4();
     result["fw"] = NESTO_VERSION;
     const BaseReadings base = hal_.base();
@@ -605,6 +701,26 @@ bool App::on_message(protocol::PanelSession& session, const protocol::Message& m
   }
   if (m.type == "time") {
     set_time(m.body);
+    return true;
+  }
+  if (m.type == "ha_info") {
+    // For Technical info (PROTOCOL.md section 18).
+    const auto text = [&](const char* key) {
+      const auto it = m.body.find(key);
+      return it != m.body.end() && it->is_string() ? it->get<std::string>().substr(0, kMaxVersion) : "";
+    };
+    ha_version_ = text("ha_version");
+    integration_version_ = text("integration_version");
+    log::info("Home Assistant %s, ha-nesto %s", ha_version_.c_str(), integration_version_.c_str());
+    return true;
+  }
+  if (m.type == "pong") {
+    // The answer to Technical info's ping.
+    if (ping_pending_ && m.body.value("seq", 0u) == ping_seq_) {
+      round_trip_ = hal_.now() - ping_sent_;
+      ping_pending_ = false;
+      if (controller_.info_open()) gather_info(false);
+    }
     return true;
   }
   return false;

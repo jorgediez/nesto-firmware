@@ -368,6 +368,10 @@ sends **P→H `ready`** (event):
 Only after `ready` does HA forward input events and notifications to
 automations. HA resends any of the four whenever they change.
 
+After `config`, HA also sends `ha_info` (section 18), for the panel's
+Technical info screen. It isn't needed for `ready`, and a panel that doesn't
+get it shows no versions.
+
 ## 9. Layout
 
 **H→P `layout`** (event) replaces the whole layout. HA sends it after
@@ -781,8 +785,9 @@ them to anything.
 
 | Message | Direction | Kind | Purpose |
 |---|---|---|---|
-| `ping` / `pong` | Both | Event | `{"t": "ping", "seq": 5}` answered by `{"t": "pong", "seq": 5}`. HA pings every 20 seconds. In an authenticated session, either side closes the connection after 60 seconds without receiving any frame. Before authentication the timeouts in sections 5 and 6 apply instead. |
-| `info` | H→P | Request | Result carries `uptime_s`, `free_ram_kb`, `wifi_rssi`, `ip`, `fw`, `base_connected` and `base_fw`, for HA's diagnostic entities. |
+| `ping` / `pong` | Both | Event | `{"t": "ping", "seq": 5}` answered by `{"t": "pong", "seq": 5}`. HA pings every 20 seconds; the panel pings every 3 seconds while its Technical info screen is open, to show the round trip. In an authenticated session, either side closes the connection after 60 seconds without receiving any frame. Before authentication the timeouts in sections 5 and 6 apply instead. |
+| `info` | H→P | Request | Result carries `uptime_s`, `free_ram_kb`, `wifi_rssi`, `wifi_ssid`, `wifi_freq_mhz`, `ip`, `fw`, `base_connected` and `base_fw`, for HA's diagnostic entities. `wifi_rssi` is the Wi-Fi signal in dBm; it and the Wi-Fi fields are null without Wi-Fi. |
+| `ha_info` | H→P | Event | `{"t": "ha_info", "ha_version": "2026.11.1", "integration_version": "0.1.0"}`, sent after `config` in synchronisation (section 8), for the panel's Technical info screen. Each at most 32 characters. |
 | `identify` | H→P | Request | Wakes the display, pulses the backlight and beeps three times, over about 3 seconds. |
 | `reboot` | H→P | Request | The panel answers, then reboots. |
 | `unpair` | H→P | Request | See section 6.3. |

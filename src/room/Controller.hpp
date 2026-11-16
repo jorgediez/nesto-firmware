@@ -8,6 +8,7 @@
 
 #include "core/Input.hpp"
 #include "room/Room.hpp"
+#include "room/TechInfo.hpp"
 
 namespace nesto::room {
 
@@ -61,7 +62,7 @@ struct Intent {
 struct RoomView {
   // Notifications and Notice come from room/Notifications: the list, and one
   // notification, popped up or opened from the list.
-  enum class Screen { Empty, Home, Item, Settings, Confirm, About, Notifications, Notice };
+  enum class Screen { Empty, Home, Item, Settings, Confirm, Info, Notifications, Notice };
   struct Entry {
     std::string name;
     std::string summary;
@@ -91,22 +92,23 @@ struct RoomView {
   int control_count = 0;
   bool available = true;
 
-  // Confirm and Notice: how to answer. About: the lines to show.
+  // Confirm and Notice: how to answer.
   std::string prompt;
-  std::vector<std::string> lines;
+  // Info: Technical info's entries; `scroll` is how many are scrolled past.
+  std::vector<InfoLine> info;
 
   // Notice: the title is item_name, with icon and tone.
   std::string message;
   std::vector<std::string> choices;  // the actions, then Dismiss
   int choice = 0;
-  int scroll = 0;  // lines of the message scrolled past
+  int scroll = 0;  // lines of the message, or Info's entries, scrolled past
 };
 
 /// What the Settings menu asks of the rest of the panel.
 struct SettingsActions {
   std::function<void()> open_pairing;  // Pair with Home Assistant
   std::function<void()> forget;        // Forget Home Assistant, once confirmed
-  std::function<std::vector<std::string>()> about;
+  std::function<void()> open_info;     // Technical info opened: gather it (set_info)
   std::function<void()> open_notifications;  // the home screen's Notifications entry
 };
 
@@ -124,7 +126,8 @@ struct SettingsActions {
 ///
 /// The last entry on the home screen, and a press on the waiting screen, open
 /// Settings: pairing, forgetting Home Assistant (after a confirmation) and
-/// About. A long press goes back from any of them.
+/// Technical info, which the ring scrolls. A long press goes back from any
+/// of them.
 class Controller {
  public:
   static constexpr Millis kLiveInterval = 300;
@@ -159,6 +162,13 @@ class Controller {
   void long_press(Millis now);
   /// Sends due intents and ends expired holds. Call regularly.
   void tick(Millis now);
+
+  /// Technical info's entries, gathered by the app; redrawn when they change.
+  void set_info(std::vector<InfoLine> lines);
+  /// How far Technical info can scroll: the entries past which the rest
+  /// still fills the screen.
+  void set_info_scroll_limit(int limit);
+  bool info_open() const { return screen_ == RoomView::Screen::Info; }
 
   RoomView view() const;
   /// Increases whenever the view may have changed, so the screen knows to redraw.
@@ -209,6 +219,9 @@ class Controller {
   std::string open_key_;
   int control_ = 0;
   int setting_ = 0;  // the selected Settings entry
+  std::vector<InfoLine> info_;
+  int info_scroll_ = 0;
+  int info_scroll_limit_ = 0;
   int click_ticks_ = 0;  // ticks towards the next click, with their sign
   Millis last_turn_ = 0;
 

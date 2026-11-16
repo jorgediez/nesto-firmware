@@ -11,11 +11,11 @@ namespace {
 struct Menu {
   int pairing_opened = 0;
   int forgotten = 0;
+  int info_opened = 0;
   std::vector<Intent> sent;
   Controller controller{[this](const Intent& i) { sent.push_back(i); },
                         SettingsActions{[this] { ++pairing_opened; }, [this] { ++forgotten; },
-                                        [] { return std::vector<std::string>{"Nesto 0.1.0", "Panel x"}; },
-                                        {}}};
+                                        [this] { ++info_opened; }, {}}};
 
   void with_room() {
     std::string error;
@@ -62,7 +62,7 @@ TEST_CASE("a press on the waiting screen opens Settings, and holding goes back t
   CHECK(v.entries[0].summary == "Pair with Home Assistant");
   CHECK(v.entries[1].name == "Forget");
   CHECK(v.entries[1].summary == "Forget Home Assistant");
-  CHECK(v.entries[2].name == "About");
+  CHECK(v.entries[2].name == "Technical info");
   m.hold();
   CHECK(m.view().screen == RoomView::Screen::Empty);
 }
@@ -104,20 +104,51 @@ TEST_CASE("Forget, confirmed, forgets and empties the room") {
   CHECK(m.view().entries.empty());
 }
 
-TEST_CASE("About shows the panel's lines; a press or a hold goes back") {
+TEST_CASE("Technical info asks for its entries and shows them; a press or a hold goes back") {
   Menu m;
   m.press();
   m.rotate(2);
   m.press();
+  CHECK(m.info_opened == 1);
+  const unsigned before = m.controller.version();
+  const std::vector<InfoLine> lines{{"Nesto", "", true}, {"Version", "0.1.0", false}};
+  m.controller.set_info(lines);
+  CHECK(m.controller.version() != before);  // redrawn
   RoomView v = m.view();
-  CHECK(v.screen == RoomView::Screen::About);
-  CHECK(v.lines == std::vector<std::string>{"Nesto 0.1.0", "Panel x"});
+  CHECK(v.screen == RoomView::Screen::Info);
+  CHECK(v.title == "Technical info");
+  CHECK(v.info == lines);
+  const unsigned same = m.controller.version();
+  m.controller.set_info(lines);
+  CHECK(m.controller.version() == same);  // nothing changed, nothing to draw
   m.press();
   CHECK(m.view().screen == RoomView::Screen::Settings);
-  m.rotate(2);
   m.press();
+  CHECK(m.info_opened == 2);
   m.hold();
   CHECK(m.view().screen == RoomView::Screen::Settings);
+}
+
+TEST_CASE("the ring scrolls Technical info an entry at a time, as far as the screen allows") {
+  Menu m;
+  m.press();
+  m.rotate(2);
+  m.press();
+  m.controller.set_info_scroll_limit(3);
+  m.rotate(2);
+  CHECK(m.view().scroll == 2);
+  m.rotate(5);
+  CHECK(m.view().scroll == 3);
+  m.controller.set_info_scroll_limit(1);  // fewer entries now
+  CHECK(m.view().scroll == 1);
+  m.rotate(-5);
+  CHECK(m.view().scroll == 0);
+  // Opened again: from the top.
+  m.controller.set_info_scroll_limit(3);
+  m.rotate(2);
+  m.hold();
+  m.press();
+  CHECK(m.view().scroll == 0);
 }
 
 TEST_CASE("the Settings selection stays within the menu") {

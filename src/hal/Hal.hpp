@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "core/BaseReadings.hpp"
+#include "core/DeviceIdentity.hpp"
 #include "core/Input.hpp"
 
 namespace nesto {
@@ -57,6 +58,9 @@ class Hal {
   virtual bool has_base() const { return false; }
   /// What the base reports now.
   virtual BaseReadings base() const { return {}; }
+
+  /// The device's hardware and serial number, for Technical info.
+  virtual DeviceIdentity identity() const { return {"Simulator", ""}; }
 
   /// Whether there's a beeper: a single tone at a time, no volume.
   virtual bool has_beeper() const { return false; }

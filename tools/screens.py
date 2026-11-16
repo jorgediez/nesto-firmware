@@ -34,7 +34,9 @@ SCREENS = {
     "cover": f"{SETTLE} r+3 p r-2 w2500",
     "settings": f"{SETTLE} r+7 p w300",
     "settings-forget": f"{SETTLE} r+7 p r+1 p w300",
-    "settings-about": f"{SETTLE} r+7 p r+2 p w300",
+    "settings-info": f"{SETTLE} r+7 p r+2 p w500",
+    "settings-info-ha": f"{SETTLE} r+7 p r+2 p w3500 r+7 w300",
+    "settings-info-network": f"{SETTLE} r+7 p r+2 p w500 r+12 w300",
     "accents": f"{SETTLE} r+1 w300",
     # The timeout below rests the display; the clock shows once the fade ends.
     "standby-analog": f"{SETTLE} w3500",

@@ -2,6 +2,7 @@
 
 #include <array>
 #include <string>
+#include <vector>
 
 #include "app/Fonts.hpp"
 #include "lvgl.h"
@@ -30,6 +31,8 @@ class Ui {
   /// On a notification, how many lines its message can scroll: those that
   /// don't fit the box.
   int notice_scroll_limit() const { return notice_scroll_limit_; }
+  /// On Technical info, how many entries it can scroll past.
+  int info_scroll_limit() const { return info_scroll_limit_; }
 
   /// The connection state, shown at the bottom while not connected.
   void set_status(const std::string& text);
@@ -55,6 +58,7 @@ class Ui {
 
   void render_list(const room::RoomView& view);
   void render_notice(const room::RoomView& view);
+  void render_info(const room::RoomView& view);
   void update_footer();
   static void hide_toast(lv_timer_t* timer);
 
@@ -73,8 +77,14 @@ class Ui {
   // An item
   lv_obj_t* control_ = nullptr;
   lv_obj_t* value_ = nullptr;
-  // Waiting, a question, About
+  // Waiting, a question
   lv_obj_t* centre_ = nullptr;
+  // Technical info: its entries in a column, moved up inside a box that
+  // clips them as the ring scrolls.
+  lv_obj_t* info_box_ = nullptr;
+  lv_obj_t* info_list_ = nullptr;
+  std::vector<room::InfoLine> info_drawn_;
+  int info_scroll_limit_ = 0;
   lv_obj_t* footer_ = nullptr;
   lv_obj_t* toast_ = nullptr;
   lv_timer_t* toast_timer_ = nullptr;
