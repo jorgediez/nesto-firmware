@@ -110,6 +110,18 @@ the last entry on the home screen (or a press on the waiting screen), has:
   `client.key` is lost or to move to another Home Assistant;
 - **Forget**: after a confirming press, forgets Home Assistant and drops the
   connection (holding cancels);
+- **Wi-Fi**: the networks around, the one in use first, then the strongest,
+  and **Other network** for a hidden one (its name, then whether it has a
+  password). A network that needs a password asks for it on a ring keyboard,
+  like the stock software's: the ring moves round the keys, a press types,
+  and the first keys are OK, delete, space, shift and the other pages (digits,
+  symbols, accented letters); holding goes back. Open networks and WPA
+  Personal ones can be joined; Enterprise and WEP are listed but not
+  offered. If the new network isn't up within a minute, the thermostat goes
+  back to the one before. A saved network offers **Join** and **Forget**
+  (the one in use, Forget only: the thermostat then joins another saved
+  network if it can), and asks for its password again if joining fails. In the simulator the networks are made up, and a
+  password starting with "wrong" fails;
 - **Technical info**, like the stock software's, scrolled with the ring:
   - **Nesto**: version, panel ID, port, pairing, how long it's been running, free memory;
   - **Home Assistant**: whether it's connected, its version, the integration's version and the round trip;

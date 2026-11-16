@@ -68,14 +68,15 @@ double fraction_of(double value, double lo, double hi) {
 
 // The Settings menu, in order: short names for the list, what each does
 // (shown below it), and icons.
-const char* const kSettings[] = {"Pair", "Forget", "Technical info"};
-const char* const kSettingsIcons[] = {"pair", "forget", "info"};
+const char* const kSettings[] = {"Pair", "Forget", "Wi-Fi", "Technical info"};
+const char* const kSettingsIcons[] = {"pair", "forget", "wifi", "info"};
 const char* const kSettingsSummaries[] = {"Pair with Home Assistant", "Forget Home Assistant",
-                                          "Versions, network, sensors"};
-constexpr int kSettingsCount = 3;
+                                          "Choose a network", "Versions, network, sensors"};
+constexpr int kSettingsCount = 4;
 constexpr int kPair = 0;
 constexpr int kForget = 1;
-constexpr int kInfo = 2;
+constexpr int kWifi = 2;
+constexpr int kInfo = 3;
 
 const char* label(Control control) {
   switch (control) {
@@ -387,6 +388,8 @@ void Controller::press(Millis now) {
         screen_ = RoomView::Screen::Confirm;
         changed();
       }
+      // Wi-Fi's screens take over until a long press leaves them, back here.
+      if (setting_ == kWifi && actions_.open_wifi) actions_.open_wifi();
       if (setting_ == kInfo) {
         screen_ = RoomView::Screen::Info;
         info_scroll_ = 0;
@@ -414,6 +417,9 @@ void Controller::press(Millis now) {
     case RoomView::Screen::Item:
     case RoomView::Screen::Notifications:
     case RoomView::Screen::Notice:
+    case RoomView::Screen::WifiList:
+    case RoomView::Screen::Keyboard:
+    case RoomView::Screen::WifiBusy:
       break;
   }
 
@@ -477,6 +483,9 @@ void Controller::long_press(Millis now) {
     case RoomView::Screen::Home:
     case RoomView::Screen::Notifications:
     case RoomView::Screen::Notice:
+    case RoomView::Screen::WifiList:
+    case RoomView::Screen::Keyboard:
+    case RoomView::Screen::WifiBusy:
       break;
   }
   const Item* item = selected_item();
@@ -718,6 +727,9 @@ RoomView Controller::view() const {
     case RoomView::Screen::Item:
     case RoomView::Screen::Notifications:
     case RoomView::Screen::Notice:
+    case RoomView::Screen::WifiList:
+    case RoomView::Screen::Keyboard:
+    case RoomView::Screen::WifiBusy:
       break;
   }
 

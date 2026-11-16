@@ -74,6 +74,8 @@ add_library(nesto_room STATIC
   src/room/Sound.cpp
   src/room/Room.cpp
   src/room/TechInfo.cpp
+  src/room/RingKeyboard.cpp
+  src/room/WifiSetup.cpp
 )
 target_include_directories(nesto_room PUBLIC src)
 target_link_libraries(nesto_room PUBLIC nesto_core nesto_protocol)
@@ -86,6 +88,8 @@ add_library(nesto_net STATIC
   src/net/NetInfo.cpp
   src/net/Server.cpp
   src/net/Wireless.cpp
+  src/net/Command.cpp
+  src/net/Wifi.cpp
 )
 target_include_directories(nesto_net PUBLIC src)
 target_link_libraries(nesto_net PUBLIC nesto_protocol PRIVATE mdns)

@@ -86,6 +86,11 @@ constexpr const char* kWifiInterface = "wlan0";
 // Home Assistant's versions are short; anything longer is cut.
 constexpr std::size_t kMaxVersion = 32;
 
+// Wi-Fi setup: where connman reads provisioning files, and how often the
+// list is scanned again while it's open.
+constexpr const char* kConnmanDir = "/var/lib/connman";
+constexpr Millis kWifiRescan = 20000;
+
 /// Free memory in KiB from /proc/meminfo. Linux 2.6.37 has no MemAvailable, so
 /// this adds free memory and the caches the kernel can drop.
 long free_ram_kb() {
@@ -113,8 +118,26 @@ App::App(Hal& hal, AppOptions options)
                   room::SettingsActions{[this] { open_pairing(); },
                                         [this] { forget_home_assistant(); },
                                         [this] { open_info(); },
+                                        [this] { wifi_.open(); },
                                         [this] { notifications_.open_list(); }}),
-      notifications_([this](const protocol::Json& event) { send_event(event); }) {}
+      notifications_([this](const protocol::Json& event) { send_event(event); }),
+      wifi_(room::WifiSetup::Actions{[this] {
+                                       last_wifi_scan_ = hal_.now();
+                                       wifi_backend_->scan(hal_.now());
+                                     },
+                                     [this](const WifiConnect& request) {
+                                       wifi_backend_->connect(request, hal_.now());
+                                     },
+                                     [this](const WifiNetwork& network) {
+                                       wifi_backend_->forget(network, hal_.now());
+                                     }}) {
+  // The thermostat's Wi-Fi through connman, or a pretend one.
+  if (options_.fake_wifi) {
+    wifi_backend_ = std::make_unique<net::FakeWifi>();
+  } else {
+    wifi_backend_ = std::make_unique<net::ConnmanWifi>(std::make_unique<net::ProcessRunner>(), kConnmanDir);
+  }
+}
 
 App::~App() {
   mdns_.reset();  // says goodbye on the network
@@ -241,9 +264,14 @@ int App::run() {
 
     controller_.tick(hal_.now());
     update_info();
+    update_wifi();
     notifications_.tick(hal_.now());
     // A pop-up on its timer keeps the display up until it's had its time.
     if (notifications_.holds_display() && display_power_.state() == room::DisplayState::Active) {
+      display_power_.input(hal_.now());
+    }
+    // So does joining a network, to show how it went.
+    if (wifi_.joining() && display_power_.state() == room::DisplayState::Active) {
       display_power_.input(hal_.now());
     }
     controller_.set_notifications(notifications_.count(), notifications_.unread());
@@ -256,7 +284,9 @@ int App::run() {
 }
 
 std::string App::ring_view() const {
-  const room::RoomView v = notifications_.active() ? notifications_.view() : controller_.view();
+  const room::RoomView v = notifications_.active() ? notifications_.view()
+                           : wifi_.active()        ? wifi_.view()
+                                                   : controller_.view();
   return std::to_string(static_cast<int>(v.screen)) + "|" + std::to_string(v.selected) + "|" + v.value +
          "|" + std::to_string(v.choice) + "|" + std::to_string(v.scroll);
 }
@@ -278,20 +308,49 @@ void App::update_sound() {
 }
 
 void App::render() {
-  // A notification screen, over the room's, or the room's.
-  const bool notices = notifications_.active();
-  if (notices) {
-    if (!notices_drawn_ || notifications_.version() != rendered_notices_) {
-      rendered_notices_ = notifications_.version();
-      ui_->render(notifications_.view());
-      notifications_.set_scroll_limit(ui_->notice_scroll_limit());
-    }
-  } else if (notices_drawn_ || controller_.version() != rendered_version_) {
-    rendered_version_ = controller_.version();
-    ui_->render(controller_.view());
-    controller_.set_info_scroll_limit(ui_->info_scroll_limit());
+  // A notification screen over everything; then Wi-Fi's, over Settings; or
+  // the room's.
+  const Drawn source = notifications_.active() ? Drawn::Notices : wifi_.active() ? Drawn::Wifi : Drawn::Room;
+  const bool fresh = source != drawn_;
+  drawn_ = source;
+  switch (source) {
+    case Drawn::Notices:
+      if (fresh || notifications_.version() != rendered_notices_) {
+        rendered_notices_ = notifications_.version();
+        ui_->render(notifications_.view());
+        notifications_.set_scroll_limit(ui_->notice_scroll_limit());
+      }
+      return;
+    case Drawn::Wifi:
+      if (fresh || wifi_.version() != rendered_wifi_) {
+        rendered_wifi_ = wifi_.version();
+        ui_->render(wifi_.view());
+      }
+      return;
+    case Drawn::Room:
+      if (fresh || controller_.version() != rendered_version_) {
+        rendered_version_ = controller_.version();
+        ui_->render(controller_.view());
+        controller_.set_info_scroll_limit(ui_->info_scroll_limit());
+      }
+      return;
   }
-  notices_drawn_ = notices;
+}
+
+void App::update_wifi() {
+  const Millis now = hal_.now();
+  wifi_backend_->tick(now);
+  if (wifi_backend_->version() != wifi_seen_) {
+    wifi_seen_ = wifi_backend_->version();
+    wifi_.set_networks(wifi_backend_->networks(), wifi_backend_->listed());
+    wifi_.set_state(wifi_backend_->state());
+  }
+  // The list kept fresh while it's open.
+  if (wifi_.listing() && !wifi_backend_->scanning() && now - last_wifi_scan_ >= kWifiRescan) {
+    last_wifi_scan_ = now;
+    wifi_backend_->scan(now);
+  }
+  if (auto message = wifi_.take_message()) ui_->show_toast(*message);
 }
 
 void App::flush(lv_display_t* display, const lv_area_t* /*area*/, std::uint8_t* /*pixels*/) {
@@ -315,18 +374,23 @@ void App::handle(const TimedInput& input) {
           // it's felt as much as heard: none at either end of a list or a
           // value.
           const std::string before = ring_view();
-          if (!notifications_.active()) {
+          if (!notifications_.active() && !wifi_.active()) {
             notice_ticks_ = 0;
             controller_.rotate(event.ticks, input.at);
           } else {
-            // A notification's choices, a click at a time.
+            // A notification's choices, or Wi-Fi's lists and keys, a click
+            // at a time.
             if ((notice_ticks_ > 0 && event.ticks < 0) || (notice_ticks_ < 0 && event.ticks > 0)) {
               notice_ticks_ = 0;
             }
             notice_ticks_ += event.ticks;
             const int clicks = notice_ticks_ / kTicksPerClick;
             notice_ticks_ -= clicks * kTicksPerClick;
-            notifications_.rotate(clicks);
+            if (notifications_.active()) {
+              notifications_.rotate(clicks);
+            } else {
+              wifi_.rotate(clicks);
+            }
           }
           if (display_power_.config().ring_click && ring_view() != before) click(input.at);
         } else if constexpr (std::is_same_v<T, ButtonEdge>) {
@@ -376,6 +440,11 @@ void App::handle(const std::vector<GestureEvent>& gestures) {
     if (notifications_.active()) {
       if (g.gesture == Gesture::Single) notifications_.press();
       if (g.gesture == Gesture::Long) notifications_.long_press();
+      continue;
+    }
+    if (wifi_.active()) {
+      if (g.gesture == Gesture::Single) wifi_.press();
+      if (g.gesture == Gesture::Long) wifi_.long_press();
       continue;
     }
     if (g.gesture == Gesture::Single) controller_.press(hal_.now());
@@ -743,6 +812,8 @@ void App::apply_display(bool report) {
   const bool active = change->state == room::DisplayState::Active;
   if (active && !display_active_) {
     controller_.go_home();
+    // Wi-Fi's screens too, unless a network is being joined.
+    if (!wifi_.joining()) wifi_.close();
     render();
   }
   display_active_ = active;

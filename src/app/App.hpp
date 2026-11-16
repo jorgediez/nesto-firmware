@@ -11,6 +11,7 @@
 #include "core/PressGestures.hpp"
 #include "hal/Hal.hpp"
 #include "lvgl.h"
+#include "net/Wifi.hpp"
 #include "net/Wireless.hpp"
 #include "protocol/PanelSession.hpp"
 #include "room/AutoBrightness.hpp"
@@ -20,6 +21,7 @@
 #include "room/Sensors.hpp"
 #include "room/Sound.hpp"
 #include "room/StandbyClock.hpp"
+#include "room/WifiSetup.hpp"
 
 namespace nesto {
 
@@ -39,6 +41,9 @@ struct AppOptions {
   // boot script to give the thermostat back to the stock software
   // (scripts/nesto-boot.sh).
   bool hold_for_stock = false;
+  // A pretend Wi-Fi for Settings → Wi-Fi, where there's no connman (the
+  // simulator).
+  bool fake_wifi = false;
 };
 
 /// The exit code when the display was held as Nesto started.
@@ -99,6 +104,9 @@ class App : private protocol::SessionEvents {
   void render();
   /// Home Assistant's `notify` request (PROTOCOL.md section 14).
   void notify(protocol::PanelSession& session, const protocol::Message& m);
+  /// Moves joining a network on, passes the Wi-Fi's news to its screens,
+  /// and scans again now and then while the list is open.
+  void update_wifi();
   /// Sends an event to Home Assistant, if it's connected and synchronised.
   void send_event(const protocol::Json& event);
   /// Sends the base's readings when they're due (PROTOCOL.md section 17).
@@ -148,7 +156,14 @@ class App : private protocol::SessionEvents {
   room::Notifications notifications_;
   int notice_ticks_ = 0;  // ring ticks towards a click, on a notification screen
   unsigned rendered_notices_ = 0;  // notifications_.version() last drawn
-  bool notices_drawn_ = false;     // whether the screen shows a notification screen
+  // Whose screen is drawn: the room's (with Settings), a notification's, or
+  // Wi-Fi's.
+  enum class Drawn { Room, Notices, Wifi } drawn_ = Drawn::Room;
+  std::unique_ptr<net::WifiBackend> wifi_backend_;
+  room::WifiSetup wifi_;
+  unsigned wifi_seen_ = 0;      // wifi_backend_->version() last passed on
+  unsigned rendered_wifi_ = 0;  // wifi_.version() last drawn
+  Millis last_wifi_scan_ = 0;
   room::DisplayPower display_power_{0};
   bool display_active_ = true;  // as last applied: it starts active
   room::BacklightFade backlight_;

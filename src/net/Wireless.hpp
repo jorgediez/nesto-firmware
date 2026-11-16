@@ -39,6 +39,7 @@ struct NetService {
   std::string state;  // idle, failure, association, configuration, ready, disconnect, online
   int strength = 0;   // 0 to 100
   bool favorite = false;  // saved
+  bool immutable = false;  // set up by a provisioning file
   std::string interface;
   std::string mac;
   std::string ipv4_method;
