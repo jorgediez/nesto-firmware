@@ -592,6 +592,7 @@ void App::gather_info(bool network) {
   in.has_base = hal_.has_base();
   in.base = hal_.base();
   const DeviceIdentity identity = hal_.identity();
+  in.model = identity.model;
   in.hardware = identity.hardware;
   in.serial = identity.serial;
   if (wall_clock_.has_offset()) in.utc_offset_min = wall_clock_.offset_min();

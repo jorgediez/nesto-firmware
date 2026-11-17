@@ -59,8 +59,8 @@ class Hal {
   /// What the base reports now.
   virtual BaseReadings base() const { return {}; }
 
-  /// The device's hardware and serial number, for Technical info.
-  virtual DeviceIdentity identity() const { return {"Simulator", ""}; }
+  /// The device's hardware, serial number and model, for Technical info.
+  virtual DeviceIdentity identity() const { return {"Simulator", "", ""}; }
 
   /// Whether there's a beeper: a single tone at a time, no volume.
   virtual bool has_beeper() const { return false; }

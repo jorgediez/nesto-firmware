@@ -109,6 +109,7 @@ std::vector<InfoLine> tech_info(const TechInfoInput& in) {
   }
 
   l.heading("Display");
+  l.add("Model", in.model);
   l.add("Hardware", in.hardware);
   l.add("Serial number", in.serial);
   l.add("Time zone", in.utc_offset_min ? format_utc_offset(*in.utc_offset_min) : "");

@@ -45,6 +45,16 @@ std::string serial_from_hostname(const std::string& hostname) {
   return hex ? hostname : "";
 }
 
+std::string model_from_cmdline(const std::string& cmdline) {
+  static const std::string key = "nlmodel=";
+  std::istringstream words(cmdline);
+  std::string word;
+  while (words >> word) {
+    if (word.compare(0, key.size(), key) == 0) return word.substr(key.size());
+  }
+  return "";
+}
+
 DeviceIdentity read_device_identity() {
   DeviceIdentity identity;
   std::ifstream file("/proc/cpuinfo");
@@ -53,6 +63,10 @@ DeviceIdentity read_device_identity() {
   identity.hardware = hardware_from_cpuinfo(text.str());
   char name[256] = {};
   if (gethostname(name, sizeof name - 1) == 0) identity.serial = serial_from_hostname(name);
+  std::ifstream cmdline("/proc/cmdline");
+  std::stringstream line;
+  line << cmdline.rdbuf();
+  identity.model = model_from_cmdline(line.str());
   return identity;
 }
 

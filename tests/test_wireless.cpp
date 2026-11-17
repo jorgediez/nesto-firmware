@@ -258,7 +258,7 @@ TEST_CASE("the IPv4 router from /proc/net/route") {
   CHECK(parse_default_route("Iface\tDestination\n").empty());
 }
 
-TEST_CASE("the thermostat's hardware and serial number") {
+TEST_CASE("the thermostat's hardware, serial number and model") {
   const char* const cpuinfo =
       "Processor\t: ARMv7 Processor rev 2 (v7l)\n"
       "Hardware\t: Nest J49\n"
@@ -270,4 +270,8 @@ TEST_CASE("the thermostat's hardware and serial number") {
   CHECK(serial_from_hostname("02AA01AC00000001") == "02AA01AC00000001");
   CHECK(serial_from_hostname("j49").empty());
   CHECK(serial_from_hostname("02aa01ac00000001").empty());
+  // The thermostat's own command line.
+  CHECK(model_from_cmdline("root=/dev/mtdblock7 rootfstype=jffs2 console= nlmodel=Display-2.14 brightness=48 "
+                           "panic=1\n") == "Display-2.14");
+  CHECK(model_from_cmdline("console=ttyS0 root=/dev/sda1\n").empty());
 }
