@@ -66,6 +66,7 @@ TechInfoInput thermostat() {
   in.base.battery_v = 3.912;
   in.base.usb_v = 4.94;
   in.base.supply_v = 0.0;
+  in.model = "Display-2.14";
   in.hardware = "Nest J49, revision 020e";
   in.serial = "02AA01AC00000001";
   in.utc_offset_min = 60;
@@ -95,6 +96,8 @@ TEST_CASE("the thermostat's Technical info, section by section") {
   CHECK(value(lines, "Power", "Supply") == "0.00 V");
   CHECK(value(lines, "Sensors", "Temperature") == "21.5 \xC2\xB0" "C");
   CHECK(value(lines, "Sensors", "Humidity") == "45%");
+  CHECK(value(lines, "Display", "Model") == "Display-2.14");
+  CHECK(value(lines, "Display", "Hardware") == "Nest J49, revision 020e");
   CHECK(value(lines, "Display", "Serial number") == "02AA01AC00000001");
   CHECK(value(lines, "Display", "Time zone") == "UTC+01:00");
   CHECK(value(lines, "Base", "Model") == "Backplate-3.2");

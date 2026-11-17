@@ -62,6 +62,7 @@ struct TechInfoInput {
   BaseReadings base;
 
   // The display: the thermostat's head unit.
+  std::string model;
   std::string hardware;
   std::string serial;
   std::optional<int> utc_offset_min;

@@ -8,6 +8,7 @@ namespace nesto {
 struct DeviceIdentity {
   std::string hardware;  // "Nest J49, revision 020e"
   std::string serial;    // the Nest's serial number, empty if unknown
+  std::string model;     // "Display-2.14", empty if unknown
 };
 
 /// The hardware's name and revision from /proc/cpuinfo's text.
@@ -18,7 +19,11 @@ std::string hardware_from_cpuinfo(const std::string& text);
 /// Empty otherwise.
 std::string serial_from_hostname(const std::string& hostname);
 
-/// Both, from this machine.
+/// The head unit's model from the kernel's command line, which the bootloader
+/// gives as `nlmodel=Display-2.14`. Empty without one.
+std::string model_from_cmdline(const std::string& cmdline);
+
+/// All three, from this machine.
 DeviceIdentity read_device_identity();
 
 }  // namespace nesto
