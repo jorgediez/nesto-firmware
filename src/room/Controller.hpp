@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "core/Input.hpp"
+#include "room/RingKeyboard.hpp"
 #include "room/Room.hpp"
 #include "room/TechInfo.hpp"
 
@@ -62,7 +63,21 @@ struct Intent {
 struct RoomView {
   // Notifications and Notice come from room/Notifications: the list, and one
   // notification, popped up or opened from the list.
-  enum class Screen { Empty, Home, Item, Settings, Confirm, Info, Notifications, Notice };
+  // WifiList, Keyboard and WifiBusy come from room/WifiSetup: networks (or a
+  // hidden one's security), typing on the ring, and joining.
+  enum class Screen {
+    Empty,
+    Home,
+    Item,
+    Settings,
+    Confirm,
+    Info,
+    Notifications,
+    Notice,
+    WifiList,
+    Keyboard,
+    WifiBusy,
+  };
   struct Entry {
     std::string name;
     std::string summary;
@@ -97,6 +112,10 @@ struct RoomView {
   // Info: Technical info's entries; `scroll` is how many are scrolled past.
   std::vector<InfoLine> info;
 
+  // Keyboard: the keys round the ring, `selected` the highlighted one, the
+  // text typed in `value`, what it's for in `item_name`, and `icon`.
+  std::vector<RingKeyboard::Key> keys;
+
   // Notice: the title is item_name, with icon and tone.
   std::string message;
   std::vector<std::string> choices;  // the actions, then Dismiss
@@ -109,6 +128,7 @@ struct SettingsActions {
   std::function<void()> open_pairing;  // Pair with Home Assistant
   std::function<void()> forget;        // Forget Home Assistant, once confirmed
   std::function<void()> open_info;     // Technical info opened: gather it (set_info)
+  std::function<void()> open_wifi;     // Wi-Fi: the networks and joining one (room/WifiSetup)
   std::function<void()> open_notifications;  // the home screen's Notifications entry
 };
 

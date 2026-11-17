@@ -12,10 +12,11 @@ struct Menu {
   int pairing_opened = 0;
   int forgotten = 0;
   int info_opened = 0;
+  int wifi_opened = 0;
   std::vector<Intent> sent;
   Controller controller{[this](const Intent& i) { sent.push_back(i); },
                         SettingsActions{[this] { ++pairing_opened; }, [this] { ++forgotten; },
-                                        [this] { ++info_opened; }, {}}};
+                                        [this] { ++info_opened; }, [this] { ++wifi_opened; }, {}}};
 
   void with_room() {
     std::string error;
@@ -57,12 +58,13 @@ TEST_CASE("a press on the waiting screen opens Settings, and holding goes back t
   const RoomView v = m.view();
   CHECK(v.screen == RoomView::Screen::Settings);
   CHECK(v.title == "Settings");
-  REQUIRE(v.entries.size() == 3);
+  REQUIRE(v.entries.size() == 4);
   CHECK(v.entries[0].name == "Pair");
   CHECK(v.entries[0].summary == "Pair with Home Assistant");
   CHECK(v.entries[1].name == "Forget");
   CHECK(v.entries[1].summary == "Forget Home Assistant");
-  CHECK(v.entries[2].name == "Technical info");
+  CHECK(v.entries[2].name == "Wi-Fi");
+  CHECK(v.entries[3].name == "Technical info");
   m.hold();
   CHECK(m.view().screen == RoomView::Screen::Empty);
 }
@@ -107,7 +109,7 @@ TEST_CASE("Forget, confirmed, forgets and empties the room") {
 TEST_CASE("Technical info asks for its entries and shows them; a press or a hold goes back") {
   Menu m;
   m.press();
-  m.rotate(2);
+  m.rotate(3);
   m.press();
   CHECK(m.info_opened == 1);
   const unsigned before = m.controller.version();
@@ -132,7 +134,7 @@ TEST_CASE("Technical info asks for its entries and shows them; a press or a hold
 TEST_CASE("the ring scrolls Technical info an entry at a time, as far as the screen allows") {
   Menu m;
   m.press();
-  m.rotate(2);
+  m.rotate(3);
   m.press();
   m.controller.set_info_scroll_limit(3);
   m.rotate(2);
@@ -155,7 +157,7 @@ TEST_CASE("the Settings selection stays within the menu") {
   Menu m;
   m.press();
   m.rotate(10);
-  CHECK(m.view().selected == 2);
+  CHECK(m.view().selected == 3);
   m.rotate(-10);
   CHECK(m.view().selected == 0);
 }
@@ -176,4 +178,14 @@ TEST_CASE("a layout arriving while in Settings doesn't leave it") {
   CHECK(m.view().screen == RoomView::Screen::Settings);
   m.hold();
   CHECK(m.view().screen == RoomView::Screen::Home);
+}
+
+TEST_CASE("Wi-Fi hands over to its own screens") {
+  Menu m;
+  m.press();
+  m.rotate(2);
+  CHECK(m.view().entries[2].summary == "Choose a network");
+  m.press();
+  CHECK(m.wifi_opened == 1);
+  CHECK(m.view().screen == RoomView::Screen::Settings);  // back here when they close
 }

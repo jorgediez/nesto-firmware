@@ -34,9 +34,17 @@ SCREENS = {
     "cover": f"{SETTLE} r+3 p r-2 w2500",
     "settings": f"{SETTLE} r+7 p w300",
     "settings-forget": f"{SETTLE} r+7 p r+1 p w300",
-    "settings-info": f"{SETTLE} r+7 p r+2 p w500",
-    "settings-info-ha": f"{SETTLE} r+7 p r+2 p w3500 r+7 w300",
-    "settings-info-network": f"{SETTLE} r+7 p r+2 p w500 r+12 w300",
+    "settings-info": f"{SETTLE} r+7 p r+3 p w500",
+    "settings-info-ha": f"{SETTLE} r+7 p r+3 p w3500 r+7 w300",
+    "settings-info-network": f"{SETTLE} r+7 p r+3 p w500 r+12 w300",
+    # Wi-Fi, with the simulator's pretend networks: the list once scanned,
+    # typing a password on the ring (letters, then the digits page), and
+    # joining an open network.
+    "wifi": f"{SETTLE} r+7 p r+2 p w2000",
+    "wifi-keyboard": f"{SETTLE} r+7 p r+2 p w2000 r+2 p r+15 p r+3 p r-11 p r+4 w300",
+    "wifi-keyboard-digits": f"{SETTLE} r+7 p r+2 p w2000 r+2 p r-3 p r+4 p w300",
+    "wifi-joining": f"{SETTLE} r+7 p r+2 p w2000 r+3 p w300",
+    "wifi-forget": f"{SETTLE} r+7 p r+2 p w2000 p w300",
     "accents": f"{SETTLE} r+1 w300",
     # The timeout below rests the display; the clock shows once the fade ends.
     "standby-analog": f"{SETTLE} w3500",

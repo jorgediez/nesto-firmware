@@ -59,6 +59,7 @@ class Ui {
   void render_list(const room::RoomView& view);
   void render_notice(const room::RoomView& view);
   void render_info(const room::RoomView& view);
+  void render_keyboard(const room::RoomView& view);
   void update_footer();
   static void hide_toast(lv_timer_t* timer);
 
@@ -85,6 +86,14 @@ class Ui {
   lv_obj_t* info_list_ = nullptr;
   std::vector<room::InfoLine> info_drawn_;
   int info_scroll_limit_ = 0;
+  // The ring keyboard: a label per key round the edge, and in the middle
+  // what it's for and the text typed.
+  lv_obj_t* keyboard_ = nullptr;
+  lv_obj_t* keyboard_icon_ = nullptr;
+  lv_obj_t* keyboard_prompt_ = nullptr;
+  lv_obj_t* keyboard_field_ = nullptr;
+  std::vector<lv_obj_t*> key_labels_;
+  std::vector<std::string> keys_drawn_;
   lv_obj_t* footer_ = nullptr;
   lv_obj_t* toast_ = nullptr;
   lv_timer_t* toast_timer_ = nullptr;

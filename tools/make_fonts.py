@@ -66,6 +66,18 @@ ICONS = {
     "pair": "link-variant",
     "forget": "link-variant-off",
     "offline": "wifi-off",
+    # Wi-Fi setup: signal bars, other network, and the ring keyboard's keys
+    "wifi": "wifi",
+    "wifi-1": "wifi-strength-1",
+    "wifi-2": "wifi-strength-2",
+    "wifi-3": "wifi-strength-3",
+    "wifi-4": "wifi-strength-4",
+    "wifi-plus": "wifi-plus",
+    "lock": "lock",
+    "check": "check",
+    "backspace": "backspace-outline",
+    "space": "keyboard-space",
+    "shift": "apple-keyboard-shift",
     "unknown": "help-circle",
 }
 

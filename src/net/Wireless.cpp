@@ -262,6 +262,9 @@ std::vector<NetService> parse_connman_services(const std::string& reply) {
     const auto favorite = d.find("Favorite");
     service.favorite = favorite != d.end() && favorite->second->kind == Value::Kind::Boolean &&
                        favorite->second->boolean;
+    const auto immutable = d.find("Immutable");
+    service.immutable = immutable != d.end() && immutable->second->kind == Value::Kind::Boolean &&
+                        immutable->second->boolean;
     const auto ethernet = dict_of(d, "Ethernet");
     service.interface = text_of(ethernet, "Interface");
     service.mac = text_of(ethernet, "Address");

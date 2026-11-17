@@ -24,6 +24,9 @@ add_executable(nesto_tests
   test_sound.cpp
   test_tech_info.cpp
   test_wireless.cpp
+  test_ring_keyboard.cpp
+  test_wifi.cpp
+  test_wifi_setup.cpp
 )
 target_link_libraries(nesto_tests PRIVATE nesto_core nesto_protocol nesto_net nesto_room nesto_fonts nesto_probe_checks
                                           doctest::doctest)

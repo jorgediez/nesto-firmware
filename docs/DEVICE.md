@@ -171,6 +171,20 @@ budget Nesto gets in its place. It's started and stopped by
 independently of `nlclient`. connman also answers DNS on `127.0.0.1:53`. UDP
 port 5353 is free (the stock mDNS daemon isn't running), and so is 6170.
 
+connman 1.29 has no `connmanctl` here; Nesto talks to it over the system
+D-Bus with `dbus-send` (`net.connman.Manager.GetServices`,
+`net.connman.Technology.Scan`, `net.connman.Service.Connect`). Its storage,
+`/var/lib/connman`, is `/media/user-config/connman`, so it survives reboots.
+connman also lists the Thread radio (`lowpan_wpan0_…`) as a service and hands
+out its network key with it; Nesto reads only Wi-Fi and Ethernet services.
+Settings → Wi-Fi joins a network with a password by writing a provisioning
+file there, `nesto-<SSID in hex>.config` (readable by root only). connman
+takes it within a second or so, not at once: Nesto waits until connman lists
+the network as saved before asking it to connect, as connman refuses at once
+without the password. The file stays, as connman forgets the network if it
+goes. Forget in Settings → Wi-Fi deletes the file and calls
+`net.connman.Service.Remove`.
+
 **Storage.** Every RAM file system, and `/media/data`, `/media/log`,
 `/media/system-config` and `/media/user-config`, are mounted `noexec`.
 Programs can run only from `/` (18 MB free) and `/media/scratch`, and every

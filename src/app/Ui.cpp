@@ -34,6 +34,10 @@ constexpr std::int32_t kNoticeLines = 4;
 // between the title and the footer.
 constexpr std::int32_t kInfoWidth = 220;
 constexpr std::int32_t kInfoHeight = 196;
+// The ring keyboard: keys this far from the middle, and the text field
+// inside them.
+constexpr double kKeyRadius = 132;
+constexpr std::int32_t kFieldWidth = 180;
 
 lv_color_t colour(Tone tone) {
   switch (tone) {
@@ -98,6 +102,32 @@ std::int32_t widest_digit(const lv_font_t* font) {
 std::int32_t text_width(const lv_font_t* font, const std::string& text) {
   std::int32_t width = 2;
   for (char c : text) width += lv_font_get_glyph_width(font, static_cast<unsigned char>(c), 0);
+  return width;
+}
+
+/// The width of UTF-8 `text` in `font`, glyph by glyph.
+std::int32_t utf8_width(const lv_font_t* font, const std::string& text) {
+  std::int32_t width = 0;
+  for (std::size_t i = 0; i < text.size();) {
+    const auto c = static_cast<unsigned char>(text[i]);
+    std::uint32_t cp = c;
+    std::size_t n = 1;
+    if (c >= 0xF0) {
+      cp = c & 0x07;
+      n = 4;
+    } else if (c >= 0xE0) {
+      cp = c & 0x0F;
+      n = 3;
+    } else if (c >= 0xC0) {
+      cp = c & 0x1F;
+      n = 2;
+    }
+    for (std::size_t k = 1; k < n && i + k < text.size(); ++k) {
+      cp = (cp << 6) | (static_cast<unsigned char>(text[i + k]) & 0x3F);
+    }
+    width += lv_font_get_glyph_width(font, cp, 0);
+    i += n;
+  }
   return width;
 }
 
@@ -186,6 +216,28 @@ Ui::Ui(const Fonts& fonts) : fonts_(fonts) {
   lv_obj_set_style_pad_row(info_list_, 6, 0);
   lv_obj_set_hidden(info_box_, true);
 
+  // The ring keyboard: its keys are made as pages need them.
+  keyboard_ = lv_obj_create(screen);
+  lv_obj_remove_style_all(keyboard_);
+  lv_obj_set_size(keyboard_, LV_PCT(100), LV_PCT(100));
+  lv_obj_set_scrollable(keyboard_, false);
+  keyboard_icon_ = make_label(keyboard_, fonts_.icon_small, kMuted);
+  lv_obj_align(keyboard_icon_, LV_ALIGN_CENTER, 0, -62);
+  keyboard_prompt_ = make_label(keyboard_, fonts_.small, kMuted, kFieldWidth);
+  lv_obj_align(keyboard_prompt_, LV_ALIGN_CENTER, 0, -30);
+  keyboard_field_ = make_label(keyboard_, fonts_.body, kText, kFieldWidth);
+  lv_label_set_long_mode(keyboard_field_, LV_LABEL_LONG_MODE_CLIP);
+  lv_obj_set_style_border_side(keyboard_field_, LV_BORDER_SIDE_BOTTOM, 0);
+  lv_obj_set_style_border_width(keyboard_field_, 2, 0);
+  lv_obj_set_style_border_color(keyboard_field_, kDim, 0);
+  lv_obj_set_style_pad_bottom(keyboard_field_, 4, 0);
+  lv_obj_set_height(keyboard_field_, LV_SIZE_CONTENT);
+  lv_obj_align(keyboard_field_, LV_ALIGN_CENTER, 0, 2);
+  lv_obj_t* keyboard_hint = make_label(keyboard_, fonts_.small, kMuted, kFieldWidth);
+  set_text(keyboard_hint, "Hold to go back");
+  lv_obj_align(keyboard_hint, LV_ALIGN_CENTER, 0, 44);
+  lv_obj_set_hidden(keyboard_, true);
+
   // A notification: icon and title above, the message in a box of four lines
   // that the ring scrolls, and the choice below.
   notice_icon_ = make_label(screen, fonts_.icon_small, kText);
@@ -250,10 +302,17 @@ Ui::~Ui() {
 void Ui::render(const room::RoomView& view) {
   view_ = view;
   const bool list = (view.screen == Screen::Home || view.screen == Screen::Settings ||
-                     view.screen == Screen::Notifications) &&
+                     view.screen == Screen::Notifications || view.screen == Screen::WifiList) &&
                     !view.entries.empty();
   const bool item = view.screen == Screen::Item;
   const bool notice = view.screen == Screen::Notice;
+  const bool keyboard = view.screen == Screen::Keyboard;
+
+  // The keyboard has the whole edge to itself.
+  lv_obj_set_hidden(title_, keyboard);
+  lv_obj_set_hidden(arc_, keyboard);
+  lv_obj_set_hidden(keyboard_, !keyboard);
+  if (keyboard) render_keyboard(view);
 
   // Title: the room, the item, or the menu.
   std::string title = "Nesto";
@@ -293,7 +352,7 @@ void Ui::render(const room::RoomView& view) {
   // A message in the middle: waiting, or a question.
   std::string centre;
   if (view.screen == Screen::Empty) centre = "Waiting for\nHome Assistant";
-  if (view.screen == Screen::Confirm) centre = view.item_name;
+  if (view.screen == Screen::Confirm || view.screen == Screen::WifiBusy) centre = view.item_name;
   lv_obj_set_hidden(centre_, centre.empty());
   set_text(centre_, centre);
 
@@ -325,6 +384,56 @@ void Ui::render(const room::RoomView& view) {
                              LV_PART_INDICATOR);
 
   update_footer();
+}
+
+void Ui::render_keyboard(const room::RoomView& view) {
+  // The keys round the edge, made again only when the page changes.
+  std::vector<std::string> texts;
+  for (const auto& k : view.keys) texts.push_back(k.icon.empty() ? k.text : "icon:" + k.icon);
+  if (texts != keys_drawn_) {
+    keys_drawn_ = texts;
+    for (lv_obj_t* label : key_labels_) lv_obj_delete(label);
+    key_labels_.clear();
+    // Icons and names ("123") take more room round the ring than a letter.
+    std::vector<double> room;
+    for (const auto& k : view.keys) room.push_back(!k.icon.empty() ? 1.7 : utf8_width(fonts_.small, k.text) > 14 ? 1.6 : 1.0);
+    double total = 0;
+    for (double r : room) total += r;
+    double along = 0;
+    for (std::size_t i = 0; i < view.keys.size(); ++i) {
+      const auto& k = view.keys[i];
+      lv_obj_t* label = make_label(keyboard_, k.icon.empty() ? fonts_.small : fonts_.icon_small, kMuted);
+      set_text(label, k.icon.empty() ? k.text : icon_text(k.icon, "unknown"));
+      // Clockwise from the top, where the first key is.
+      const double a = 2 * 3.14159265358979 * along / total;
+      along += (room[i] + (i + 1 < room.size() ? room[i + 1] : 0)) / 2;
+      lv_obj_align(label, LV_ALIGN_CENTER, static_cast<std::int32_t>(std::lround(kKeyRadius * std::sin(a))),
+                   static_cast<std::int32_t>(std::lround(-kKeyRadius * std::cos(a))));
+      key_labels_.push_back(label);
+    }
+  }
+  for (std::size_t i = 0; i < key_labels_.size(); ++i) {
+    const bool on = static_cast<int>(i) == view.selected;
+    lv_obj_set_style_text_color(key_labels_[i], on ? kAccent : kMuted, 0);
+    if (view.keys[i].icon.empty()) {
+      lv_obj_set_style_text_font(key_labels_[i], on ? fonts_.body : fonts_.small, 0);
+    }
+  }
+
+  // In the middle: what it's for, and the text so far, its end showing when
+  // it's longer than the field.
+  set_text(keyboard_icon_, icon_text(view.icon, "wifi"));
+  set_text(keyboard_prompt_, view.item_name.empty() ? view.title : view.title + " for " + view.item_name);
+  std::string shown = view.value;
+  while (!shown.empty() &&
+         utf8_width(fonts_.body, shown) >
+             kFieldWidth - 16) {
+    // Off the front a character at a time, UTF-8 and all.
+    std::size_t cut = 1;
+    while (cut < shown.size() && (static_cast<unsigned char>(shown[cut]) & 0xC0) == 0x80) ++cut;
+    shown.erase(0, cut);
+  }
+  set_text(keyboard_field_, shown + "_");
 }
 
 void Ui::render_notice(const room::RoomView& view) {
@@ -429,7 +538,11 @@ void Ui::update_footer() {
       break;  // the box reaches the bottom
     case Screen::Confirm:
     case Screen::Notice:
+    case Screen::WifiBusy:
       text = view_.prompt;
+      break;
+    case Screen::WifiList:
+    case Screen::Keyboard:
       break;
     case Screen::Notifications:
       text = "Hold to go back";

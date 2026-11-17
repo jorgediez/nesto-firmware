@@ -66,6 +66,7 @@ int main(int argc, char** argv) {
   app_options.state_dir = default_state_dir();
 #if defined(NESTO_PLATFORM_SIM)
   nesto::SimOptions options;
+  app_options.fake_wifi = true;  // no connman here
 #elif defined(NESTO_PLATFORM_NEST)
   nesto::NestOptions options;
   bool input_test = false;
