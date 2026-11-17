@@ -3,11 +3,13 @@ name: CI
 # Builds and tests in the same container scripts/dev.sh uses locally: the
 # simulator for this machine, and the thermostat's ARM program, whose tests and
 # screens run under QEMU emulating the thermostat's Cortex-A8. Screenshots and
-# the ARM program are kept, so a pull request shows the screens and can be tried
-# on a device.
+# the release package are kept, so a pull request shows the screens and can be
+# tried on a device; a version tag's run drafts the release with its package.
 on:
   push:
     branches: [main]
+    # A version tag also drafts its release (the release job below).
+    tags: ["v*"]
   pull_request:
 
 permissions:
@@ -16,7 +18,7 @@ permissions:
 jobs:
   build:
     name: Build and test
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
@@ -76,12 +78,55 @@ jobs:
           name: screenshots
           path: screenshots/
 
-      - name: Strip the thermostat's program
-        run: scripts/dev.sh dist
+      - name: Pack the thermostat's programs as a release
+        run: scripts/dev.sh package
 
+      # What a release attaches, from a tag's build: the programs tested above.
       - uses: actions/upload-artifact@v7
         with:
-          name: nesto-arm
+          name: nesto-release
           path: |
-            dist/nesto
-            dist/nesto-probe
+            dist/nesto-*.tar.gz
+            dist/nesto-*.tar.gz.sha256
+
+  release:
+    name: Draft the release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check the tag names the project's version
+        run: |
+          version="$(sed -n 's/^project(nesto VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)"
+          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match the version in CMakeLists.txt ($version)"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Fetch the package this run built and tested
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --name nesto-release --dir release
+
+      # A draft: the maintainer writes the notes and publishes it. Published
+      # releases are immutable, so the files go on before that.
+      - name: Draft the release, with the package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "Nesto $VERSION for the Nest Learning Thermostat (2nd generation)."
+            echo
+            echo "Install or update: unpack \`nesto-$VERSION-nest-gen2.tar.gz\` and follow its INSTALL.md"
+            echo "([online](https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/docs/INSTALL.md))."
+            echo
+            echo "SHA-256: \`$(cut -d' ' -f1 release/nesto-$VERSION-nest-gen2.tar.gz.sha256)\`"
+          } > notes.md
+          gh release create "$GITHUB_REF_NAME" release/* --draft --verify-tag \
+            --title "Nesto $VERSION" --notes-file notes.md

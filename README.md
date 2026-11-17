@@ -20,6 +20,15 @@ integration, which discovers the panel, pairs with it and decides what it shows.
 > untested. The wire protocol between the panel and Home Assistant is in
 > [PROTOCOL.md](PROTOCOL.md).
 
+## Install
+
+Download a [release](https://github.com/jorgediez/nesto-firmware/releases)
+and follow [docs/INSTALL.md](docs/INSTALL.md): root the thermostat with
+unfr0zen, then `sh install.sh <nest-ip>` from the unpacked release, from
+Linux, macOS, or Windows with WSL or Git Bash. No build is needed. The same
+script updates Nesto, gives the thermostat back to the stock software, and
+uninstalls it.
+
 ## Development
 
 Everything builds inside a Docker container, so the only requirement is Docker.
