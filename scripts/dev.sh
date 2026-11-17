@@ -143,7 +143,10 @@ case "${1:-}" in
     ;;
   package)
     "$0" dist
-    "$ROOT/scripts/package.sh"
+    # In the container, like dist: it owns dist/, which the CI runner's user
+    # can't write to. The dates come from the commit, read here, where git
+    # knows the repository.
+    run env SOURCE_DATE_EPOCH="$(cd "$ROOT" && git log -1 --format=%ct)" bash /src/scripts/package.sh
     ;;
   vectors)
     run python3 /src/tools/make_vectors.py /src/tests/vectors/protocol-v1.json

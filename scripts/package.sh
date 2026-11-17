@@ -30,6 +30,7 @@ mkdir -p "$stage"
 cp dist/nesto dist/nesto-probe \
   scripts/install.sh scripts/nesto-boot.sh scripts/nest-screen.sh scripts/device-check.sh \
   docs/INSTALL.md LICENSE THIRD_PARTY.md "$stage/"
+chmod 644 "$stage"/*
 chmod 755 "$stage"/nesto "$stage"/nesto-probe "$stage"/*.sh
 echo "$version" > "$stage/VERSION"
 (cd "$stage" && sha256sum -- * > ../SHA256SUMS && mv ../SHA256SUMS .)
