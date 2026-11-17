@@ -67,7 +67,7 @@ nesto::Millis handshake(bp::Session& s, nesto::Millis now = 1000) {
   CHECK(commands(s.take_output()) == Commands{bp::kGetHardware});
   say(s, now + 40, bp::kHardware, ascii("Backplate-3.2\r"));
   CHECK(commands(s.take_output()) == Commands{bp::kGetSerial});
-  say(s, now + 50, bp::kSerial, ascii("03BA01AC1015023X"));
+  say(s, now + 50, bp::kSerial, ascii("03BA01AC00000001"));
   CHECK(s.running());
   CHECK(commands(s.take_output()) == Commands{bp::kStatusRequest, bp::kRequestBuffers});
   return now + 50;
@@ -178,7 +178,7 @@ TEST_CASE("the handshake: break, reset, burst to BRK, acknowledgement, five ques
   CHECK(s.build_info() == "2019-04-03 12:00:00");
   CHECK(s.bsl_id() == "0000");
   CHECK(s.model() == "Backplate-3.2");
-  CHECK(s.serial() == "03BA01AC1015023X");
+  CHECK(s.serial() == "03BA01AC00000001");
   CHECK(s.handshakes() == 1);
   CHECK_FALSE(s.take_break());
 }

@@ -1,24 +1,23 @@
 # Nesto Panel firmware
 
 Turns a retired Nest Learning Thermostat (2nd generation) into a Home Assistant
-room panel. Turn the ring and press to control the lights, climate, covers and
-scenes of a room. The panel can also show notifications, and a clock or photo
-carousel while idle.
+room panel. Turn the ring and press to control the lights, climate, covers,
+switches and scenes of a room. The panel also shows Home Assistant's
+notifications and a clock while idle, and reports the thermostat's
+temperature, humidity, light and motion sensors.
 
 Nesto ("nest" in Esperanto) is the software that runs on the thermostat. It
 works with the [ha-nesto](https://github.com/jorgediez/ha-nesto) Home Assistant
 integration, which discovers the panel, pairs with it and decides what it shows.
 
-> **Status: early development.** In the simulator, the panel pairs with Home
-> Assistant and controls a room's lights, climate, covers, switches and scenes
-> from the layout Home Assistant sends, with icons and colours for what each is
-> doing, and a Settings menu to pair again or forget Home Assistant. On a real
-> thermostat it runs for a supervised while, with its screen, ring and press,
-> and gives the stock software its place back afterwards. It talks to the
-> thermostat's base, which would otherwise reset it after 30 minutes
-> ([docs/BACKPLATE.md](docs/BACKPLATE.md)), so runs last hours, with the
-> display resting to keep the battery up. Installing it for good comes next.
-> The wire protocol between the panel and Home Assistant is in
+> **Status: before the first release.** Nesto installs on the thermostat for
+> good and starts at every boot, with a way back to the stock software
+> ([docs/DEVICE.md](docs/DEVICE.md)). It talks to the thermostat's base, which
+> would otherwise reset it after 30 minutes
+> ([docs/BACKPLATE.md](docs/BACKPLATE.md)), rests the display to keep the
+> battery up, and joins Wi-Fi networks from its own Settings. It has been
+> tested on one thermostat, on a USB stand; running on a wall's wires is
+> untested. The wire protocol between the panel and Home Assistant is in
 > [PROTOCOL.md](PROTOCOL.md).
 
 ## Development
@@ -238,6 +237,14 @@ uses, so an icon name from Home Assistant needs no translation. At build time
 Extended-A for text, which cover Spanish and Esperanto, and about 30 icons) and
 embeds them; LVGL draws them at runtime at any size. To add an icon, add it to
 `ICONS` in that script and to PROTOCOL.md appendix C.
+
+## Contributing
+
+Reports from real thermostats help most: there are issue forms for bugs, for
+how Nesto does on your thermostat, and for ideas. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for what makes a report useful and how to
+work on the code, and [SECURITY.md](SECURITY.md) to report a vulnerability
+privately.
 
 ## Not affiliated
 

@@ -1,0 +1,56 @@
+name: Thermostat report
+description: Tell us how Nesto does on your thermostat.
+labels: [compatibility]
+body:
+  - type: input
+    id: firmware
+    attributes:
+      label: Nesto version
+      description: Settings → Technical info → Nesto → Version.
+    validations:
+      required: true
+  - type: input
+    id: display
+    attributes:
+      label: Display model
+      description: Settings → Technical info → Display → Model.
+      placeholder: Display-2.14
+    validations:
+      required: true
+  - type: input
+    id: base
+    attributes:
+      label: Base model and region
+      description: Settings → Technical info → Base → Model, and where the thermostat is from.
+      placeholder: Backplate-3.2, EU
+    validations:
+      required: true
+  - type: dropdown
+    id: power
+    attributes:
+      label: Power
+      options:
+        - USB stand
+        - Wires, with a common (C) wire
+        - Wires, without a common wire
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: Does it work?
+      options:
+        - Everything works
+        - Partially (details below)
+        - Doesn't start, or keeps rebooting
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: >-
+        What works and what doesn't: the ring and press, the display and its
+        brightness, the sensors, Wi-Fi, sound, the battery over a day. A device
+        report helps (scripts/dev.sh device-check <nest-ip>); read it before
+        attaching it.
