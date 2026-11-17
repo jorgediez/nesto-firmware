@@ -1,0 +1,66 @@
+name: Bug report
+description: Nesto doesn't work as expected on the thermostat or in the simulator.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: firmware
+    attributes:
+      label: Nesto version
+      description: Settings → Technical info → Nesto → Version.
+    validations:
+      required: true
+  - type: input
+    id: display
+    attributes:
+      label: Display model
+      description: Settings → Technical info → Display → Model, or "simulator".
+      placeholder: Display-2.14
+    validations:
+      required: true
+  - type: input
+    id: base
+    attributes:
+      label: Base model
+      description: Settings → Technical info → Base → Model, if it has one.
+      placeholder: Backplate-3.2
+  - type: dropdown
+    id: power
+    attributes:
+      label: Power
+      options:
+        - USB stand
+        - Wires, with a common (C) wire
+        - Wires, without a common wire
+        - Simulator
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How is Nesto running?
+      options:
+        - Installed for good (device-install)
+        - A trial run (device-run)
+        - Simulator
+    validations:
+      required: true
+  - type: input
+    id: integration_version
+    attributes:
+      label: ha-nesto version
+      description: If Home Assistant is involved. Settings → Technical info → Home Assistant.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log
+      description: >-
+        Lines of /media/data/nesto/nesto.log around the moment it went wrong
+        (scripts/dev.sh device-status <nest-ip> shows the end of it).
+      render: text

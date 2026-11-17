@@ -1,0 +1,6 @@
+# The community thread joins contact_links after the first release.
+blank_issues_enabled: false
+contact_links:
+  - name: A problem with Home Assistant's side
+    url: https://github.com/jorgediez/ha-nesto/issues/new/choose
+    about: What the panel shows, its entities, pairing from Home Assistant — the ha-nesto integration.

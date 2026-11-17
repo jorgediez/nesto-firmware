@@ -15,7 +15,7 @@ struct DeviceIdentity {
 std::string hardware_from_cpuinfo(const std::string& text);
 
 /// The serial number, if `hostname` is one: the stock software names the
-/// thermostat after it, 16 hexadecimal digits such as 02AA01AC091503D1.
+/// thermostat after it, 16 hexadecimal digits such as 02AA01AC00000001.
 /// Empty otherwise.
 std::string serial_from_hostname(const std::string& hostname);
 
