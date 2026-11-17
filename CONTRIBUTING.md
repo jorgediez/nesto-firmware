@@ -100,6 +100,24 @@ work, such as talking to connman, runs in another process and is polled),
 comments that say why rather than what, and texts on screen kept short enough
 for a round 320-pixel display. Python follows ruff.
 
+## Releasing
+
+1. Bump `VERSION` in `project()` in `CMakeLists.txt`, in a pull request. It
+   is the version `--version`, `hello` and Technical info show.
+2. Once it's merged, tag that commit `vX.Y.Z` and push the tag.
+3. CI builds and tests the tag as it does any change, packs
+   `nesto-X.Y.Z-nest-gen2.tar.gz` (`scripts/dev.sh package`, the same
+   locally), checks the tag matches the version, and drafts a release with
+   the package and its checksum attached.
+4. Write the notes for users in the draft, and publish it. Releases are
+   immutable once published: a release with a problem is fixed by a new
+   version, not by changing its files.
+
+Semantic versioning: a patch for fixes; a minor version for new features, or
+a protocol addition both sides tolerate; a major version for anything that
+needs Home Assistant's side to change with it, such as a new protocol
+version.
+
 ## License
 
 Contributions are under the [MIT License](LICENSE), like the rest of the

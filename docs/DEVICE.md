@@ -502,7 +502,10 @@ scripts/dev.sh device-log <nest-ip> follow      # and the log in a third
 
 ## Installing Nesto for good
 
-`scripts/dev.sh device-install <nest-ip>` copies Nesto and two scripts to
+To install a release, follow [INSTALL.md](INSTALL.md): its `install.sh` does
+what this section describes, from an unpacked release. From this repository,
+`scripts/dev.sh device-install <nest-ip>` builds Nesto and runs the same
+installer. It copies Nesto and two scripts to
 `/nesto` (on `/`, where programs may run and stay: `/media/scratch` is
 emptied at boot), and adds one line to `/etc/inittab`, keeping a copy of it
 as `/etc/inittab.nesto-backup`:

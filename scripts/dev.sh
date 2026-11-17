@@ -8,6 +8,7 @@
 #   scripts/dev.sh e2e                    run the real panel against the Python client, both builds
 #   scripts/dev.sh check-arm              check the ARM programs can run on the thermostat
 #   scripts/dev.sh dist                   the thermostat's programs, stripped, in dist/ (nesto, nesto-probe)
+#   scripts/dev.sh package                those, packed as a release in dist/ (scripts/package.sh)
 #   scripts/dev.sh vectors                regenerate the protocol test vectors from tools/
 #   scripts/dev.sh sim [options]          open the simulator window (WSLg or X11), port 6170
 #   scripts/dev.sh client pair|connect    talk to the running simulator as Home Assistant would
@@ -20,7 +21,7 @@
 #   scripts/dev.sh device-check HOST [SSH OPTIONS]
 #                                         describe a rooted thermostat, read-only (docs/DEVICE.md)
 #   scripts/dev.sh check-report           run the device scripts in busybox and dash, and
-#                                         nest-screen.sh against a pretend thermostat
+#                                         them and install.sh against a pretend thermostat
 #   scripts/dev.sh device-screen HOST status|take|give|watch|trial|battery [SECONDS] [SSH OPTIONS]
 #                                         take the screen from the stock software, or give it back
 #   scripts/dev.sh device-run HOST [input-test|backplate-test|light-test|sound-test|detach] [SECONDS] [SSH OPTIONS] [-- NESTO OPTIONS]
@@ -75,6 +76,13 @@ build_nest_binary() {
     cmake --build /build/nest --target nesto > /dev/null
     mkdir -p /src/dist
     "$NESTO_ARM_TOOLCHAIN/bin/arm-buildroot-linux-musleabihf-strip" -o /src/dist/nesto /build/nest/nesto'
+}
+
+# The scripts the installer sends, next to the built programs in dist/, as a
+# release has them.
+stage_scripts() {
+  mkdir -p "$ROOT/dist"
+  cp "$ROOT/scripts/nesto-boot.sh" "$ROOT/scripts/nest-screen.sh" "$ROOT/scripts/device-check.sh" "$ROOT/dist/"
 }
 
 # On the thermostat: whether Nesto is installed there, started at boot.
@@ -132,6 +140,10 @@ case "${1:-}" in
         "$NESTO_ARM_TOOLCHAIN/bin/arm-buildroot-linux-musleabihf-strip" -o "/src/dist/$program" "/build/nest/$program"
         echo "dist/$program: $(( $(stat -c %s "/src/dist/$program") / 1024 )) KiB"
       done'
+    ;;
+  package)
+    "$0" dist
+    "$ROOT/scripts/package.sh"
     ;;
   vectors)
     run python3 /src/tools/make_vectors.py /src/tests/vectors/protocol-v1.json
@@ -220,6 +232,12 @@ case "${1:-}" in
         exit 1
       fi
       echo "ok:   nesto-boot.sh parses"
+      # shellcheck disable=SC2086
+      if ! docker run --rm -v "$ROOT/scripts":/scripts:ro $shell -n /scripts/install.sh; then
+        echo "FAIL: install.sh doesn't parse in $shell" >&2
+        exit 1
+      fi
+      echo "ok:   install.sh parses"
     done
     # nest-screen.sh's runs, against a pretend thermostat in busybox.
     echo "== nest-screen.sh on a pretend thermostat, in busybox"
@@ -228,6 +246,9 @@ case "${1:-}" in
     # nesto-boot.sh, installed and started at boot, against the same.
     echo "== nesto-boot.sh on a pretend thermostat, in busybox"
     docker run --rm -v "$ROOT/scripts":/scripts:ro -v "$ROOT/tests/device":/t:ro       "$BUSYBOX_IMAGE" sh /t/fake-boot.sh
+    # install.sh, from an unpacked release, against the same.
+    echo "== install.sh on a pretend thermostat, in busybox"
+    docker run --rm -v "$ROOT/scripts":/scripts:ro -v "$ROOT/tests/device":/t:ro       "$BUSYBOX_IMAGE" sh /t/fake-install.sh
     ;;
   device-screen)
     if [ $# -lt 3 ] || ! [[ "$3" =~ ^(status|take|give|watch|trial|battery)$ ]]; then
@@ -353,26 +374,12 @@ case "${1:-}" in
     fi
     host="$2"
     shift 2
-    update=""
-    if [ "${1:-}" = update ]; then
-      update=1
-      shift
-    fi
+    [ "${1:-}" = update ] && shift
     build_nest_binary
-    # Nesto and its scripts go to /, where programs may run from and stay
-    # (/media/scratch is emptied at boot); a new Nesto replaces the old one in
-    # one step, so the service never starts half a file.
-    echo "Copying Nesto ($(( $(stat -c %s "$ROOT/dist/nesto") / 1024 )) KiB) and its scripts to $host:/nesto"
-    if [ -n "$update" ]; then
-      then_do='sh /nesto/nesto-boot.sh restart'
-    else
-      then_do='sh /nesto/nesto-boot.sh install && sleep 10 && sh /nesto/nesto-boot.sh status'
-    fi
-    tar -C "$ROOT" --format=ustar --owner=0 --group=0 -cf -         --transform 's|.*/||' dist/nesto scripts/nesto-boot.sh scripts/nest-screen.sh |
-      ssh -o ConnectTimeout=10 "$@" "root@$host"         "rm -rf /tmp/nesto-install && mkdir /tmp/nesto-install && tar xf - -C /tmp/nesto-install &&
-         mkdir -p /nesto /media/data/nesto && cd /tmp/nesto-install &&
-         chmod 755 nesto && mv nesto /nesto/nesto.new && mv /nesto/nesto.new /nesto/nesto &&
-         mv nesto-boot.sh nest-screen.sh /nesto/ && cd / && rm -rf /tmp/nesto-install && $then_do"
+    stage_scripts
+    # Installing or updating are the same to the installer: it puts this
+    # build in place, and adds the boot line if it isn't there yet.
+    NESTO_FILES="$ROOT/dist" sh "$ROOT/scripts/install.sh" "$host" install "$@"
     ;;
   device-mode)
     if [ $# -lt 3 ] || ! [[ "$3" =~ ^(stock|nesto)$ ]]; then
@@ -382,7 +389,7 @@ case "${1:-}" in
     host="$2"
     mode="$3"
     shift 3
-    ssh -o ConnectTimeout=10 "$@" "root@$host" "sh /nesto/nesto-boot.sh $mode"
+    sh "$ROOT/scripts/install.sh" "$host" "$mode" "$@"
     ;;
   device-status)
     if [ $# -lt 2 ]; then
@@ -391,7 +398,7 @@ case "${1:-}" in
     fi
     host="$2"
     shift 2
-    ssh -o ConnectTimeout=10 "$@" "root@$host"       "sh /nesto/nesto-boot.sh status; echo; sh /nesto/nest-screen.sh status"
+    sh "$ROOT/scripts/install.sh" "$host" status "$@"
     ;;
   device-uninstall)
     if [ $# -lt 2 ]; then
@@ -402,7 +409,7 @@ case "${1:-}" in
     shift 2
     # The stock software back for good; Nesto's settings and log stay in
     # /media/data/nesto.
-    ssh -o ConnectTimeout=10 "$@" "root@$host"       "sh /nesto/nesto-boot.sh uninstall && rm -rf /nesto && echo 'removed /nesto'"
+    sh "$ROOT/scripts/install.sh" "$host" uninstall "$@"
     ;;
   device-log)
     if [ $# -lt 2 ]; then
@@ -447,24 +454,11 @@ case "${1:-}" in
       cmake --build /build/nest --target nesto-probe > /dev/null
       mkdir -p /src/dist
       "$NESTO_ARM_TOOLCHAIN/bin/arm-buildroot-linux-musleabihf-strip" -o /src/dist/nesto-probe /build/nest/nesto-probe'
-    mkdir -p "$ROOT/device-reports"
-    report="$ROOT/device-reports/$(date +%Y%m%d-%H%M%S).txt"
-    # One SSH session, so a password is asked for once: the report script and
-    # the probe travel as a tar on its input, unpack into RAM (/tmp), and are
-    # deleted when the report is done. The script picks where the probe can
-    # run from; see its header.
-    remote='rm -rf /tmp/nesto-check && mkdir /tmp/nesto-check && cd /tmp/nesto-check &&
-            tar xf - && sh ./device-check.sh; status=$?; cd / && rm -rf /tmp/nesto-check; exit $status'
-    tar -C "$ROOT" --format=ustar --owner=0 --group=0 -cf - \
-        --transform 's|.*/||' scripts/device-check.sh dist/nesto-probe |
-      ssh -o ConnectTimeout=10 "$@" "root@$host" "$remote" |
-      tee "$report" || echo "(the check over SSH exited with ${PIPESTATUS[1]})"
-    echo
-    echo "Saved to device-reports/$(basename "$report"). It has MAC addresses and the Wi-Fi network's name:"
-    echo "read it before sharing it."
+    stage_scripts
+    NESTO_FILES="$ROOT/dist" NESTO_REPORTS="$ROOT/device-reports" sh "$ROOT/scripts/install.sh" "$host" check "$@"
     ;;
   *)
-    sed -n '2,41p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,42p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac
