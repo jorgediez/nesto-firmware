@@ -4,11 +4,18 @@ Nesto turns a Nest Learning Thermostat (2nd generation) into a Home Assistant
 room panel. This guide installs a release on one. It takes about half an
 hour, most of it rooting.
 
-> **Read this first.** Installing Nesto means rooting the thermostat, which
-> can leave it unusable. Only do it to a thermostat you no longer need as a
-> thermostat, and back it up first (step 2). Nesto is not affiliated with
-> Google or Nest. It has been tested on a thermostat on a USB stand; running
-> it on a wall's heating wires is untested.
+> **Use at your own risk.** Nesto is a personal project, provided as is,
+> without warranty of any kind (see the
+> [licence](https://github.com/jorgediez/nesto-firmware/blob/main/LICENSE)).
+> Rooting the thermostat and installing Nesto can leave it unusable. The
+> authors aren't responsible for any damage, data loss or other harm, to the
+> thermostat, your heating or anything else. Only use it on a thermostat you
+> no longer need, and back it up first (step 2).
+
+Nesto replaces the thermostat's own software: once it runs, the thermostat
+no longer controls any heating. It has been tested on one thermostat on a USB
+stand; running it on a wall's heating wires is untested. Nesto is not
+affiliated with Google or Nest.
 
 ## What you need
 

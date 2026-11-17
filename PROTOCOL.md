@@ -529,11 +529,11 @@ flash so it can sleep, wake and show the clock before HA connects.
 | `display.timeout_s` | Seconds without input before leaving the active state (section 13). 0 means never. |
 | `display.wake_on_motion` | Motion wakes the panel from standby. Ignored without sensors. |
 | `display.wake_on_input_when_off` | The ring or a press wakes the panel from **off**. If false, only HA can turn it back on. |
-| `standby.mode` | `"clock"`, `"carousel"` or `"off"` (screen off instead of standby). |
+| `standby.mode` | `"clock"`, `"carousel"` or `"off"` (screen off instead of standby). Firmware 0.1.0 has no carousel and shows the clock instead (section 15). |
 | `standby.brightness` | Standby brightness, 0–100. |
 | `standby.clock.style` | `"analog"` or `"digital"`. |
 | `standby.carousel.interval_s` | Seconds per image, minimum 5. |
-| `locale.language` | Language for the panel's own texts (`"en"`, `"es"`, …), falling back to English. |
+| `locale.language` | Language for the panel's own texts (`"en"`, `"es"`, …), falling back to English. Firmware 0.1.0 has English texts only and ignores it. |
 | `locale.hour12` | 12-hour clock. |
 | `sound.ring_click` | Click when a turn of the ring changes what the screen shows, while the display is active: the next item in a list, the next value. Default true. Nothing changes at either end of a list or a value, so no click there either. The turn that wakes the display doesn't click, and a fast turn clicks at most every 15 ms. |
 | `sound.press_click` | Click when the display is pressed down while it's active. Default false. |
@@ -672,6 +672,9 @@ button pressed on the panel.
 
 ## 15. Images for the carousel
 
+> Not in firmware 0.1.0, nor in ha-nesto 0.1.0: the panel never asks for
+> images, and shows the clock instead.
+
 The panel pulls images; HA never pushes them. This lets the panel stay within
 its memory budget and stop fetching when it isn't showing the carousel.
 
@@ -789,7 +792,7 @@ them to anything.
 | `info` | H→P | Request | Result carries `uptime_s`, `free_ram_kb`, `wifi_rssi`, `wifi_ssid`, `wifi_freq_mhz`, `ip`, `fw`, `base_connected` and `base_fw`, for HA's diagnostic entities. `wifi_rssi` is the Wi-Fi signal in dBm; it and the Wi-Fi fields are null without Wi-Fi. |
 | `ha_info` | H→P | Event | `{"t": "ha_info", "ha_version": "2026.11.1", "integration_version": "0.1.0"}`, sent after `config` in synchronisation (section 8), for the panel's Technical info screen. Each at most 32 characters. |
 | `identify` | H→P | Request | Wakes the display, pulses the backlight and beeps three times, over about 3 seconds. |
-| `reboot` | H→P | Request | The panel answers, then reboots. |
+| `reboot` | H→P | Request | The panel answers, then reboots. Firmware 0.1.0 answers error `unsupported` instead. |
 | `unpair` | H→P | Request | See section 6.3. |
 
 ## 19. Firmware update
@@ -884,11 +887,13 @@ experience depend on them.
 This appendix is informative; it describes `ha-nesto` so the panel side knows
 what to expect.
 
-**Which entities.** In room mode, the integration takes every entity whose own
-area, or whose device's area, is the chosen area. It keeps those in supported
-domains, then removes the ones the user excluded. Entities added to the area
-later appear on the panel unless excluded. In manual mode, the user picks the
-entities.
+**Which entities.** The integration's options hold one ordered list of
+entities per kind (lights, climate, covers, switches, scenes, sensors). In
+room mode the lists start as every entity whose own area, or whose device's
+area, is the panel's area, in supported domains, except sensors, which the
+user adds; entities added to the area later come after the listed ones, and
+the ones the user took off stay off. In manual mode, the lists are what the
+user picked.
 
 **Domains to kinds.**
 
@@ -905,9 +910,9 @@ entities.
 **Colour.** The panel always works in hue and saturation. HA converts to and
 from whatever colour mode the light uses.
 
-**Order.** Synthetic "all lights" first (when a room has two or more lights),
-then lights, climate, covers, switches, scenes and sensors, each group sorted by
-name. A custom order may be added later.
+**Order.** Kind by kind: lights, climate, covers, switches, scenes and
+sensors; within a kind, the user's order. With the user's "All lights"
+option and two or more lights, a synthetic "all lights" item comes first.
 
 ## Appendix B: example session
 

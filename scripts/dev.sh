@@ -15,6 +15,7 @@
 #   scripts/dev.sh client demo            serve a made-up room to the running simulator
 #                                         (client --host HOST ...: to a panel elsewhere)
 #   scripts/dev.sh screens DIR [options]  screenshots of every screen against the demo room
+#   scripts/dev.sh readme-images          the README's pictures, small, into docs/images/
 #   scripts/dev.sh shot FILE "STEPS"      play STEPS headless, save the screen to FILE
 #   scripts/dev.sh shot-arm FILE "STEPS"  the same with the ARM build, under QEMU
 #   scripts/dev.sh shell                  a shell in the container
@@ -189,6 +190,9 @@ case "${1:-}" in
   screens)
     shift
     run python3 /src/tools/screens.py "$@"
+    ;;
+  readme-images)
+    run python3 /src/tools/readme_images.py
     ;;
   shot)
     if [ $# -lt 3 ]; then
@@ -461,7 +465,7 @@ case "${1:-}" in
     NESTO_FILES="$ROOT/dist" NESTO_REPORTS="$ROOT/device-reports" sh "$ROOT/scripts/install.sh" "$host" check "$@"
     ;;
   *)
-    sed -n '2,42p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,43p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac

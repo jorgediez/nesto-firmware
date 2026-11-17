@@ -27,6 +27,7 @@ SCREENS = {
     "waiting": None,  # no Home Assistant at all
     "home": f"{SETTLE} w200",
     "home-fan": f"{SETTLE} r+5 w300",
+    "home-scene": f"{SETTLE} r+4 w300",
     "light": f"{SETTLE} p r+2 w2500",
     "light-colour-temperature": f"{SETTLE} p p r-3 w2500",
     "climate": f"{SETTLE} r+2 p r+2 w2500",
@@ -52,6 +53,7 @@ SCREENS = {
     "standby-digital-12h": f"{SETTLE} w3500",
     # Notifications, sent right after synchronising (NOTICES below).
     "notice": f"{SETTLE} r+1 w300",
+    "notice-open": f"{SETTLE} w300",  # the first button, as it pops up
     "notice-critical": f"{SETTLE} w300",
     # The selection stays on the light it was on; the entry is just above.
     "home-notifications": f"{SETTLE} r-1 w300",
@@ -59,15 +61,19 @@ SCREENS = {
 }
 
 # Settings for the screens that need some, as Home Assistant sends them.
+# The standby clocks at 60% rather than the default 20%, so they show.
 CONFIGS = {
-    "standby-analog": {"display": {"timeout_s": 2}, "standby": {"clock": {"seconds": True}}},
+    "standby-analog": {
+        "display": {"timeout_s": 2},
+        "standby": {"brightness": 60, "clock": {"seconds": True}},
+    },
     "standby-digital": {
         "display": {"timeout_s": 2},
-        "standby": {"clock": {"style": "digital", "seconds": True}},
+        "standby": {"brightness": 60, "clock": {"style": "digital", "seconds": True}},
     },
     "standby-digital-12h": {
         "display": {"timeout_s": 2},
-        "standby": {"clock": {"style": "digital", "seconds": True}},
+        "standby": {"brightness": 60, "clock": {"style": "digital", "seconds": True}},
         "locale": {"hour12": True},
     },
 }
@@ -102,6 +108,7 @@ LOW = [
 # Notifications for the screens that need some: each after so many seconds.
 NOTICES = {
     "notice": [(0, DOOR)],
+    "notice-open": [(0, DOOR)],
     "notice-critical": [(0, LEAK)],
     "home-notifications": [(0, n) for n in LOW],
     "notifications": [(0, n) for n in LOW],
