@@ -6,21 +6,52 @@ switches and scenes of a room. The panel also shows Home Assistant's
 notifications and a clock while idle, and reports the thermostat's
 temperature, humidity, light and motion sensors.
 
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/home.png" width="180" alt="The home screen, showing one of the room's lights"><br>The room, item by item</td>
+    <td align="center"><img src="docs/images/light.png" width="180" alt="A light's brightness"><br>Brightness</td>
+    <td align="center"><img src="docs/images/light-colour-temperature.png" width="180" alt="A light's colour temperature"><br>Colour temperature</td>
+    <td align="center"><img src="docs/images/climate.png" width="180" alt="A radiator's target temperature"><br>Climate</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/cover.png" width="180" alt="A window blind's position"><br>Covers</td>
+    <td align="center"><img src="docs/images/switch.png" width="180" alt="A switch on the home screen"><br>Switches</td>
+    <td align="center"><img src="docs/images/scene.png" width="180" alt="A scene on the home screen"><br>Scenes and scripts</td>
+    <td align="center"><img src="docs/images/notification.png" width="180" alt="A notification with buttons"><br>Notifications</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/clock-analog.png" width="180" alt="The analog standby clock"><br>Standby clock</td>
+    <td align="center"><img src="docs/images/clock-digital.png" width="180" alt="The digital standby clock"><br>Or a digital one</td>
+    <td align="center"><img src="docs/images/wifi-keyboard.png" width="180" alt="Typing a Wi-Fi password on the ring keyboard"><br>Wi-Fi, typed on the ring</td>
+    <td align="center"><img src="docs/images/technical-info.png" width="180" alt="Technical info"><br>Technical info</td>
+  </tr>
+</table>
+
 Nesto ("nest" in Esperanto) is the software that runs on the thermostat. It
 works with the [ha-nesto](https://github.com/jorgediez/ha-nesto) Home Assistant
 integration, which discovers the panel, pairs with it and decides what it shows.
+Everything stays on your network: no cloud, and no Home Assistant token on the
+panel.
 
-> **Status: before the first release.** Nesto installs on the thermostat for
-> good and starts at every boot, with a way back to the stock software
-> ([docs/DEVICE.md](docs/DEVICE.md)). It talks to the thermostat's base, which
-> would otherwise reset it after 30 minutes
-> ([docs/BACKPLATE.md](docs/BACKPLATE.md)), rests the display to keep the
-> battery up, and joins Wi-Fi networks from its own Settings. It has been
-> tested on one thermostat, on a USB stand; running on a wall's wires is
-> untested. The wire protocol between the panel and Home Assistant is in
+> **Status: first release (0.1.0).** Nesto replaces the thermostat's own
+> software, so the thermostat no longer controls any heating. It installs for
+> good, starts at every boot, and can give the thermostat back to the stock
+> software at any time ([docs/INSTALL.md](docs/INSTALL.md)). It talks to the
+> thermostat's base, which would otherwise reset it after 30 minutes
+> ([docs/BACKPLATE.md](docs/BACKPLATE.md)), and rests the display to keep the
+> battery up. It has been tested on one thermostat (display Display-2.14, EU
+> base Backplate-3.2) on a USB stand; running on a wall's heating wires is
+> untested. The protocol between the panel and Home Assistant is in
 > [PROTOCOL.md](PROTOCOL.md).
 
 ## Install
+
+> **Use at your own risk.** Nesto is a personal project, provided as is,
+> without warranty of any kind (see the [licence](LICENSE)). Rooting the
+> thermostat and installing Nesto can leave it unusable. The authors aren't
+> responsible for any damage, data loss or other harm, to the thermostat,
+> your heating or anything else. Only use it on a thermostat you no longer
+> need, and back it up first.
 
 Download a [release](https://github.com/jorgediez/nesto-firmware/releases)
 and follow [docs/INSTALL.md](docs/INSTALL.md): root the thermostat with
@@ -29,11 +60,76 @@ Linux, macOS, or Windows with WSL or Git Bash. No build is needed. The same
 script updates Nesto, gives the thermostat back to the stock software, and
 uninstalls it.
 
+## What it does
+
+**The room.** Home Assistant sends the panel a room: its lights, climate,
+covers, switches, scenes and sensors, in the order chosen in the
+integration's options. Turn the ring to choose an item, press to open it,
+turn to change it, press to step through its controls (brightness, colour
+temperature, colour and effect; target, mode, preset and fan; position and
+tilt), and hold to go back. On the home screen, a press switches a switch or
+runs a scene, and holding switches a light.
+
+**Notifications.** Home Assistant's notifications pop up, waking the panel as
+their priority says, and wait in a list the home screen opens. The ring
+chooses a button or Dismiss, a press sends it, and holding keeps the
+notification for later. A critical one beeps every 30 seconds until it's
+answered.
+
+**Resting.** After 30 seconds without input (or what Home Assistant sets),
+the display fades to a standby clock, analog or digital, or turns off. The
+ring, a press or someone coming near wakes it, and the input that wakes it
+does nothing else. It wakes to the top of the home screen: the Notifications
+entry while there are any, else the first item. The light sensor scales the
+brightness down to a quarter in the dark, slowly, so a hand or a shadow
+doesn't dim it.
+
+**Sound.** The beeper clicks when a turn of the ring changes the screen
+(nothing at either end of a list) and, if Home Assistant turns it on, on a
+press. Notifications beep, and `identify` beeps while the backlight pulses.
+
+**Sensors and presses.** With its base, the panel reports temperature,
+humidity, light, motion, someone near, and its battery and supply voltages.
+Every press gesture is an event for automations, including a double press
+while it rests, which doesn't wake it.
+
+**Settings**, the last entry on the home screen (or a press on the waiting
+screen):
+
+- **Pair**: lets Home Assistant pair again for 5 minutes, for instance to
+  move to another Home Assistant;
+- **Forget**: after a confirming press, forgets Home Assistant and drops the
+  connection (holding cancels);
+- **Wi-Fi**: the networks around, the one in use first, then the strongest,
+  and **Other network** for a hidden one (its name, then whether it has a
+  password). A network that needs a password asks for it on a ring keyboard,
+  like the stock software's: the ring moves round the keys, a press types,
+  and the first keys are OK, delete, space, shift and the other pages
+  (digits, symbols, accented letters); holding goes back. Open networks and
+  WPA Personal ones can be joined; Enterprise and WEP are listed but not
+  offered. If the new network isn't up within a minute, the thermostat goes
+  back to the one before. A saved network offers **Join** and **Forget**
+  (the one in use, Forget only: the thermostat then joins another saved
+  network if it can), and asks for its password again if joining fails;
+- **Technical info**, like the stock software's, scrolled with the ring:
+  - **Nesto**: version, panel ID, port, pairing, how long it's been running, free memory;
+  - **Home Assistant**: whether it's connected, its version, the integration's version and the round trip;
+  - **Network**: Wi-Fi name, security, signal, frequency, interface, IPv4 and IPv6 addresses and routers, name servers, search domains, MAC address;
+  - **Power** and **Sensors**, with a base: battery, USB and supply voltages, temperature, humidity, light;
+  - **Display**: model, hardware, serial number, time zone;
+  - **Base**, with one: whether it's connected, its software, model and serial number.
+
+Hold to go back from any of them.
+
+Not in this release: a picture carousel while resting, languages other than
+English, and rebooting from Home Assistant.
+
 ## Development
 
 Everything builds inside a Docker container, so the only requirement is Docker.
-On Windows, run the commands from a WSL terminal (Ubuntu): WSLg shows the
-simulator's window on the Windows desktop.
+On Windows, run the commands from WSL (Ubuntu), where WSLg shows the
+simulator's window on the Windows desktop, or from Git Bash with
+`MSYS_NO_PATHCONV=1` set.
 
 ```bash
 scripts/dev.sh image   # once, and after changing docker/Dockerfile
@@ -58,46 +154,19 @@ press gesture as an `input` event, including the double press in standby or
 off, which doesn't wake the display and is there for automations.
 `client demo` prints both.
 
-Home Assistant's notifications pop up on the panel, waking it as their
-priority says, and wait in a list the home screen opens
-([PROTOCOL.md](PROTOCOL.md) section 14). The ring chooses an action or
-Dismiss, a press sends it, and a long press keeps the notification for later.
-`client demo` sends one to try:
-
-```bash
-scripts/dev.sh client demo --notify "Someone is at the door" --title "Front door" \
-  --icon door --priority high --action open=Open --action ignore=Ignore
-```
-
-The thermostat's beeper clicks when a turn of the ring changes the screen
-(the next item, the next value; nothing at either end) and, if Home
-Assistant turns it on, on pressing the display; notifications beep, a
-critical one every 30 seconds until it's answered, and `identify` beeps
-three times while the backlight pulses ([PROTOCOL.md](PROTOCOL.md) sections
-12, 14 and 18). The simulator logs its tones instead. `client demo
---press-click`, `--no-ring-click` and `--no-notification-sound` try the
-settings.
-
-With Home Assistant's `auto_brightness` (on unless it's turned off), the
-light sensor scales the brightness: the configured one in a lit room, down to
-a quarter of it in the dark (5% at least), the standby clock too. It dims over
-about 10 s, so a hand or a shadow doesn't dim it, and comes back up within a
-few seconds.
-
-After 30 seconds without input (or what Home Assistant sets) the display
-fades to standby, a clock at 20% (analog or digital, as Home Assistant
-sets), once the panel knows the time; until then, dark. The ring, a press or
-someone near wakes it, and the input that wakes it does nothing else
-([PROTOCOL.md](PROTOCOL.md) section 13). It wakes to the top of the home
-screen: the Notifications entry while there are any, else the first item. Home Assistant's `wake_on_motion`
-setting turns waking on someone near off; `client demo --no-motion` tries it.
+`client demo` (below) also tries what the panel does. It sends a notification with
+`--notify "Someone is at the door" --title "Front door" --icon door --priority
+high --action open=Open --action ignore=Ignore`, and tries the settings with
+`--press-click`, `--no-ring-click`, `--no-notification-sound`,
+`--no-motion`, `--timeout N`, `--clock digital`, `--seconds` and `--hour12`.
+The simulator logs its tones instead of beeping.
 
 The simulator listens for Home Assistant on port 6170 and announces itself over
 mDNS as a `_nesto._tcp` service, which is how Home Assistant discovers it
 (`--no-mdns` turns that off). In Docker, the announcements stay inside Docker's
-network, so from outside the panel is reached by address. Until the
-integration exists, `tools/nesto_client.py` stands in for it. With the
-simulator running:
+network, so from outside the panel is reached by address.
+`tools/nesto_client.py` stands in for Home Assistant during development. With
+the simulator running:
 
 ```bash
 scripts/dev.sh client pair      # type the code the simulator shows
@@ -105,40 +174,11 @@ scripts/dev.sh client demo      # serve a made-up living room to the simulator (
 scripts/dev.sh client connect   # or: authenticate, synchronise, print what the panel sends
 ```
 
-With `client demo` running, the simulator shows the room: turn the ring to
-choose an item, press to open it, turn to change it, press to step through its
-controls (brightness, colour, effect...), and hold to go back. On the home
-screen, a press switches a switch or runs a scene, and holding switches a light.
-The demo carries out each change as Home Assistant would and prints it.
-
-The pairing is kept in the build volume, so it survives restarts. **Settings**,
-the last entry on the home screen (or a press on the waiting screen), has:
-
-- **Pair**: lets Home Assistant pair again for 5 minutes, for instance after
-  `client.key` is lost or to move to another Home Assistant;
-- **Forget**: after a confirming press, forgets Home Assistant and drops the
-  connection (holding cancels);
-- **Wi-Fi**: the networks around, the one in use first, then the strongest,
-  and **Other network** for a hidden one (its name, then whether it has a
-  password). A network that needs a password asks for it on a ring keyboard,
-  like the stock software's: the ring moves round the keys, a press types,
-  and the first keys are OK, delete, space, shift and the other pages (digits,
-  symbols, accented letters); holding goes back. Open networks and WPA
-  Personal ones can be joined; Enterprise and WEP are listed but not
-  offered. If the new network isn't up within a minute, the thermostat goes
-  back to the one before. A saved network offers **Join** and **Forget**
-  (the one in use, Forget only: the thermostat then joins another saved
-  network if it can), and asks for its password again if joining fails. In the simulator the networks are made up, and a
-  password starting with "wrong" fails;
-- **Technical info**, like the stock software's, scrolled with the ring:
-  - **Nesto**: version, panel ID, port, pairing, how long it's been running, free memory;
-  - **Home Assistant**: whether it's connected, its version, the integration's version and the round trip;
-  - **Network**: Wi-Fi name, security, signal, frequency, interface, IPv4 and IPv6 addresses and routers, name servers, search domains, MAC address;
-  - **Power** and **Sensors**, with a base: battery, USB and supply voltages, temperature, humidity, light;
-  - **Display**: hardware, serial number, time zone;
-  - **Base**, with one: whether it's connected, its software, model and serial number.
-
-Hold to go back from any of them.
+With `client demo` running, the simulator shows the room, and the demo
+carries out each change as Home Assistant would and prints it. The pairing is
+kept in the build volume, so it survives restarts; Settings → Pair lets the
+client pair again after `client.key` is lost. In the simulator the Wi-Fi
+networks are made up, and a password starting with "wrong" fails.
 
 Screens can also be captured without a window. CI does this against the demo
 room, and keeps the screenshots:
@@ -146,6 +186,7 @@ room, and keeps the screenshots:
 ```bash
 scripts/dev.sh screens screenshots              # every screen, into screenshots/
 scripts/dev.sh shot screenshots/x.png "r+2 p"   # one screen, without Home Assistant
+scripts/dev.sh readme-images                    # the README's pictures, into docs/images/
 ```
 
 The steps are `r+N`/`r-N` (turn the ring N clicks, as many wheel notches),
@@ -260,9 +301,6 @@ privately.
 Nesto is an independent project. It is not affiliated with, endorsed by or
 supported by Google or Nest Labs. "Nest" is a trademark of Google LLC, used here
 only to say which hardware this software runs on.
-
-Installing Nesto means rooting the thermostat, which can leave it unusable.
-Only use it on a device you no longer need as a thermostat.
 
 ## License
 
