@@ -161,7 +161,8 @@ The direction of each message is marked **H→P** (HA to panel) or **P→H**
                    "supply_voltage", "usb_voltage", "battery_voltage"],
        "beeper": true,
        "image_formats": ["jpeg", "png"],
-       "ota": false
+       "ota": false,
+       "reboot": true
      }
    }
    ```
@@ -172,7 +173,7 @@ The direction of each message is marked **H→P** (HA to panel) or **P→H**
    | `paired` | The panel holds a pairing key. |
    | `pairing_open` | The panel will accept `pair_begin` (section 6.1). |
    | `nonce` | 16 random bytes, base64, fresh for every connection. |
-   | `caps` | What this panel can do. `sensors` lists only sensors that are actually working, so a panel off its base reports none. The Nest Gen 2 lists the base's sensors whenever it talks to its base, even before the base has answered; until it does, `sensors` messages leave those readings out (section 17). |
+   | `caps` | What this panel can do. `sensors` lists only sensors that are actually working, so a panel off its base reports none. The Nest Gen 2 lists the base's sensors whenever it talks to its base, even before the base has answered; until it does, `sensors` messages leave those readings out (section 17). `ota`: the panel takes firmware updates (section 19). `reboot`: it reboots when asked (section 18); firmware 0.2.0 and older leave it out. |
    | `insecure` | Present and true only on development builds (section 7.4). |
 
 3. HA checks `proto` (section 22). Then:
@@ -792,7 +793,7 @@ them to anything.
 | `info` | H→P | Request | Result carries `uptime_s`, `free_ram_kb`, `wifi_rssi`, `wifi_ssid`, `wifi_freq_mhz`, `ip`, `fw`, `base_connected` and `base_fw`, for HA's diagnostic entities. `wifi_rssi` is the Wi-Fi signal in dBm; it and the Wi-Fi fields are null without Wi-Fi. |
 | `ha_info` | H→P | Event | `{"t": "ha_info", "ha_version": "2026.11.1", "integration_version": "0.1.0"}`, sent after `config` in synchronisation (section 8), for the panel's Technical info screen. Each at most 32 characters. |
 | `identify` | H→P | Request | Wakes the display, pulses the backlight and beeps three times, over about 3 seconds. |
-| `reboot` | H→P | Request | The panel answers, then reboots. Firmware 0.1.0 answers error `unsupported` instead. |
+| `reboot` | H→P | Request | The panel answers, shows that it's restarting, and within a few seconds reboots: the Nest Gen 2 hands its base back as the stock software leaves it, then reboots the thermostat, which runs Nesto again about a minute later. During a firmware update, or once asked, it answers `bad_request` instead. A panel reports it can in `hello.caps.reboot`; firmware 0.2.0 and older answer `unsupported`. |
 | `unpair` | H→P | Request | See section 6.3. |
 
 ## 19. Firmware update

@@ -1,3 +1,5 @@
+#include <cerrno>
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -5,14 +7,57 @@
 #include <string>
 
 #include "app/App.hpp"
+#include "core/Log.hpp"
 
 #if defined(NESTO_PLATFORM_SIM)
 #include "hal/sim/SimHal.hpp"
 #elif defined(NESTO_PLATFORM_NEST)
+#include <spawn.h>
+#include <sys/reboot.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include "hal/nest/NestHal.hpp"
+
+extern char** environ;
 #endif
 
 namespace {
+
+// Reboots, as Home Assistant asked (PROTOCOL.md section 18), once Nesto has
+// stopped and handed the base back. On the thermostat it doesn't return when
+// it works: init stops everything, the boot script too, so Nesto's exit is
+// never taken for a crash. An update only replaces the program, so this
+// can't count on a boot script that knows another exit code.
+int reboot_now() {
+#if defined(NESTO_PLATFORM_NEST)
+  nesto::log::info("rebooting the thermostat");
+  sync();
+  // Busybox's reboot asks init, which runs the stock shutdown script
+  // (/etc/init.d/rcH: the services stopped, the filesystems unmounted), then
+  // ends every process and reboots. Nesto is one of them: with the default
+  // handlers back, init's SIGTERM ends it, rather than cut the wait short.
+  for (int signal : {SIGINT, SIGTERM, SIGHUP}) std::signal(signal, SIG_DFL);
+  char program[] = "/sbin/reboot";
+  char* argv[] = {program, nullptr};
+  pid_t pid = 0;
+  if (posix_spawn(&pid, program, nullptr, nullptr, argv, environ) == 0) {
+    int status = 0;
+    waitpid(pid, &status, 0);
+    // The shutdown script takes a while; wait for init rather than exit.
+    unsigned left = 120;
+    while (left > 0) left = sleep(left);
+  }
+  nesto::log::warn("init didn't reboot the thermostat: rebooting it directly");
+  sync();
+  ::reboot(RB_AUTOBOOT);
+  nesto::log::error("couldn't reboot: %s", std::strerror(errno));
+  return EXIT_FAILURE;
+#else
+  nesto::log::info("the thermostat would reboot now; the simulator exits");
+  return nesto::kRebootExit;
+#endif
+}
 
 std::string default_state_dir() {
 #if defined(NESTO_PLATFORM_SIM)
@@ -193,7 +238,14 @@ int main(int argc, char** argv) {
   if (light_test) return hal->light_test();
 #endif
 
-  nesto::App app(*hal, app_options);
-  if (!app.init()) return EXIT_FAILURE;
-  return app.run();
+  int code = EXIT_FAILURE;
+  {
+    nesto::App app(*hal, app_options);
+    if (!app.init()) return EXIT_FAILURE;
+    code = app.run();
+  }
+  if (code != nesto::kRebootExit) return code;
+  // The hardware let go first: the base handed back, the backlight restored.
+  hal.reset();
+  return reboot_now();
 }

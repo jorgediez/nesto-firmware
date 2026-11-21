@@ -205,7 +205,8 @@ bool App::init() {
                 {"sensors", sensors},
                 {"beeper", hal_.has_beeper()},
                 {"image_formats", protocol::Json::array()},
-                {"ota", ota_ != nullptr}};
+                {"ota", ota_ != nullptr},
+                {"reboot", true}};
 
   pairing_ = std::make_unique<protocol::PairingState>(
       std::make_unique<protocol::FileKeyStore>(options_.state_dir));
@@ -282,7 +283,7 @@ int App::run() {
     }
     // And an update, which wakes it.
     if (ota_) ota_->tick(hal_.now());
-    if (updating()) {
+    if (updating() || rebooting()) {
       if (display_power_.state() != room::DisplayState::Active) {
         display_power_.set(room::DisplayState::Active, hal_.now());
       }
@@ -292,6 +293,10 @@ int App::run() {
       log::info("starting the new Nesto");
       quit_ = true;
       exit_code_ = kUpdatedExit;
+    }
+    if (rebooting() && hal_.now() >= reboot_at_) {
+      quit_ = true;
+      exit_code_ = kRebootExit;
     }
     controller_.set_notifications(notifications_.count(), notifications_.unread());
     update_sound();
@@ -329,7 +334,7 @@ void App::update_sound() {
 void App::render() {
   // A notification screen over everything; then Wi-Fi's, over Settings; or
   // the room's.
-  const Drawn source = updating()                ? Drawn::Update
+  const Drawn source = updating() || rebooting() ? Drawn::Update
                        : notifications_.active() ? Drawn::Notices
                        : wifi_.active()          ? Drawn::Wifi
                                                  : Drawn::Room;
@@ -679,6 +684,12 @@ room::RoomView App::update_view() const {
   v.offline = false;
   v.title = "Update";
   v.tone = room::Tone::Active;
+  if (rebooting()) {
+    v.title = "Restart";
+    v.item_name = "Restarting";
+    v.prompt = "Back in a minute";
+    return v;
+  }
   if (quit_at_ != 0) {
     v.item_name = "Restarting";
     v.prompt = "Nesto " + ota_->version();
@@ -695,7 +706,26 @@ room::RoomView App::update_view() const {
   return v;
 }
 
+void App::handle_reboot(protocol::PanelSession& session, const protocol::Message& m) {
+  // An update half sent, or put in place, finishes first; a reboot asked for
+  // already is on its way.
+  if (updating() || rebooting()) {
+    session.send(protocol::result_error(
+        *m.id, protocol::ErrorCode::BadRequest,
+        rebooting() ? "restarting already" : "an update is in progress"));
+    return;
+  }
+  log::info("Home Assistant asked for a reboot");
+  session.send(protocol::result_ok(*m.id));
+  // Stop once the answer has gone; main reboots.
+  reboot_at_ = hal_.now() + 1000;
+}
+
 void App::handle_ota(protocol::PanelSession& session, const protocol::Message& m) {
+  if (rebooting()) {
+    session.send(protocol::result_error(*m.id, protocol::ErrorCode::BadRequest, "restarting"));
+    return;
+  }
   if (!ota_) {
     session.send(protocol::result_error(*m.id, protocol::ErrorCode::Unsupported,
                                         "this panel takes no updates (hello caps.ota)"));
@@ -815,8 +845,7 @@ bool App::on_message(protocol::PanelSession& session, const protocol::Message& m
     return true;
   }
   if (m.type == "reboot" && m.is_request()) {
-    session.send(protocol::result_error(*m.id, protocol::ErrorCode::Unsupported,
-                                       "rebooting comes with the device support"));
+    handle_reboot(session, m);
     return true;
   }
   if (m.type == "layout") {
