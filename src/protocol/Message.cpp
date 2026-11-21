@@ -17,6 +17,9 @@ const char* to_string(ErrorCode code) {
     case ErrorCode::ServiceFailed: return "service_failed";
     case ErrorCode::NoImages: return "no_images";
     case ErrorCode::TooLarge: return "too_large";
+    case ErrorCode::BadSignature: return "bad_signature";
+    case ErrorCode::Downgrade: return "downgrade";
+    case ErrorCode::NoSpace: return "no_space";
     case ErrorCode::Internal: return "internal";
   }
   return "internal";

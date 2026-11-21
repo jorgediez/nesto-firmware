@@ -187,19 +187,25 @@ bool App::init() {
   }
   info_.firmware = NESTO_VERSION;
   info_.model = "nest-gen2";
-  // The base's sensors, with one; firmware updates come later (PROTOCOL.md
-  // section 5).
+  // The base's sensors, with one (PROTOCOL.md section 5).
   protocol::Json sensors = protocol::Json::array();
   if (hal_.has_base()) {
     sensors = {"temperature",  "humidity",       "illuminance", "motion_near",
                "motion_far",   "supply_voltage", "usb_voltage", "battery_voltage"};
+  }
+  // Firmware updates, when the boot script runs Nesto and this build trusts
+  // a release key (PROTOCOL.md section 19).
+  if (!options_.ota_target.empty() && !protocol::ota_trusted_keys().empty()) {
+    ota_ = std::make_unique<protocol::OtaReceiver>(protocol::OtaReceiver::Config{
+        options_.ota_target, options_.state_dir, NESTO_VERSION, info_.model,
+        protocol::ota_trusted_keys()});
   }
   info_.caps = {{"display", {{"width", kScreenSize}, {"height", kScreenSize}, {"shape", "round"}}},
                 {"input", {"ring", "press"}},
                 {"sensors", sensors},
                 {"beeper", hal_.has_beeper()},
                 {"image_formats", protocol::Json::array()},
-                {"ota", false}};
+                {"ota", ota_ != nullptr}};
 
   pairing_ = std::make_unique<protocol::PairingState>(
       std::make_unique<protocol::FileKeyStore>(options_.state_dir));
@@ -274,6 +280,19 @@ int App::run() {
     if (wifi_.joining() && display_power_.state() == room::DisplayState::Active) {
       display_power_.input(hal_.now());
     }
+    // And an update, which wakes it.
+    if (ota_) ota_->tick(hal_.now());
+    if (updating()) {
+      if (display_power_.state() != room::DisplayState::Active) {
+        display_power_.set(room::DisplayState::Active, hal_.now());
+      }
+      display_power_.input(hal_.now());
+    }
+    if (quit_at_ != 0 && hal_.now() >= quit_at_) {
+      log::info("starting the new Nesto");
+      quit_ = true;
+      exit_code_ = kUpdatedExit;
+    }
     controller_.set_notifications(notifications_.count(), notifications_.unread());
     update_sound();
     render();
@@ -310,10 +329,22 @@ void App::update_sound() {
 void App::render() {
   // A notification screen over everything; then Wi-Fi's, over Settings; or
   // the room's.
-  const Drawn source = notifications_.active() ? Drawn::Notices : wifi_.active() ? Drawn::Wifi : Drawn::Room;
+  const Drawn source = updating()                ? Drawn::Update
+                       : notifications_.active() ? Drawn::Notices
+                       : wifi_.active()          ? Drawn::Wifi
+                                                 : Drawn::Room;
   const bool fresh = source != drawn_;
   drawn_ = source;
   switch (source) {
+    case Drawn::Update: {
+      const room::RoomView view = update_view();
+      const std::string shown = view.item_name + view.prompt;
+      if (fresh || shown != update_drawn_) {
+        update_drawn_ = shown;
+        ui_->render(view);
+      }
+      return;
+    }
     case Drawn::Notices:
       if (fresh || notifications_.version() != rendered_notices_) {
         rendered_notices_ = notifications_.version();
@@ -625,6 +656,9 @@ void App::on_authenticated(protocol::PanelSession& session) {
 
 void App::on_ready(protocol::PanelSession& /*session*/) {
   log::info("synchronised with Home Assistant");
+  // A new program that got this far works: the boot script keeps it.
+  const std::string confirmed = protocol::OtaReceiver::confirm(options_.state_dir);
+  if (!confirmed.empty()) log::info("update to Nesto %s confirmed", confirmed.c_str());
   update_status();
   // Where the display is, for Home Assistant to start from (section 13); a
   // change from the synchronisation's config is part of it.
@@ -632,6 +666,64 @@ void App::on_ready(protocol::PanelSession& /*session*/) {
   send_display_state(display_power_.state(), backlight_.target(), "sync");
   sensors_.start();  // the readings, at once
   send_sensors();
+}
+
+bool App::updating() const {
+  return quit_at_ != 0 ||
+         (ota_ && ota_->stage() != protocol::OtaReceiver::Stage::Idle);
+}
+
+room::RoomView App::update_view() const {
+  room::RoomView v;
+  v.screen = room::RoomView::Screen::WifiBusy;
+  v.offline = false;
+  v.title = "Update";
+  v.tone = room::Tone::Active;
+  if (quit_at_ != 0) {
+    v.item_name = "Restarting";
+    v.prompt = "Nesto " + ota_->version();
+    v.fraction = 1;
+    return v;
+  }
+  v.item_name = "Updating to\nNesto " + ota_->version();
+  const double fraction =
+      ota_->size() > 0 ? static_cast<double>(ota_->received()) / static_cast<double>(ota_->size()) : 0;
+  v.fraction = fraction;
+  v.prompt = ota_->stage() == protocol::OtaReceiver::Stage::Received
+                 ? "Checked"
+                 : std::to_string(static_cast<int>(fraction * 100)) + "%";
+  return v;
+}
+
+void App::handle_ota(protocol::PanelSession& session, const protocol::Message& m) {
+  if (!ota_) {
+    session.send(protocol::result_error(*m.id, protocol::ErrorCode::Unsupported,
+                                        "this panel takes no updates (hello caps.ota)"));
+    return;
+  }
+  if (quit_at_ != 0) {
+    session.send(protocol::result_error(*m.id, protocol::ErrorCode::BadRequest,
+                                        "an update was applied; restarting"));
+    return;
+  }
+  protocol::OtaResult result;
+  if (m.type == "ota_begin") {
+    result = ota_->begin(m.body, hal_.now());
+  } else if (m.type == "ota_chunk") {
+    result = ota_->chunk(m.body, hal_.now());
+  } else if (m.type == "ota_end") {
+    result = ota_->end();
+  } else if (m.type == "ota_apply") {
+    result = ota_->apply();
+    // Exit once the answer has gone, for the boot script to start the new one.
+    if (result.ok) quit_at_ = hal_.now() + 1000;
+  } else {
+    result = protocol::OtaResult::error(protocol::ErrorCode::UnknownType,
+                                        "unknown request '" + m.type + "'");
+  }
+  if (!result.ok) log::warn("%s: %s", m.type.c_str(), result.message.c_str());
+  session.send(result.ok ? protocol::result_ok(*m.id)
+                         : protocol::result_error(*m.id, result.code, result.message));
 }
 
 void App::notify(protocol::PanelSession& session, const protocol::Message& m) {
@@ -716,6 +808,10 @@ bool App::on_message(protocol::PanelSession& session, const protocol::Message& m
     identify_until_ = hal_.now() + kIdentifyTime;
     sound_.play(room::sounds::identify(), hal_.now());
     session.send(protocol::result_ok(*m.id));
+    return true;
+  }
+  if (m.type.rfind("ota_", 0) == 0 && m.is_request()) {
+    handle_ota(session, m);
     return true;
   }
   if (m.type == "reboot" && m.is_request()) {

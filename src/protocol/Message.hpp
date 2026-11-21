@@ -26,6 +26,9 @@ enum class ErrorCode {
   ServiceFailed,
   NoImages,
   TooLarge,
+  BadSignature,
+  Downgrade,
+  NoSpace,
   Internal,
 };
 

@@ -11,6 +11,9 @@ export NESTO_INITTAB=/etc/inittab
 export NESTO_INIT_PID=999999  # no such process: nothing to tell
 export NESTO_RUN_DIR=/tmp/run
 export NESTO_DIR=/media/data/nesto
+# An update has 4 s to confirm itself here, checked every second.
+export NESTO_OTA_CONFIRM=4
+export NESTO_KEEPER_EVERY=1
 BOOT=/nesto/nesto-boot.sh
 LOG=$NESTO_DIR/nesto.log
 failures=0
@@ -74,12 +77,16 @@ case "$1" in
   summary) echo "Process 'nlclient'                   $(cat $state)" ;;
 esac
 EOF
-# Nesto: runs until TERM, or exits at once with 1 (a crash) or 3 (held).
+# Nesto: runs until TERM, or exits at once with 1 (a crash), 3 (held) or 4
+# (an update put in place, once). In crash-new mode only a program without a
+# "# prev" line crashes: the update, not the one it replaced.
 cat > /nesto/nesto << 'EOF'
 #!/bin/sh
 case "$(cat /tmp/fake-nesto-mode)" in
   crash) echo "fake nesto: crashing"; exit 1 ;;
+  crash-new) grep -q '^# prev' "$0" || { echo "fake nesto: the update crashes"; exit 1; } ;;
   hold) echo "fake nesto: held"; exit 3 ;;
+  update-once) echo run > /tmp/fake-nesto-mode; echo "fake nesto: updated"; exit 4 ;;
 esac
 echo "fake nesto: $*"
 trap 'echo "fake nesto: TERM"; exit 0' TERM
@@ -175,6 +182,55 @@ check "held: logged" logged "the display was held"
 fake_mode run
 sh $BOOT resume > /dev/null
 check "held, resumed: Nesto runs" nesto_running
+
+# --- Updates ---
+logged "fake nesto: --hold-for-stock --ota-target /nesto/nesto" && ok "update: Nesto may take updates" ||
+  fail "update: no --ota-target"
+fake_mode update-once
+sh $BOOT restart > /dev/null
+check "update: Nesto started again" logged "put an update in place: starting it"
+check "update: and runs" nesto_running
+[ -s "$NESTO_RUN_DIR/nesto-boot.exits" ] && fail "update: counted as a crash" || ok "update: not a crash"
+
+# The new program, which never reaches Home Assistant: the previous one back.
+cp /nesto/nesto /tmp/new-nesto
+{ cat /tmp/new-nesto; echo "# prev"; } > /nesto/nesto.prev
+chmod 755 /nesto/nesto.prev
+# What Nesto leaves when it applies an update: the marker, no starts yet.
+pend() { echo "$1" > $NESTO_DIR/ota-pending; rm -f $NESTO_DIR/ota-pending.starts; }
+pend 9.9.9
+sh $BOOT restart > /dev/null
+check "unconfirmed: rolled back" logged "update to Nesto 9.9.9 wasn't confirmed within 4 seconds"
+grep -q '^# prev' /nesto/nesto && ok "unconfirmed: the previous program is back" ||
+  fail "unconfirmed: still the update"
+[ -f $NESTO_DIR/ota-pending ] && fail "unconfirmed: still pending" || ok "unconfirmed: nothing pending"
+check "unconfirmed: Nesto runs" nesto_running
+
+# One that confirms itself in time stays.
+cp /tmp/new-nesto /nesto/nesto
+{ cat /tmp/new-nesto; echo "# prev"; } > /nesto/nesto.prev
+chmod 755 /nesto/nesto.prev
+pend 9.9.10
+sh $BOOT restart > /dev/null
+# As Nesto confirms it: the marker and the starts go.
+within 10 nesto_running && rm -f $NESTO_DIR/ota-pending $NESTO_DIR/ota-pending.starts
+sleep 6
+logged "update to Nesto 9.9.10" && fail "confirmed: rolled back anyway" || ok "confirmed: kept"
+grep -q '^# prev' /nesto/nesto && fail "confirmed: the previous program is back" ||
+  ok "confirmed: still the update"
+
+# One that crashes as it starts: two starts, then the previous one.
+fake_mode crash-new
+pend 9.9.11
+sh $BOOT restart > /dev/null
+check "crashing update: rolled back" logged "update to Nesto 9.9.11 didn't start"
+within 30 nesto_running && ok "crashing update: the previous one runs" ||
+  { fail "crashing update: the previous one runs"; tail -15 $LOG >&2; }
+grep -q '^# prev' /nesto/nesto && ok "crashing update: the previous program is back" ||
+  fail "crashing update: still the update"
+fake_mode run
+sh $BOOT resume > /dev/null
+cp /tmp/new-nesto /nesto/nesto
 
 # --- The status ---
 sh $BOOT status > /tmp/out

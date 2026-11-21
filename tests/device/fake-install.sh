@@ -38,6 +38,7 @@ export NESTO_SSH=/fake/ssh
 rel=/tmp/nesto-9.8.7-nest-gen2
 mkdir -p "$rel"
 cp /scripts/install.sh /scripts/nesto-boot.sh /scripts/nest-screen.sh /scripts/device-check.sh "$rel/"
+chmod 777 "$rel/nesto-boot.sh" "$rel/nest-screen.sh"  # as a Windows checkout packs them
 cat > "$rel/nesto" << 'EOF'
 #!/bin/sh
 [ "${1:-}" = --version ] && echo 9.8.7 && exit 0
@@ -56,6 +57,8 @@ if [ -x /nesto/nesto ] && [ -f /nesto/nesto-boot.sh ] && [ -f /nesto/nest-screen
 else
   fail "install: /nesto is incomplete: $(ls -l /nesto 2>&1)"
 fi
+modes="$(stat -c %a /nesto/nesto /nesto/nesto-boot.sh /nesto/nest-screen.sh | tr '\n' ' ')"
+[ "$modes" = "755 755 755 " ] && ok "install: only root may change them" || fail "install: modes $modes"
 grep -q "::respawn:/bin/sh /nesto/nesto-boot.sh" /etc/inittab && ok "install adds the boot line" ||
   fail "install: no boot line in /etc/inittab"
 echo "$out" | grep -q "Nesto: none -> 9.8.7" && ok "install says which version" ||

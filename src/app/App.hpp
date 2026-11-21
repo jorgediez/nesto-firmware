@@ -13,6 +13,7 @@
 #include "lvgl.h"
 #include "net/Wifi.hpp"
 #include "net/Wireless.hpp"
+#include "protocol/Ota.hpp"
 #include "protocol/PanelSession.hpp"
 #include "room/AutoBrightness.hpp"
 #include "room/Controller.hpp"
@@ -44,10 +45,15 @@ struct AppOptions {
   // A pretend Wi-Fi for Settings → Wi-Fi, where there's no connman (the
   // simulator).
   bool fake_wifi = false;
+  // Where firmware updates go (PROTOCOL.md section 19): the program they
+  // replace. Empty: no updates, as when not run by the boot script.
+  std::string ota_target;
 };
 
 /// The exit code when the display was held as Nesto started.
 constexpr int kHeldExit = 3;
+/// The exit code after a firmware update was put in place: start the new one.
+constexpr int kUpdatedExit = 4;
 
 /// Ties the hardware, LVGL, the screens and the connection to Home Assistant
 /// together, and runs the main loop.
@@ -128,6 +134,11 @@ class App : private protocol::SessionEvents {
   void gather_info(bool network);
   /// Pings Home Assistant, to time its pong.
   void ping(Millis now);
+  /// Home Assistant's ota_* requests (PROTOCOL.md section 19).
+  void handle_ota(protocol::PanelSession& session, const protocol::Message& m);
+  /// What the Updating screen shows, while an update arrives or applies.
+  room::RoomView update_view() const;
+  bool updating() const;
 
   // protocol::SessionEvents
   void on_pairing_code(const std::string& code) override;
@@ -158,7 +169,10 @@ class App : private protocol::SessionEvents {
   unsigned rendered_notices_ = 0;  // notifications_.version() last drawn
   // Whose screen is drawn: the room's (with Settings), a notification's, or
   // Wi-Fi's.
-  enum class Drawn { Room, Notices, Wifi } drawn_ = Drawn::Room;
+  enum class Drawn { Room, Notices, Wifi, Update } drawn_ = Drawn::Room;
+  std::unique_ptr<protocol::OtaReceiver> ota_;
+  std::string update_drawn_;  // what the Updating screen last showed
+  Millis quit_at_ = 0;        // after an update applied: exit then, its answer sent
   std::unique_ptr<net::WifiBackend> wifi_backend_;
   room::WifiSetup wifi_;
   unsigned wifi_seen_ = 0;      // wifi_backend_->version() last passed on

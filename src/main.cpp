@@ -54,7 +54,9 @@ void print_usage(const char* program) {
       "  --panel-id ID       panel ID instead of the network interface's MAC address\n"
       "  --no-mdns           don't announce the panel on the network\n"
       "  --hold-for-stock    held in the first 3 s, exit with 3 (for the boot script)\n"
-      "  --version           print the version and exit\n"
+      "  --ota-target FILE   take firmware updates from Home Assistant, replacing FILE,\n"
+      "                      then exit with 4 to be started again (for the boot script)\n"
+      "  --version          print the version and exit\n"
       "  --help              print this and exit\n",
       default_state_dir().c_str());
 }
@@ -101,6 +103,10 @@ int main(int argc, char** argv) {
     }
     if (arg == "--no-mdns") {
       app_options.mdns = false;
+      continue;
+    }
+    if (arg == "--ota-target" && has_value) {
+      app_options.ota_target = argv[++i];
       continue;
     }
     if (arg == "--hold-for-stock") {

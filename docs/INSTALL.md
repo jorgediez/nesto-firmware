@@ -90,14 +90,23 @@ options choose and order what it shows. The
 
 ## Updating
 
-Download and unpack the new release, then:
+From Home Assistant, once Nesto takes updates (0.2.0 and newer): the panel's
+firmware update entity offers each new release, and installs it over the
+panel's own connection. The panel checks the release's signature before
+installing it, refuses an older version, and goes back to the one it had if
+the new one doesn't reach Home Assistant within five minutes.
+
+Or over SSH, as for installing: download and unpack the new release, then:
 
 ```bash
 sh install.sh <nest-ip> update
 ```
 
-Nesto's pairing and settings stay. The installer says which version it
-replaced.
+Nesto's pairing and settings stay either way. The installer says which
+version it replaced. Over SSH any release goes in, older ones too, with no
+checks: that's the way back to an earlier version, if a release turns out
+bad. A release older than 0.2.0 takes no updates from Home Assistant, so the
+next update after it goes over SSH too.
 
 ## Getting the stock software back
 

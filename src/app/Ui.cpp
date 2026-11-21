@@ -369,6 +369,12 @@ void Ui::render(const room::RoomView& view) {
     lv_arc_set_value(arc_, static_cast<std::int32_t>(std::lround(view.fraction * kArcScale)));
     arc_tone = view.tone;
     arc_shown = true;
+  } else if (view.screen == Screen::WifiBusy && view.fraction >= 0) {
+    // How far something long has got: an update arriving.
+    lv_arc_set_range(arc_, 0, kArcScale);
+    lv_arc_set_value(arc_, static_cast<std::int32_t>(std::lround(view.fraction * kArcScale)));
+    arc_tone = view.tone;
+    arc_shown = true;
   } else if (info && info_scroll_limit_ > 0) {
     lv_arc_set_range(arc_, 0, info_scroll_limit_);
     lv_arc_set_value(arc_, std::min(view.scroll, info_scroll_limit_));

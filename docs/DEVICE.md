@@ -537,7 +537,24 @@ Getting the stock software back:
   `/media/data/nesto`.
 
 `scripts/dev.sh device-install <nest-ip> update` puts a new Nesto in place in
-one step and restarts it. `device-run` and its tests still work with Nesto
+one step and restarts it.
+
+Run by the boot script, Nesto also takes updates from Home Assistant
+([PROTOCOL.md](../PROTOCOL.md) section 19): the new program arrives as
+`/nesto/nesto.new`, the running one is kept as `/nesto/nesto.prev` (a hard
+link), and the new one is renamed into place with a marker,
+`/media/data/nesto/ota-pending`, naming its version. Nesto exits with 4 and the
+boot script starts it again, not counting it as a crash. Once the new one is
+synchronised with Home Assistant it removes the marker; if the marker is
+still there after 5 minutes, or at a third start, the boot script moves
+`nesto.prev` back. To try it by hand, a local build trusts this machine's dev
+key:
+
+```bash
+scripts/dev.sh device-install <nest-ip>     # a build that trusts the dev key
+scripts/dev.sh dist && scripts/dev.sh sign  # dist/nesto and dist/nesto.sig
+scripts/dev.sh client --host <nest-ip> ota /src/dist/nesto 0.2.0
+``` `device-run` and its tests still work with Nesto
 installed: the service gives way first and comes back afterwards (after a
 detached run, with `device-mode <nest-ip> nesto`).
 
