@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from conftest import PANEL_ID, Panel
+from conftest import PANEL_ID, VERSION, Panel
 from nesto_client import NestoClient, PanelError
 
 
@@ -65,7 +65,7 @@ def test_pair_authenticate_and_talk(panel: Panel) -> None:
         assert (await client.wait_for("pong"))["seq"] == 42
 
         info = await client.request({"t": "info"})
-        assert info["fw"] == "0.1.0"
+        assert info["fw"] == VERSION
         assert info["free_ram_kb"] > 0
         # No Wi-Fi in the container: the fields are there, and null.
         assert info["wifi_rssi"] is None

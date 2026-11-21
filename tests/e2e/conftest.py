@@ -23,6 +23,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
 
 PANEL_ID = "0a1b2c3d4e5f"
+# The panel's version, as CMakeLists.txt sets it.
+VERSION = re.search(
+    r"project\(nesto VERSION ([0-9.]+)",
+    (Path(__file__).resolve().parents[2] / "CMakeLists.txt").read_text(),
+).group(1)
 
 
 def free_port() -> int:
