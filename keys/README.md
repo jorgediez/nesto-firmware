@@ -19,6 +19,32 @@ updates from Home Assistant until the next release is installed over SSH;
 leaking it means someone could sign programs panels would install, so a new
 key, and a release installed over SSH, would be needed.
 
+## How a release is signed
+
+A version tag's CI run drafts the release (`.github/workflows/ci.yml`). Its
+release job, in the `release` environment, takes the program out of the
+package the build job made and tested, and `scripts/release-sign.sh` signs it
+with `NESTO_OTA_KEY`. The release gets two more files:
+
+- `nesto-VERSION-nest-gen2.bin`: the package's `nesto`, byte for byte;
+- `nesto-VERSION-nest-gen2.bin.sig`: its signature, in base64.
+
+The script checks the signature against `ota-release.pub` before the release
+gets it, so a wrong secret stops the release instead of shipping a signature
+no panel takes. The `release` environment should let only `v*` tags deploy,
+so no branch's workflow can read the key. Every build also runs the script
+with the test key (`scripts/dev.sh release-sign`), to keep the signing
+working between releases.
+
+To check a release by hand (Python with `cryptography`):
+
+```bash
+python3 tools/ota_sign.py verify nesto-VERSION-nest-gen2.bin VERSION \
+  nesto-VERSION-nest-gen2.bin.sig keys/ota-release.pub
+```
+
+## Other keys
+
 Local builds also trust a dev key, made in the build volume
 (`/build/ota-dev.key`), so `scripts/dev.sh sign` can sign them for an update
 by hand. CI builds never trust one, and the simulator also trusts
