@@ -10,7 +10,7 @@ import asyncio
 import threading
 import time
 
-from conftest import PANEL_ID, Panel
+from conftest import PANEL_ID, VERSION, Panel
 from test_panel import pair
 from zeroconf import ServiceBrowser, ServiceInfo, ServiceStateChange, Zeroconf
 
@@ -55,7 +55,7 @@ def test_the_service_resolves_to_the_panel(panel: Panel) -> None:
     assert properties == {
         "id": PANEL_ID,
         "proto": "1",
-        "fw": "0.1.0",
+        "fw": VERSION,
         "model": "nest-gen2",
         "paired": "0",
     }
