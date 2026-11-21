@@ -62,6 +62,10 @@ The release page gives the archive's SHA-256; `sha256sum` (or
 `shasum -a 256` on a Mac) shows the one you downloaded. The installer checks
 each file inside against `SHA256SUMS` by itself.
 
+A release also has `nesto-VERSION-nest-gen2.bin` and its `.sig`: the same
+program alone, signed, for updates from Home Assistant, which downloads them
+itself. Installing doesn't need them.
+
 ## 4. Install it
 
 ```bash

@@ -4,7 +4,8 @@ name: CI
 # simulator for this machine, and the thermostat's ARM program, whose tests and
 # screens run under QEMU emulating the thermostat's Cortex-A8. Screenshots and
 # the release package are kept, so a pull request shows the screens and can be
-# tried on a device; a version tag's run drafts the release with its package.
+# tried on a device; a version tag's run drafts the release with its package,
+# and the program signed with the release key for updates from Home Assistant.
 on:
   push:
     branches: [main]
@@ -81,6 +82,11 @@ jobs:
       - name: Pack the thermostat's programs as a release
         run: scripts/dev.sh package
 
+      # As a tag's release is signed below, with the test key instead: the
+      # .bin and .bin.sig stay here, the release signs its own.
+      - name: Check the package's program can be signed for an update
+        run: scripts/dev.sh release-sign
+
       # What a release attaches, from a tag's build: the programs tested above.
       - uses: actions/upload-artifact@v7
         with:
@@ -94,6 +100,9 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
+    # The environment holds NESTO_OTA_KEY, the release key's private half,
+    # and lets only version tags read it.
+    environment: release
     permissions:
       contents: write
       actions: read
@@ -114,6 +123,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh run download "$GITHUB_RUN_ID" --name nesto-release --dir release
 
+      # The package's own nesto, as nesto-VERSION-nest-gen2.bin with its .sig:
+      # what Home Assistant sends a panel. The script checks the signature
+      # against keys/ota-release.pub, which the panel trusts.
+      - name: Sign the program with the release key
+        env:
+          NESTO_OTA_KEY: ${{ secrets.NESTO_OTA_KEY }}
+        run: |
+          python3 -m venv /tmp/sign
+          /tmp/sign/bin/pip install --quiet cryptography==44.0.0
+          PYTHON=/tmp/sign/bin/python scripts/release-sign.sh \
+            "release/nesto-$VERSION-nest-gen2.tar.gz" keys/ota-release.pub
+
       # A draft: the maintainer writes the notes and publishes it. Published
       # releases are immutable, so the files go on before that.
       - name: Draft the release, with the package
@@ -127,6 +148,9 @@ jobs:
             echo "([online](https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/docs/INSTALL.md))."
             echo
             echo "SHA-256: \`$(cut -d' ' -f1 release/nesto-$VERSION-nest-gen2.tar.gz.sha256)\`"
+            echo
+            echo "\`nesto-$VERSION-nest-gen2.bin\` and its \`.sig\` are the program alone, signed with the"
+            echo "release key: Home Assistant's firmware update entity installs them."
           } > notes.md
           gh release create "$GITHUB_REF_NAME" release/* --draft --verify-tag \
             --title "Nesto $VERSION" --notes-file notes.md

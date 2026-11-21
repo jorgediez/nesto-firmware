@@ -9,6 +9,8 @@
 #   scripts/dev.sh check-arm              check the ARM programs can run on the thermostat
 #   scripts/dev.sh dist                   the thermostat's programs, stripped, in dist/ (nesto, nesto-probe)
 #   scripts/dev.sh package                those, packed as a release in dist/ (scripts/package.sh)
+#   scripts/dev.sh release-sign           sign the package's program with the test key, as a release
+#                                         is signed (scripts/release-sign.sh)
 #   scripts/dev.sh sign [VERSION]         sign dist/nesto with this machine's dev key, for an update
 #   scripts/dev.sh ota-keygen             make the release key pair, once (keys/README.md)
 #   scripts/dev.sh vectors                regenerate the protocol test vectors from tools/
@@ -176,6 +178,14 @@ case "${1:-}" in
     # can't write to. The dates come from the commit, read here, where git
     # knows the repository.
     run env SOURCE_DATE_EPOCH="$(cd "$ROOT" && git log -1 --format=%ct)" bash /src/scripts/package.sh
+    ;;
+  release-sign)
+    # The release's .bin and .bin.sig from the package in dist/, signed with
+    # the test key: CI checks the signing this way on every build, and a tag's
+    # release signs with the release key (.github/workflows/ci.yml).
+    version="$(sed -n 's/^project(nesto VERSION \([0-9][0-9.]*\).*/\1/p' "$ROOT/CMakeLists.txt")"
+    run bash /src/scripts/release-sign.sh "/src/dist/nesto-$version-nest-gen2.tar.gz" \
+      /src/tests/ota/test-key.pub /src/tests/ota/test-key
     ;;
   vectors)
     run python3 /src/tools/make_vectors.py /src/tests/vectors/protocol-v1.json
@@ -493,7 +503,7 @@ case "${1:-}" in
     NESTO_FILES="$ROOT/dist" NESTO_REPORTS="$ROOT/device-reports" sh "$ROOT/scripts/install.sh" "$host" check "$@"
     ;;
   *)
-    sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,47p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac
