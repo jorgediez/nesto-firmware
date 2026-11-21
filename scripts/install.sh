@@ -99,8 +99,13 @@ case "$command" in
       rm -rf /tmp/nesto-install && mkdir /tmp/nesto-install && cd /tmp/nesto-install
       tar xf -
       chown 0:0 nesto nesto-boot.sh nest-screen.sh
-      chmod 755 nesto
+      # Whatever modes the archive brought (a Windows checkout's are 777):
+      # root runs these, so only root may change them.
+      chmod 755 nesto nesto-boot.sh nest-screen.sh
       mkdir -p /nesto /media/data/nesto
+      # Installed by hand, any version: no update waits to be confirmed, and
+      # nothing to roll back to.
+      rm -f /nesto/nesto.prev /media/data/nesto/ota-pending /media/data/nesto/ota-pending.starts
       mv nesto /nesto/nesto.new && mv /nesto/nesto.new /nesto/nesto
       mv nesto-boot.sh nest-screen.sh /nesto/
       cd / && rm -rf /tmp/nesto-install

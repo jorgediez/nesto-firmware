@@ -25,6 +25,7 @@ add_executable(nesto_tests
   test_tech_info.cpp
   test_wireless.cpp
   test_ring_keyboard.cpp
+  test_ota.cpp
   test_wifi.cpp
   test_wifi_setup.cpp
 )

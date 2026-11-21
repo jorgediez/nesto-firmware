@@ -11,6 +11,7 @@ end-to-end tests use it, and it is handy by hand against the simulator:
 (nesto.key by default); `connect` uses that key, synchronises, and prints what
 the panel sends until interrupted; `demo` serves a made-up room, carrying out
 the panel's intents the way Home Assistant would, so the screens can be tried.
+`ota PROGRAM VERSION` sends a signed program as a firmware update.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import hashlib
 import json
 import os
 import struct
@@ -27,6 +29,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import nesto_protocol as p
+
+# The most an ota_chunk carries, decoded (PROTOCOL.md section 19).
+OTA_CHUNK = 64 * 1024
 
 DEFAULT_PORT = 6170
 
@@ -116,6 +121,39 @@ class NestoClient:
                     raise PanelError(error.get("message", "error"), error.get("code"))
                 return reply
             self.events.append(reply)
+
+    async def update(
+        self,
+        program: bytes,
+        version: str,
+        signature: str,
+        model: str = "nest-gen2",
+        progress: Callable[[int, int], None] | None = None,
+    ) -> None:
+        """Sends the panel a signed program and has it put it in place.
+
+        PROTOCOL.md section 19: ota_begin, the chunks in order, ota_end,
+        ota_apply. The panel then restarts with the new program.
+        """
+        await self.request(
+            {
+                "t": "ota_begin",
+                "model": model,
+                "version": version,
+                "size": len(program),
+                "sha512": hashlib.sha512(program).hexdigest(),
+                "signature": signature,
+            }
+        )
+        for offset in range(0, len(program), OTA_CHUNK):
+            data = program[offset : offset + OTA_CHUNK]
+            await self.request(
+                {"t": "ota_chunk", "offset": offset, "data": base64.b64encode(data).decode()}
+            )
+            if progress:
+                progress(offset + len(data), len(program))
+        await self.request({"t": "ota_end"}, timeout=30)
+        await self.request({"t": "ota_apply"}, timeout=30)
 
     async def wait_for(self, message_type: str, timeout: float = 10) -> dict:
         for i, event in enumerate(self.events):
@@ -444,6 +482,27 @@ async def _connect(args: argparse.Namespace) -> None:
         await client.close()
 
 
+async def _ota(args: argparse.Namespace) -> None:
+    program = Path(args.program).read_bytes()
+    signature = Path(args.signature or args.program + ".sig").read_text().strip()
+    client = await NestoClient.connect(args.host, args.port)
+    await client.authenticate(read_key(args.key_file))
+    await client.synchronise()
+    print(f"Panel {client.hello['panel_id']} runs Nesto {client.hello['fw']}")
+    if not client.hello.get("caps", {}).get("ota"):
+        sys.exit("It takes no updates: is it run by the boot script, with a release key?")
+
+    def show(sent: int, total: int) -> None:
+        print(f"\r{sent * 100 // total:3d}% of {total // 1024} KiB", end="", flush=True)
+
+    try:
+        await client.update(program, args.version, signature, progress=show)
+    finally:
+        print()
+        await client.close()
+    print(f"Nesto {args.version} is in place; the panel restarts with it.")
+
+
 async def _demo(args: argparse.Namespace) -> None:
     key = read_key(args.key_file)
     client = await NestoClient.connect(args.host, args.port)
@@ -500,6 +559,10 @@ def main() -> None:
     pair = commands.add_parser("pair", help="pair and save the key")
     pair.add_argument("--yes", action="store_true", help="accept the code without asking")
     commands.add_parser("connect", help="authenticate, synchronise and print messages")
+    ota = commands.add_parser("ota", help="update the panel's program (PROTOCOL.md section 19)")
+    ota.add_argument("program", help="the program, as dev.sh dist strips it")
+    ota.add_argument("version", help="its version, as signed")
+    ota.add_argument("--signature", help="its signature's file (default: PROGRAM.sig)")
     demo = commands.add_parser("demo", help="serve a made-up room that answers the panel's intents")
     demo.add_argument(
         "--timeout",
@@ -560,7 +623,7 @@ def main() -> None:
         help="when to send it (default: 5)",
     )
     args = parser.parse_args()
-    run = {"pair": _pair, "connect": _connect, "demo": _demo}[args.command]
+    run = {"pair": _pair, "connect": _connect, "demo": _demo, "ota": _ota}[args.command]
     try:
         asyncio.run(run(args))
     except asyncio.IncompleteReadError:

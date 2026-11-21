@@ -797,17 +797,50 @@ them to anything.
 
 ## 19. Firmware update
 
-Reserved for a later version. Planned messages, all H→P requests:
+HA can replace the panel's program. The panel trusts a program only when a
+release key compiled into it signed it, so HA, or anything else on the
+network, only carries the bytes. A panel takes updates when `hello` reports
+`"ota": true`: on the Nest Gen 2, when the boot script runs Nesto and the
+build trusts a release key.
 
-- `ota_begin` {`version`, `size`, `sha512`}: the panel checks it has space and
-  prepares the inactive slot.
-- `ota_chunk` {`offset`, `data` (base64, at most 64 KiB decoded)}: sent in
-  order, one at a time.
-- `ota_end`: the panel checks the hash and marks the new slot as pending.
-- `ota_apply`: the panel reboots into the new firmware, and goes back to the
-  old one if the new one doesn't reach `ready` with HA within 5 minutes.
+**What's signed.** An Ed25519 signature over this text, each line ending in
+`\n`, the SHA-512 in lower-case hex:
 
-Until then, `hello` reports `"ota": false` and firmware is installed over SSH.
+```
+nesto-ota-v1
+model=nest-gen2
+version=0.2.0
+size=2410424
+sha512=8f3a…
+```
+
+A release publishes the program and its signature, in base64, as
+`nesto-VERSION-MODEL.bin` and `nesto-VERSION-MODEL.bin.sig`.
+
+**The messages**, all H→P requests, in this order, one at a time:
+
+| Request | Fields | The panel |
+|---|---|---|
+| `ota_begin` | `model`, `version`, `size`, `sha512` (hex), `signature` (base64) | Checks the model, that `version` isn't older than the one running, the size (at most 16 MiB), the signature and the free space, and starts the new program beside the running one. A new `ota_begin` drops an update in progress. |
+| `ota_chunk` | `offset`, `data` (base64, 1 byte to 64 KiB decoded) | Writes the next piece. `offset` is where it starts, so pieces come in order. |
+| `ota_end` | | Checks all of it arrived and its SHA-512 matches. |
+| `ota_apply` | | Answers, puts the new program in place, keeping the running one, and restarts with it within a few seconds. |
+
+Errors: `unsupported` (no updates, or another model), `downgrade` (older than
+the one running), `bad_signature` (no trusted key signed it, or the program
+doesn't match its SHA-512), `too_large`, `no_space`, `bad_request` (missing
+fields, a piece out of order, a request out of turn). An update with nothing
+arriving for 60 seconds is dropped.
+
+**Rollback.** The new program has to confirm itself: once it's `ready` with
+HA (section 8), it does. If it doesn't within 5 minutes, or fails to start
+twice, the panel goes back to the program it replaced. So HA, after
+`ota_apply`, sees the panel go, come back, and report the new version in
+`hello.fw`; or the old one, if the new one didn't work.
+
+The panel shows an Updating screen, with the progress, from `ota_begin` to
+the restart. Firmware can also be installed over SSH (docs/INSTALL.md), with
+no checks: whoever has root on the panel can replace its program anyway.
 
 ## 20. Errors
 
@@ -824,6 +857,9 @@ Until then, `hello` reports `"ota": false` and firmware is installed over SSH.
 | `service_failed` | Home Assistant's service call raised an error; `message` has the reason. |
 | `no_images` | No carousel images are configured or found. |
 | `too_large` | A field or the frame exceeds the limits. |
+| `bad_signature` | A firmware update no trusted key signed, or that doesn't match its SHA-512 (section 19). |
+| `downgrade` | A firmware update older than the program running (section 19). |
+| `no_space` | Not enough room for a firmware update (section 19). |
 | `internal` | Anything else. |
 
 ## 21. Limits

@@ -57,6 +57,7 @@ add_library(nesto_protocol STATIC
   src/protocol/Message.cpp
   src/protocol/PairingState.cpp
   src/protocol/PanelSession.cpp
+  src/protocol/Ota.cpp
 )
 target_include_directories(nesto_protocol PUBLIC src)
 target_link_libraries(nesto_protocol PUBLIC nesto_core monocypher nlohmann_json::nlohmann_json)
@@ -120,6 +121,39 @@ target_compile_definitions(nesto PRIVATE
   $<$<STREQUAL:${NESTO_PLATFORM},sim>:NESTO_PLATFORM_SIM>
   $<$<STREQUAL:${NESTO_PLATFORM},nest>:NESTO_PLATFORM_NEST>
 )
+
+# The keys a firmware update must be signed with (PROTOCOL.md section 19),
+# compiled in: the release key, keys/ota-release.pub; in the simulator also
+# the test key, whose private half is in tests/ota/ for the tests; and, for a
+# local build, a developer's own (NESTO_OTA_DEV_KEY, which scripts/dev.sh
+# sets outside CI). Each file holds the Ed25519 public key in hex.
+set(NESTO_OTA_DEV_KEY "" CACHE FILEPATH "A further OTA public key (hex) to trust, for local builds")
+set(nesto_ota_key_files)
+if(EXISTS ${CMAKE_SOURCE_DIR}/keys/ota-release.pub)
+  list(APPEND nesto_ota_key_files ${CMAKE_SOURCE_DIR}/keys/ota-release.pub)
+else()
+  message(WARNING "keys/ota-release.pub is missing: this build trusts no release")
+endif()
+if(NESTO_PLATFORM STREQUAL "sim")
+  list(APPEND nesto_ota_key_files ${CMAKE_SOURCE_DIR}/tests/ota/test-key.pub)
+endif()
+if(NESTO_OTA_DEV_KEY)
+  list(APPEND nesto_ota_key_files ${NESTO_OTA_DEV_KEY})
+endif()
+set(NESTO_OTA_KEYS "")
+foreach(key_file IN LISTS nesto_ota_key_files)
+  file(STRINGS ${key_file} key_hex LIMIT_COUNT 1 REGEX "^[0-9a-fA-F]+$")
+  string(LENGTH "${key_hex}" key_length)
+  if(NOT key_length EQUAL 64)
+    message(FATAL_ERROR "${key_file} should hold a 32-byte key in hex")
+  endif()
+  string(REGEX REPLACE "(..)" "0x\\1," key_bytes "${key_hex}")
+  get_filename_component(key_name ${key_file} NAME)
+  string(APPEND NESTO_OTA_KEYS "    {{${key_bytes}}},  // ${key_name}\n")
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${key_file})
+endforeach()
+configure_file(cmake/OtaKeys.cpp.in ${CMAKE_BINARY_DIR}/generated/OtaKeys.cpp @ONLY)
+target_sources(nesto PRIVATE ${CMAKE_BINARY_DIR}/generated/OtaKeys.cpp)
 
 if(NESTO_PLATFORM STREQUAL "sim" AND SDL2_FOUND)
   target_link_libraries(nesto PRIVATE PkgConfig::SDL2)

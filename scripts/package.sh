@@ -22,6 +22,15 @@ for program in nesto nesto-probe; do
     exit 1
   fi
 done
+# What CI packs is what a release ships: it must take updates signed with the
+# release key, and no one's dev key.
+keys=/build/nest/generated/OtaKeys.cpp
+if [ -n "${CI:-}" ]; then
+  if ! grep -q "ota-release.pub" "$keys" || grep -q "ota-dev.pub" "$keys"; then
+    echo "the thermostat's build must trust keys/ota-release.pub and no dev key ($keys)" >&2
+    exit 1
+  fi
+fi
 
 name="nesto-$version-nest-gen2"
 stage="dist/$name"

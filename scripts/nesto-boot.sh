@@ -18,6 +18,12 @@
 #   nesto-boot.sh install    add the inittab line, keeping a copy of inittab
 #   nesto-boot.sh uninstall  take the line out, and give back for good
 #
+# Updates: Nesto takes firmware updates from Home Assistant into $NESTO,
+# keeping the program it replaced as $NESTO.prev, and exits with 4 to be
+# started again. The new one has two starts and 5 minutes to reach Home
+# Assistant, which it confirms by removing the pending marker; otherwise the
+# previous one is put back (PROTOCOL.md section 19).
+#
 # Giving back: if Nesto exits 3 times within 10 minutes, or the display is
 # held as it starts (it exits with 3), the service gives the thermostat back
 # to the stock software until the next boot, and waits. Nothing here touches
@@ -43,6 +49,12 @@ LINE="::respawn:/bin/sh $SELF"
 EXIT_WINDOW=600
 EXIT_LIMIT=3
 HOLD_EXIT=3  # Nesto's exit code when the display was held as it started
+UPDATED_EXIT=4  # Nesto's exit code after an update was put in place
+PREV="$NESTO.prev"  # the program an update replaced
+PENDING="$DIR/ota-pending"  # an update not yet confirmed: its version
+STARTS="$DIR/ota-pending.starts"  # when it was started, one line each
+OTA_CONFIRM="${NESTO_OTA_CONFIRM:-300}"  # seconds it has to confirm
+KEEPER_EVERY="${NESTO_KEEPER_EVERY:-10}"  # seconds between the keeper's checks
 
 uptime_s() { cut -d. -f1 /proc/uptime; }
 
@@ -124,6 +136,17 @@ take() {
   ! nlclient_pid > /dev/null
 }
 
+# Puts back the program an update replaced, because the new one $1.
+roll_back() {
+  if [ -f "$PREV" ]; then
+    mv "$PREV" "$NESTO"
+    log "the update to Nesto $(cat "$PENDING" 2> /dev/null) $1: the previous Nesto is back"
+  else
+    log "the update to Nesto $(cat "$PENDING" 2> /dev/null) $1, and there's no previous Nesto"
+  fi
+  rm -f "$PENDING" "$STARTS"
+}
+
 give() {
   stop_nesto
   "$MONIT" monitor nlclient > /dev/null 2>&1
@@ -174,6 +197,14 @@ service() {
     give
     wait_given
   fi
+  # An update not yet confirmed gets two starts; a third means the new
+  # program never reached Home Assistant.
+  if [ -f "$PENDING" ]; then
+    uptime_s >> "$STARTS"
+    [ "$(wc -l < "$STARTS")" -gt 2 ] && roll_back "didn't start"
+  else
+    rm -f "$STARTS"
+  fi
   # Only a waiting service is ever ended from outside, never one running Nesto.
   rm -f "$PID_FILE"
   touch "$STARTED"
@@ -182,7 +213,16 @@ service() {
   # monit is told again and it's stopped, so they never share the screen.
   (
     n=0
-    while sleep 10; do
+    waited=0
+    while sleep "$KEEPER_EVERY"; do
+      # An update that doesn't confirm itself in time is rolled back.
+      if [ -f "$PENDING" ]; then
+        waited=$((waited + KEEPER_EVERY))
+        if [ "$waited" -ge "$OTA_CONFIRM" ]; then
+          roll_back "wasn't confirmed within $OTA_CONFIRM seconds"
+          stop_nesto
+        fi
+      fi
       if nlclient_pid > /dev/null; then
         log "nlclient came back while Nesto runs: stopping it"
         take || log "couldn't stop nlclient"
@@ -192,7 +232,7 @@ service() {
     done
   ) &
   local keeper=$! code
-  "$NESTO" --hold-for-stock >> "$LOG" 2>&1
+  "$NESTO" --hold-for-stock --ota-target "$NESTO" >> "$LOG" 2>&1
   code=$?
   kill $keeper 2> /dev/null
   log "Nesto exited with $code"
@@ -200,6 +240,10 @@ service() {
     give
     log "given back to the stock software"
     wait_given
+  fi
+  if [ "$code" = "$UPDATED_EXIT" ]; then
+    log "Nesto put an update in place: starting it"
+    exit 0
   fi
   if [ "$code" = "$HOLD_EXIT" ]; then
     log "the display was held as Nesto started: the stock software until the next boot"
@@ -236,6 +280,7 @@ status() {
   say "Nesto: $(nesto_pid > /dev/null && echo "running, pid $(nesto_pid)" || echo stopped)"
   say "nlclient: $(nlclient_pid > /dev/null && echo "running, pid $(nlclient_pid)" || echo stopped)"
   [ -s "$EXITS" ] && say "Nesto's exits this boot (uptime): $(tr '\n' ' ' < "$EXITS")"
+  [ -f "$PENDING" ] && say "an update to Nesto $(cat "$PENDING") waits to be confirmed"
   if [ -f "$LOG" ]; then
     say "the log's end ($LOG):"
     tail -n 20 "$LOG" | sed 's/^/    /'

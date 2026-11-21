@@ -121,6 +121,11 @@ screen):
 
 Hold to go back from any of them.
 
+**Updates.** Home Assistant can install a new release: the panel takes only
+a program signed with the release key, shows its progress, and goes back to
+the one it had if the new one doesn't come back to Home Assistant within five
+minutes ([PROTOCOL.md](PROTOCOL.md) section 19).
+
 Not in this release: a picture carousel while resting, languages other than
 English, and rebooting from Home Assistant.
 

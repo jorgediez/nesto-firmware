@@ -9,6 +9,8 @@
 #   scripts/dev.sh check-arm              check the ARM programs can run on the thermostat
 #   scripts/dev.sh dist                   the thermostat's programs, stripped, in dist/ (nesto, nesto-probe)
 #   scripts/dev.sh package                those, packed as a release in dist/ (scripts/package.sh)
+#   scripts/dev.sh sign [VERSION]         sign dist/nesto with this machine's dev key, for an update
+#   scripts/dev.sh ota-keygen             make the release key pair, once (keys/README.md)
 #   scripts/dev.sh vectors                regenerate the protocol test vectors from tools/
 #   scripts/dev.sh sim [options]          open the simulator window (WSLg or X11), port 6170
 #   scripts/dev.sh client pair|connect    talk to the running simulator as Home Assistant would
@@ -61,7 +63,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 run() {
   local tty=()
   if [ -t 0 ] && [ -t 1 ]; then tty=(-it); fi
+  # CI passes through, so a CI build trusts no dev key (see build).
   docker run --rm "${tty[@]}" \
+    -e CI \
     -v "$ROOT":/src \
     -v "$VOLUME":/build \
     "${EXTRA_ARGS[@]}" \
@@ -102,7 +106,16 @@ case "${1:-}" in
       # Earlier versions built /build/nest natively; CMake cannot switch an
       # existing build to another compiler, so start that one afresh.
       grep -qs toolchain-nest /build/nest/CMakeCache.txt || rm -rf /build/nest
-      cmake -S /src -B /build/nest -G Ninja "$arm" -DNESTO_PLATFORM=nest -DNESTO_BUILD_TESTS=OFF
+      # Outside CI, the thermostat'"'"'s build also trusts this machine'"'"'s dev key,
+      # so a local build can be updated with a locally signed one (dev.sh sign).
+      dev_key=
+      if [ -z "${CI:-}" ]; then
+        [ -f /build/ota-dev.key ] || python3 /src/tools/ota_sign.py keygen /build/ota-dev.pub \
+          | tail -1 > /build/ota-dev.key
+        dev_key=/build/ota-dev.pub
+      fi
+      cmake -S /src -B /build/nest -G Ninja "$arm" -DNESTO_PLATFORM=nest -DNESTO_BUILD_TESTS=OFF \
+        -DNESTO_OTA_DEV_KEY="$dev_key"
       cmake --build /build/nest
       cmake -S /src -B /build/sim-arm -G Ninja "$arm" -DNESTO_PLATFORM=sim
       cmake --build /build/sim-arm'
@@ -141,6 +154,21 @@ case "${1:-}" in
         "$NESTO_ARM_TOOLCHAIN/bin/arm-buildroot-linux-musleabihf-strip" -o "/src/dist/$program" "/build/nest/$program"
         echo "dist/$program: $(( $(stat -c %s "/src/dist/$program") / 1024 )) KiB"
       done'
+    ;;
+  sign)
+    # dist/nesto, signed with this machine's dev key, for an update by hand:
+    # scripts/dev.sh client --host HOST ota /src/dist/nesto VERSION
+    version="${2:-$(sed -n 's/^project(nesto VERSION \([0-9][0-9.]*\).*/\1/p' "$ROOT/CMakeLists.txt")}"
+    run python3 /src/tools/ota_sign.py sign /src/dist/nesto "$version" --key /build/ota-dev.key
+    ;;
+  ota-keygen)
+    # The release key pair, once: the public half to keys/ota-release.pub, the
+    # private half shown here, for the maintainer to keep and give to CI.
+    if [ -f "$ROOT/keys/ota-release.pub" ]; then
+      echo "keys/ota-release.pub exists already; remove it first to make a new key" >&2
+      exit 1
+    fi
+    run python3 /src/tools/ota_sign.py keygen /src/keys/ota-release.pub
     ;;
   package)
     "$0" dist
@@ -465,7 +493,7 @@ case "${1:-}" in
     NESTO_FILES="$ROOT/dist" NESTO_REPORTS="$ROOT/device-reports" sh "$ROOT/scripts/install.sh" "$host" check "$@"
     ;;
   *)
-    sed -n '2,43p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac
