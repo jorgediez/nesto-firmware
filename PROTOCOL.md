@@ -162,7 +162,8 @@ The direction of each message is marked **H→P** (HA to panel) or **P→H**
        "beeper": true,
        "image_formats": ["jpeg", "png"],
        "ota": false,
-       "reboot": true
+       "reboot": true,
+       "kinds": ["light", "switch", "scene", "climate", "cover", "sensor", "fan"]
      }
    }
    ```
@@ -173,7 +174,7 @@ The direction of each message is marked **H→P** (HA to panel) or **P→H**
    | `paired` | The panel holds a pairing key. |
    | `pairing_open` | The panel will accept `pair_begin` (section 6.1). |
    | `nonce` | 16 random bytes, base64, fresh for every connection. |
-   | `caps` | What this panel can do. `sensors` lists only sensors that are actually working, so a panel off its base reports none. The Nest Gen 2 lists the base's sensors whenever it talks to its base, even before the base has answered; until it does, `sensors` messages leave those readings out (section 17). `ota`: the panel takes firmware updates (section 19). `reboot`: it reboots when asked (section 18); firmware 0.2.0 and older leave it out. |
+   | `caps` | What this panel can do. `sensors` lists only sensors that are actually working, so a panel off its base reports none. The Nest Gen 2 lists the base's sensors whenever it talks to its base, even before the base has answered; until it does, `sensors` messages leave those readings out (section 17). `ota`: the panel takes firmware updates (section 19). `reboot`: it reboots when asked (section 18); firmware 0.2.0 and older leave it out. `kinds`: the item kinds the panel draws (section 9.1); HA sends only those, and falls back for the rest as appendix A says. Firmware 0.2.1 and older leave it out: they draw the first six kinds. |
    | `insecure` | Present and true only on development builds (section 7.4). |
 
 3. HA checks `proto` (section 22). Then:
@@ -424,9 +425,11 @@ change.
 | `climate` | `target`: `"single"`, `"range"` or `"none"` · `min`, `max`, `step` · `unit` · `hvac_modes`, `presets`, `fan_modes`: lists | `hvac_modes` values: `off`, `heat`, `cool`, `heat_cool`, `auto`, `dry`, `fan_only`. Presets and fan modes are display strings HA passes through. |
 | `cover` | `open`, `close`, `stop`, `position`, `tilt`: bools | |
 | `sensor` | `unit`: string | Read-only. |
+| `fan` | `speed`: bool · `speed_step`: percent between speeds (`33.33` for three; default 1) · `presets`: list · `oscillate`: bool · `direction`: bool | Every fan can turn on and off. Since firmware 0.3.0. |
 
-Kinds planned for later versions: `fan` (speed), `media_player`, `lock`. They
-need no protocol change beyond a new `kind`, which old panels skip.
+Kinds planned for later versions: `media_player`, `lock`. A new kind needs no
+protocol change: old panels skip it, and `caps.kinds` tells HA which kinds a
+panel draws.
 
 ## 10. State
 
@@ -460,6 +463,7 @@ Fields per kind:
 | `climate` | `hvac_mode` · `hvac_action`: Home Assistant's value passed through (`"heating"`, `"cooling"`, `"idle"`, `"off"`, `"preheating"`, …) or null · `current`: number or null · `target`: number or null · `target_low`, `target_high`: number or null · `preset`, `fan_mode`: string or null · `current_humidity`: number or null |
 | `cover` | `state`: `"open"`, `"closed"`, `"opening"`, `"closing"` · `position`: 0–100 or null (100 = fully open) · `tilt`: 0–100 or null |
 | `sensor` | `value`: string, already formatted by HA |
+| `fan` | `on`: bool · `percentage`: 0–100 or null · `preset`: string or null · `oscillating`: bool · `direction`: `"forward"`, `"reverse"` or null |
 
 Brightness is a percentage on the wire because that's what the panel shows; HA
 converts to and from Home Assistant's 0–255 scale.
@@ -492,6 +496,11 @@ restores the item's last known state.
 | `cover` | `open`, `close`, `stop` | none |
 | | `set_position` | `position` 0–100 |
 | | `set_tilt` | `tilt` 0–100 |
+| `fan` | `toggle`, `turn_on`, `turn_off` | none |
+| | `set_percentage` | `percentage` 1–100 |
+| | `set_preset` | `preset` |
+| | `oscillate` | `oscillating`: bool |
+| | `set_direction` | `direction`: `"forward"` or `"reverse"` |
 
 Errors specific to intents: `unknown_key` (stale layout), `unsupported` (the
 item lacks the feature), `unavailable`, `service_failed` (HA's call raised).
@@ -897,8 +906,9 @@ experience depend on them.
 
 - **Optimistic display.** When the user turns the ring, the panel changes the
   value on screen at once and sends intents as follows:
-  - lights and covers: at most one intent every 300 ms while turning, and a
-    final one 300 ms after the ring stops, so lights follow the ring live;
+  - lights, covers and fans' speed: at most one intent every 300 ms while
+    turning, and a final one 300 ms after the ring stops, so lights follow the
+    ring live;
   - climate: one intent 1.5 seconds after the ring stops, so a thermostat isn't
     sent every half-degree step.
 - **States win.** A `states` message for an item overrides the optimistic value,
@@ -938,7 +948,7 @@ user picked.
 |---|---|---|
 | `light` | `light` | `supported_color_modes`: any of `hs`, `xy`, `rgb`, `rgbw`, `rgbww` gives `color`; `color_temp` gives `color_temp` with `min_color_temp_kelvin` and `max_color_temp_kelvin`; anything other than `onoff` gives `brightness`. `effect_list`, minus "off"/"none" entries, gives `effects`. |
 | `switch`, `input_boolean` | `switch` | none |
-| `fan` without speed control | `switch` | none (a `fan` kind is planned) |
+| `fan` | `fan` | `FanEntityFeature` `SET_SPEED` gives `speed`, with `percentage_step`; `PRESET_MODE` gives `presets` from `preset_modes`; `OSCILLATE` and `DIRECTION`. On a panel without `fan` in `caps.kinds`, a fan is a `switch`. |
 | `scene`, `script` | `scene` | none |
 | `climate` | `climate` | `ClimateEntityFeature`: `TARGET_TEMPERATURE` gives `single`, `TARGET_TEMPERATURE_RANGE` gives `range`; `hvac_modes`, `preset_modes`, `fan_modes`; `min_temp`, `max_temp`, `target_temperature_step` (default 0.5); unit from Home Assistant's unit system |
 | `cover` | `cover` | `CoverEntityFeature` `OPEN`, `CLOSE`, `STOP`, `SET_POSITION`, `SET_TILT_POSITION` |

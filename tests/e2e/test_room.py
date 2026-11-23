@@ -67,6 +67,15 @@ def test_switches_toggle_and_scenes_activate(tmp_path: Path) -> None:
     assert actions(intents) == [("w1", "turn_on", {}), ("s1", "activate", {})]
 
 
+def test_a_fan_steps_through_its_speeds(tmp_path: Path) -> None:
+    # Select the ceiling fan (off, four speeds), open it, one click up, then oscillate.
+    intents, _ = run(tmp_path, "r+6 p r+1 w800 p p r+1 w500", seconds=9)
+    assert actions(intents) == [
+        ("f1", "set_percentage", {"percentage": 25}),
+        ("f1", "oscillate", {"oscillating": True}),
+    ]
+
+
 def test_a_long_press_on_home_toggles_a_light(tmp_path: Path) -> None:
     intents, _ = run(tmp_path, "h w500", seconds=7)
     assert actions(intents) == [("l1", "turn_off", {})]

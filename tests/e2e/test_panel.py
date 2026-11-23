@@ -47,6 +47,7 @@ def test_hello_describes_an_unpaired_panel(panel: Panel) -> None:
         assert hello["paired"] is False
         assert hello["pairing_open"] is True
         assert hello["caps"]["display"] == {"width": 320, "height": 320, "shape": "round"}
+        assert "fan" in hello["caps"]["kinds"]
         await client.close()
 
     asyncio.run(run())

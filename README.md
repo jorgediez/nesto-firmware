@@ -2,7 +2,7 @@
 
 Turns a retired Nest Learning Thermostat (2nd generation) into a Home Assistant
 room panel. Turn the ring and press to control the lights, climate, covers,
-switches and scenes of a room. The panel also shows Home Assistant's
+fans, switches and scenes of a room. The panel also shows Home Assistant's
 notifications and a clock while idle, and reports the thermostat's
 temperature, humidity, light and motion sensors.
 
@@ -63,12 +63,13 @@ uninstalls it.
 ## What it does
 
 **The room.** Home Assistant sends the panel a room: its lights, climate,
-covers, switches, scenes and sensors, in the order chosen in the
+covers, fans, switches, scenes and sensors, in the order chosen in the
 integration's options. Turn the ring to choose an item, press to open it,
 turn to change it, press to step through its controls (brightness, colour
 temperature, colour and effect; target, mode, preset and fan; position and
-tilt), and hold to go back. On the home screen, a press switches a switch or
-runs a scene, and holding switches a light.
+tilt; speed, preset, oscillation and direction), and hold to go back. On the
+home screen, a press switches a switch or runs a scene, and holding switches
+a light or a fan.
 
 **Notifications.** Home Assistant's notifications pop up, waking the panel as
 their priority says, and wait in a list the home screen opens. The ring
