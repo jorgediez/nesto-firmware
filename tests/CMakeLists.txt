@@ -4,6 +4,7 @@ add_executable(nesto_tests
   test_bytes.cpp
   test_controller.cpp
   test_fan.cpp
+  test_lock.cpp
   test_fonts.cpp
   test_crypto.cpp
   test_display_power.cpp

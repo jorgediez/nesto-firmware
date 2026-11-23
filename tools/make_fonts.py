@@ -61,6 +61,8 @@ ICONS = {
     "bell": "bell",
     "alert": "alert",
     "info": "information",
+    "lock": "lock",
+    "lock-open": "lock-open-variant",
     # The panel's own screens
     "settings": "cog",
     "pair": "link-variant",
@@ -73,7 +75,6 @@ ICONS = {
     "wifi-3": "wifi-strength-3",
     "wifi-4": "wifi-strength-4",
     "wifi-plus": "wifi-plus",
-    "lock": "lock",
     "check": "check",
     "backspace": "backspace-outline",
     "space": "keyboard-space",

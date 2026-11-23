@@ -278,6 +278,7 @@ DEMO_ITEMS = [
             "direction": True,
         },
     },
+    {"key": "k1", "kind": "lock", "name": "Front door", "features": {"open": True}},
     {"key": "t1", "kind": "sensor", "name": "CO2", "features": {"unit": "ppm"}},
 ]
 
@@ -289,8 +290,13 @@ DEMO_STATES = {
     "s1": {},
     "w1": {"on": False},
     "f1": {"on": False, "percentage": 0, "oscillating": False, "direction": "forward"},
+    "k1": {"state": "locked"},
     "t1": {"value": "612"},
 }
+
+
+# The demo's locks, and the state each of their actions leaves.
+LOCKS = {"k1": {"lock": "locked", "unlock": "unlocked", "open": "open"}}
 
 
 class DemoRoom:
@@ -319,7 +325,10 @@ class DemoRoom:
         s = self.states[key]
         before = dict(s)
         fan = "percentage" in s
-        if action == "turn_on" and fan:
+        lock = key in LOCKS
+        if lock and action in LOCKS[key]:
+            s["state"] = LOCKS[key][action]
+        elif action == "turn_on" and fan:
             s["on"] = True
             if not s.get("percentage"):
                 s["percentage"] = 100

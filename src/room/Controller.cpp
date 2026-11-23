@@ -74,6 +74,12 @@ int snap_speed(double percentage, const FanFeatures& fan) {
   return std::clamp(static_cast<int>(std::lround(snapped)), 0, 100);
 }
 
+/// A lock that's unlocked, or on its way: what Lock's right and Open show.
+bool unlocked(const ItemState& s) {
+  return s.state == "unlocked" || s.state == "unlocking" || s.state == "open" ||
+         s.state == "opening";
+}
+
 /// Time since `since`, never negative (see PanelSession).
 Millis elapsed(Millis now, Millis since) {
   return now > since ? now - since : 0;
@@ -114,6 +120,8 @@ const char* label(Control control) {
     case Control::Speed: return "Speed";
     case Control::Oscillate: return "Oscillate";
     case Control::Direction: return "Direction";
+    case Control::Lock: return "Lock";
+    case Control::Open: return "Open";
   }
   return "";
 }
@@ -158,6 +166,10 @@ std::vector<Control> controls_for(const Item& item) {
       if (item.fan.oscillate) out.push_back(Control::Oscillate);
       if (item.fan.direction) out.push_back(Control::Direction);
       break;
+    case Kind::Lock:
+      out.push_back(Control::Lock);
+      if (item.lock.open) out.push_back(Control::Open);
+      break;
     case Kind::Scene:
     case Kind::Sensor:
       break;
@@ -189,7 +201,7 @@ std::string summary(const Item& item, const ItemState& s) {
       return out.empty() ? capitalised(s.hvac_mode) : out;
     }
     case Kind::Cover: {
-      std::string out = s.cover_state.empty() ? "Unknown" : capitalised(s.cover_state);
+      std::string out = s.state.empty() ? "Unknown" : capitalised(s.state);
       if (s.position) out += " - " + std::to_string(*s.position) + "%";
       return out;
     }
@@ -200,6 +212,8 @@ std::string summary(const Item& item, const ItemState& s) {
       if (item.fan.speed && s.percentage) return "On - " + std::to_string(*s.percentage) + "%";
       if (s.preset) return "On - " + capitalised(*s.preset);
       return "On";
+    case Kind::Lock:
+      return s.state.empty() ? "Unknown" : capitalised(s.state);
   }
   return "";
 }
@@ -222,7 +236,10 @@ Tone tone_for(const Item& item, const ItemState& s) {
       return Tone::Neutral;
     }
     case Kind::Cover:
-      return s.cover_state == "closed" ? Tone::Off : Tone::Active;
+      return s.state == "closed" ? Tone::Off : Tone::Active;
+    case Kind::Lock:
+      if (s.state == "jammed") return Tone::Alert;
+      return unlocked(s) ? Tone::Active : Tone::Off;
     case Kind::Scene:
     case Kind::Sensor:
       return Tone::Neutral;
@@ -239,8 +256,15 @@ const char* default_icon(Kind kind) {
     case Kind::Cover: return "blind";
     case Kind::Sensor: return "sensor";
     case Kind::Fan: return "fan";
+    case Kind::Lock: return "lock";
   }
   return "unknown";
+}
+
+/// The icon an item shows without one from Home Assistant: a lock's opens.
+std::string state_icon(const Item& item, const ItemState& s) {
+  if (item.kind == Kind::Lock && unlocked(s)) return "lock-open";
+  return default_icon(item.kind);
 }
 
 Controller::Controller(Send send, SettingsActions actions)
@@ -287,6 +311,11 @@ bool Controller::apply_layout(const Json& message, std::string& error) {
   selected_ = std::clamp(selected_, 0, home_count() - 1);  // the last is Settings
   if (const Item* item = open_item()) {
     control_ = std::clamp(control_, 0, std::max(0, static_cast<int>(controls_for(*item).size()) - 1));
+  }
+  // A question about a lock that's gone goes too.
+  if (screen_ == RoomView::Screen::Confirm && !question_.key.empty() &&
+      !room_.find(question_.key)) {
+    screen_ = RoomView::Screen::Home;
   }
   for (auto it = shown_.begin(); it != shown_.end();) {
     it = room_.find(it->first) ? std::next(it) : shown_.erase(it);
@@ -347,6 +376,26 @@ void Controller::open_settings() {
 void Controller::leave_settings() {
   screen_ = room_.has_layout() ? RoomView::Screen::Home : RoomView::Screen::Empty;
   changed();
+}
+
+void Controller::ask(Question question) {
+  question_ = std::move(question);
+  screen_ = RoomView::Screen::Confirm;
+  click_ticks_ = 0;
+  changed();
+}
+
+void Controller::ask_lock(const Item& item, bool open) {
+  ask({room_.layout().title, (open ? "Open " : "Unlock ") + item.name + "?",
+       open ? "Press to open it,\nhold to leave it" : "Press to unlock it,\nhold to keep it locked",
+       screen_, item.key, open ? "open" : "unlock"});
+}
+
+void Controller::lock(const Item& item, Millis now) {
+  ItemState s = shown(item.key);
+  s.state = "locking";
+  show(item.key, s, now);
+  act_now(item, "lock", Json::object(), now);
 }
 
 ItemState Controller::shown(const std::string& key) const {
@@ -418,8 +467,8 @@ void Controller::press(Millis now) {
     case RoomView::Screen::Settings:
       if (setting_ == kPair && actions_.open_pairing) actions_.open_pairing();
       if (setting_ == kForget) {
-        screen_ = RoomView::Screen::Confirm;
-        changed();
+        ask({"Settings", "Forget Home Assistant?", "Press to forget it,\nhold to keep it",
+             RoomView::Screen::Settings, "", ""});
       }
       // Wi-Fi's screens take over until a long press leaves them, back here.
       if (setting_ == kWifi && actions_.open_wifi) actions_.open_wifi();
@@ -432,6 +481,18 @@ void Controller::press(Millis now) {
       }
       return;
     case RoomView::Screen::Confirm:
+      if (!question_.key.empty()) {
+        // Unlocking or opening a lock, from its screen or the home screen.
+        screen_ = question_.back;
+        changed();
+        const Item* item = room_.find(question_.key);
+        if (!item || !can_act(*item)) return;
+        ItemState s = shown(item->key);
+        s.state = question_.action == "open" ? "opening" : "unlocking";
+        show(item->key, s, now);
+        act_now(*item, question_.action, Json::object(), now);
+        return;
+      }
       if (actions_.forget) actions_.forget();
       // Without Home Assistant there's no room any more.
       room_ = Room();
@@ -471,6 +532,7 @@ void Controller::press(Millis now) {
       case Kind::Climate:
       case Kind::Cover:
       case Kind::Fan:
+      case Kind::Lock:
         if (controls_for(*item).empty()) return;
         screen_ = RoomView::Screen::Item;
         open_key_ = item->key;
@@ -509,6 +571,9 @@ void Controller::long_press(Millis now) {
       leave_settings();
       return;
     case RoomView::Screen::Confirm:
+      screen_ = question_.back;
+      changed();
+      return;
     case RoomView::Screen::Info:
       screen_ = RoomView::Screen::Settings;
       changed();
@@ -528,6 +593,14 @@ void Controller::long_press(Millis now) {
     toggle(*item, now);
   }
   if (item->kind == Kind::Scene) act_now(*item, "activate", Json::object(), now);
+  if (item->kind == Kind::Lock) {
+    // Locking needs no question; unlocking does.
+    if (unlocked(shown(item->key))) {
+      lock(*item, now);
+    } else {
+      ask_lock(*item, false);
+    }
+  }
 }
 
 void Controller::tick(Millis now) {
@@ -701,7 +774,7 @@ void Controller::adjust(const Item& item, Control control, int steps, Millis now
     case Control::Tilt: {
       const bool tilt = control == Control::Tilt;
       std::optional<int>& value = tilt ? s.tilt : s.position;
-      const int current = value.value_or(!tilt && s.cover_state == "open" ? 100 : 0);
+      const int current = value.value_or(!tilt && s.state == "open" ? 100 : 0);
       const int next = std::clamp(current + steps, 0, 100);
       if (next == current && value) return;
       value = next;
@@ -713,7 +786,7 @@ void Controller::adjust(const Item& item, Control control, int steps, Millis now
     case Control::CoverMove: {
       const bool open = steps > 0;
       if ((open && !item.cover.open) || (!open && !item.cover.close)) return;
-      s.cover_state = open ? "opening" : "closing";
+      s.state = open ? "opening" : "closing";
       show(item.key, s, now);
       act_now(item, open ? "open" : "close", Json::object(), now);
       return;
@@ -748,6 +821,16 @@ void Controller::adjust(const Item& item, Control control, int steps, Millis now
       act_now(item, "set_direction", Json{{"direction", direction}}, now);
       return;
     }
+    case Control::Lock: {
+      // Left locks at once, a jammed lock too; right asks before unlocking.
+      const bool locked = s.state == "locked" || s.state == "locking";
+      if (steps < 0 && !locked) lock(item, now);
+      if (steps > 0 && !unlocked(s)) ask_lock(item, false);
+      return;
+    }
+    case Control::Open:
+      if (steps > 0 && s.state != "open" && s.state != "opening") ask_lock(item, true);
+      return;
   }
 }
 
@@ -780,9 +863,9 @@ RoomView Controller::view() const {
       v.selected = setting_;
       return v;
     case RoomView::Screen::Confirm:
-      v.title = "Settings";
-      v.item_name = "Forget Home Assistant?";
-      v.prompt = "Press to forget it,\nhold to keep it";
+      v.title = question_.title;
+      v.item_name = question_.text;
+      v.prompt = question_.prompt;
       return v;
     case RoomView::Screen::Info:
       v.title = "Technical info";
@@ -813,7 +896,8 @@ RoomView Controller::view() const {
     const ItemState s = shown(item.key);
     const char* fallback = default_icon(item.kind);
     v.entries.push_back({item.name, summary(item, s), s.available,
-                         item.icon.empty() ? fallback : item.icon, fallback, tone_for(item, s)});
+                         item.icon.empty() ? state_icon(item, s) : item.icon, fallback,
+                         tone_for(item, s)});
   }
   v.entries.push_back({"Settings", "Pairing, technical info", true, "settings", "settings",
                        Tone::Neutral});
@@ -824,7 +908,7 @@ RoomView Controller::view() const {
   const auto controls = controls_for(*item);
   v.item_name = item->name;
   v.default_icon = default_icon(item->kind);
-  v.icon = item->icon.empty() ? v.default_icon : item->icon;
+  v.icon = item->icon.empty() ? state_icon(*item, s) : item->icon;
   v.tone = tone_for(*item, s);
   v.available = s.available;
   v.control_count = static_cast<int>(controls.size());
@@ -890,7 +974,7 @@ RoomView Controller::view() const {
       v.fraction = s.tilt ? *s.tilt / 100.0 : -1;
       break;
     case Control::CoverMove:
-      v.value = s.cover_state.empty() ? "-" : capitalised(s.cover_state);
+      v.value = s.state.empty() ? "-" : capitalised(s.state);
       break;
     case Control::Speed: {
       const int speed = s.on ? s.percentage.value_or(0) : 0;
@@ -905,6 +989,16 @@ RoomView Controller::view() const {
     case Control::Direction:
       v.value = s.direction.empty() ? "-" : capitalised(s.direction);
       break;
+    case Control::Lock:
+      v.value = s.state.empty() ? "-" : capitalised(s.state);
+      v.fraction = unlocked(s) ? 1 : 0;
+      break;
+    case Control::Open: {
+      const bool open = s.state == "open" || s.state == "opening";
+      v.value = open ? capitalised(s.state) : "Closed";
+      v.fraction = open ? 1 : 0;
+      break;
+    }
   }
   return v;
 }

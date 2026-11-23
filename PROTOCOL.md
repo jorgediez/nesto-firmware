@@ -163,7 +163,7 @@ The direction of each message is marked **H→P** (HA to panel) or **P→H**
        "image_formats": ["jpeg", "png"],
        "ota": false,
        "reboot": true,
-       "kinds": ["light", "switch", "scene", "climate", "cover", "sensor", "fan"]
+       "kinds": ["light", "switch", "scene", "climate", "cover", "sensor", "fan", "lock"]
      }
    }
    ```
@@ -426,8 +426,9 @@ change.
 | `cover` | `open`, `close`, `stop`, `position`, `tilt`: bools | |
 | `sensor` | `unit`: string | Read-only. |
 | `fan` | `speed`: bool · `speed_step`: percent between speeds (`33.33` for three; default 1) · `presets`: list · `oscillate`: bool · `direction`: bool | Every fan can turn on and off. Since firmware 0.3.0. |
+| `lock` | `open`: bool (it can open the latch, not only unlock) | Every lock can lock and unlock. The panel asks before unlocking or opening. Since firmware 0.3.0. |
 
-Kinds planned for later versions: `media_player`, `lock`. A new kind needs no
+Kinds planned for later versions: `media_player`. A new kind needs no
 protocol change: old panels skip it, and `caps.kinds` tells HA which kinds a
 panel draws.
 
@@ -464,6 +465,7 @@ Fields per kind:
 | `cover` | `state`: `"open"`, `"closed"`, `"opening"`, `"closing"` · `position`: 0–100 or null (100 = fully open) · `tilt`: 0–100 or null |
 | `sensor` | `value`: string, already formatted by HA |
 | `fan` | `on`: bool · `percentage`: 0–100 or null · `preset`: string or null · `oscillating`: bool · `direction`: `"forward"`, `"reverse"` or null |
+| `lock` | `state`: `"locked"`, `"unlocked"`, `"locking"`, `"unlocking"`, `"jammed"`, `"open"`, `"opening"`, or null when unknown |
 
 Brightness is a percentage on the wire because that's what the panel shows; HA
 converts to and from Home Assistant's 0–255 scale.
@@ -501,6 +503,7 @@ restores the item's last known state.
 | | `set_preset` | `preset` |
 | | `oscillate` | `oscillating`: bool |
 | | `set_direction` | `direction`: `"forward"` or `"reverse"` |
+| `lock` | `lock`, `unlock`, `open` | none |
 
 Errors specific to intents: `unknown_key` (stale layout), `unsupported` (the
 item lacks the feature), `unavailable`, `service_failed` (HA's call raised).
@@ -910,7 +913,9 @@ experience depend on them.
     turning, and a final one 300 ms after the ring stops, so lights follow the
     ring live;
   - climate: one intent 1.5 seconds after the ring stops, so a thermostat isn't
-    sent every half-degree step.
+    sent every half-degree step;
+  - locks: locking at once; unlocking and opening only after the user confirms
+    on the panel, with a press.
 - **States win.** A `states` message for an item overrides the optimistic value,
   except for the item being adjusted right now and for 2 seconds after the last
   turn, to stop the value jumping back while the user is still turning.
@@ -952,13 +957,14 @@ user picked.
 | `scene`, `script` | `scene` | none |
 | `climate` | `climate` | `ClimateEntityFeature`: `TARGET_TEMPERATURE` gives `single`, `TARGET_TEMPERATURE_RANGE` gives `range`; `hvac_modes`, `preset_modes`, `fan_modes`; `min_temp`, `max_temp`, `target_temperature_step` (default 0.5); unit from Home Assistant's unit system |
 | `cover` | `cover` | `CoverEntityFeature` `OPEN`, `CLOSE`, `STOP`, `SET_POSITION`, `SET_TILT_POSITION` |
+| `lock` | `lock` | `LockEntityFeature` `OPEN` gives `open`. A lock with a `code_format` is left out unless it has a default code in Home Assistant, which then fills it in; the panel never asks for a code. On a panel without `lock` in `caps.kinds`, left out. |
 | `sensor` (picked by the user) | `sensor` | unit from the entity |
 
 **Colour.** The panel always works in hue and saturation. HA converts to and
 from whatever colour mode the light uses.
 
-**Order.** Kind by kind: lights, climate, covers, switches, scenes and
-sensors; within a kind, the user's order. With the user's "All lights"
+**Order.** Kind by kind: lights, climate, covers, locks, switches (fans
+among them), scenes and sensors; within a kind, the user's order. With the user's "All lights"
 option and two or more lights, a synthetic "all lights" item comes first.
 
 ## Appendix B: example session
@@ -1000,4 +1006,5 @@ fits.
 `lightbulb`, `lightbulb-group`, `ceiling-light`, `lamp`, `led-strip`,
 `switch`, `power-socket`, `fan`, `scene`, `script`, `thermostat`, `radiator`,
 `air-conditioner`, `blind`, `shutter`, `curtains`, `garage`, `window`, `door`,
-`sensor`, `thermometer`, `water`, `tv`, `speaker`, `bell`, `alert`, `info`.
+`sensor`, `thermometer`, `water`, `tv`, `speaker`, `bell`, `alert`, `info`,
+`lock`, `lock-open`.

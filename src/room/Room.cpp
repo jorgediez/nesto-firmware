@@ -10,7 +10,7 @@ namespace {
 const std::pair<const char*, Kind> kKinds[] = {
     {"light", Kind::Light},     {"switch", Kind::Switch}, {"scene", Kind::Scene},
     {"climate", Kind::Climate}, {"cover", Kind::Cover},   {"sensor", Kind::Sensor},
-    {"fan", Kind::Fan},
+    {"fan", Kind::Fan},         {"lock", Kind::Lock},
 };
 
 std::optional<Kind> kind_from(const std::string& name) {
@@ -168,6 +168,9 @@ std::optional<Layout> parse_layout(const Json& message, std::string& error) {
         if (!strings(features, "presets", fan.presets, error)) return std::nullopt;
         break;
       }
+      case Kind::Lock:
+        item.lock.open = flag(features, "open");
+        break;
       case Kind::Switch:
       case Kind::Scene:
         break;
@@ -213,7 +216,7 @@ void merge_state(ItemState& s, const Json& fields) {
   optional_field(fields, "fan_mode", s.fan_mode);
   optional_field(fields, "current_humidity", s.current_humidity);
 
-  string("state", s.cover_state);
+  string("state", s.state);
   optional_field(fields, "position", s.position);
   optional_field(fields, "tilt", s.tilt);
 

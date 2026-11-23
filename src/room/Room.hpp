@@ -13,7 +13,7 @@ namespace nesto::room {
 using protocol::Json;
 
 /// Item kinds of PROTOCOL.md section 9.1.
-enum class Kind { Light, Switch, Scene, Climate, Cover, Sensor, Fan };
+enum class Kind { Light, Switch, Scene, Climate, Cover, Sensor, Fan, Lock };
 
 /// The names of every kind this panel draws, for hello's `caps.kinds`.
 std::vector<std::string> kind_names();
@@ -53,6 +53,10 @@ struct FanFeatures {
   bool direction = false;
 };
 
+struct LockFeatures {
+  bool open = false;  // it can open the latch, not only unlock
+};
+
 /// One thing on the panel (section 9). Only the features for its kind are set.
 struct Item {
   std::string key;
@@ -63,6 +67,7 @@ struct Item {
   ClimateFeatures climate;
   CoverFeatures cover;
   FanFeatures fan;
+  LockFeatures lock;
   std::string unit;  // sensors
 };
 
@@ -91,8 +96,9 @@ struct ItemState {
   std::optional<std::string> preset;  // climate, fan
   std::optional<std::string> fan_mode;
   std::optional<double> current_humidity;
-  // cover
-  std::string cover_state;
+  // cover: open, closed, opening, closing; lock: locked, unlocked, locking,
+  // unlocking, jammed, open, opening
+  std::string state;
   std::optional<int> position;
   std::optional<int> tilt;
   // fan

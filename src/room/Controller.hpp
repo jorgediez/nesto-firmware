@@ -32,6 +32,8 @@ enum class Control {
   Speed,
   Oscillate,
   Direction,
+  Lock,
+  Open,
 };
 
 /// The controls an item's screen offers, in the order a press steps through.
@@ -47,7 +49,8 @@ enum class Tone {
   Light,    // a light that's on
   Heat,     // climate heating, or set to heat
   Cool,     // climate cooling, or set to cool
-  Active,   // a switch or fan that's on, an open cover
+  Active,   // a switch or fan that's on, an open cover, an unlocked lock
+  Alert,    // a jammed lock
 };
 
 Tone tone_for(const Item& item, const ItemState& state);
@@ -142,10 +145,14 @@ struct SettingsActions {
 /// - lights and covers follow the ring live, at most one intent per 300 ms
 ///   while it turns and the last value within 300 ms of it stopping;
 /// - climate sends once, 1.5 seconds after the ring stops;
-/// - switching on or off, scenes and opening or closing are sent at once.
+/// - switching on or off, scenes, opening or closing, and locking are sent
+///   at once; unlocking or opening a lock only once a press confirms it.
 ///
 /// Values change on screen straight away. Home Assistant's states take over
 /// again 2 seconds after the last turn, or at once if an intent fails.
+///
+/// Confirm asks before something that can't wait to be undone: a press does
+/// it, a long press goes back to where it was asked.
 ///
 /// The last entry on the home screen, and a press on the waiting screen, open
 /// Settings: pairing, forgetting Home Assistant (after a confirmation) and
@@ -209,8 +216,23 @@ class Controller {
     bool ever_sent = false;
   };
 
+  /// A question on the Confirm screen: forgetting Home Assistant, or
+  /// unlocking or opening a lock.
+  struct Question {
+    std::string title;
+    std::string text;
+    std::string prompt;
+    RoomView::Screen back = RoomView::Screen::Settings;  // where a long press goes
+    std::string key;     // the lock; empty for Forget
+    std::string action;  // the lock's intent: "unlock" or "open"
+  };
+
   void open_settings();
   void leave_settings();
+  void ask(Question question);
+  /// Asks before unlocking a lock, or opening its latch.
+  void ask_lock(const Item& item, bool open);
+  void lock(const Item& item, Millis now);
   int home_count() const;
   /// 1 while the home screen starts with the Notifications entry, else 0.
   int notices_entry() const { return notification_count_ > 0 ? 1 : 0; }
@@ -242,6 +264,7 @@ class Controller {
   std::string open_key_;
   int control_ = 0;
   int setting_ = 0;  // the selected Settings entry
+  Question question_;
   std::vector<InfoLine> info_;
   int info_scroll_ = 0;
   int info_scroll_limit_ = 0;

@@ -36,7 +36,7 @@ TEST_CASE("every icon of PROTOCOL.md appendix C is in the icon font") {
        {"lightbulb", "lightbulb-group", "ceiling-light", "lamp", "led-strip", "switch",
         "power-socket", "fan", "scene", "script", "thermostat", "radiator", "air-conditioner",
         "blind", "shutter", "curtains", "garage", "window", "door", "sensor", "thermometer",
-        "water", "tv", "speaker", "bell", "alert", "info"}) {
+        "water", "tv", "speaker", "bell", "alert", "info", "lock", "lock-open"}) {
     CAPTURE(name);
     CHECK(is_icon(fonts::icon(name)));
   }
@@ -49,7 +49,7 @@ TEST_CASE("the panel's own icons and every kind's default are in the icon font")
   }
   for (room::Kind kind : {room::Kind::Light, room::Kind::Switch, room::Kind::Scene,
                           room::Kind::Climate, room::Kind::Cover, room::Kind::Sensor,
-                          room::Kind::Fan}) {
+                          room::Kind::Fan, room::Kind::Lock}) {
     CHECK(is_icon(fonts::icon(room::default_icon(kind))));
   }
 }

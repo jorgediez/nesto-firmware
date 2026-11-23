@@ -76,6 +76,13 @@ def test_a_fan_steps_through_its_speeds(tmp_path: Path) -> None:
     ]
 
 
+def test_a_lock_unlocks_only_once_confirmed(tmp_path: Path) -> None:
+    # Select the front door (locked), open it, turn right: the question. Hold
+    # leaves it locked; asked again, a press unlocks; turning left locks.
+    intents, _ = run(tmp_path, "r+7 p r+1 w300 h w300 r+1 w300 p w800 r-1 w500", seconds=10)
+    assert actions(intents) == [("k1", "unlock", {}), ("k1", "lock", {})]
+
+
 def test_a_long_press_on_home_toggles_a_light(tmp_path: Path) -> None:
     intents, _ = run(tmp_path, "h w500", seconds=7)
     assert actions(intents) == [("l1", "turn_off", {})]
