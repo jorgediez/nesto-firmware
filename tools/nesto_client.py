@@ -11,7 +11,8 @@ end-to-end tests use it, and it is handy by hand against the simulator:
 (nesto.key by default); `connect` uses that key, synchronises, and prints what
 the panel sends until interrupted; `demo` serves a made-up room, carrying out
 the panel's intents the way Home Assistant would, so the screens can be tried.
-`ota PROGRAM VERSION` sends a signed program as a firmware update.
+`ota PROGRAM VERSION` sends a signed program as a firmware update; `reboot`
+reboots the panel.
 """
 
 from __future__ import annotations
@@ -503,6 +504,20 @@ async def _ota(args: argparse.Namespace) -> None:
     print(f"Nesto {args.version} is in place; the panel restarts with it.")
 
 
+async def _reboot(args: argparse.Namespace) -> None:
+    client = await NestoClient.connect(args.host, args.port)
+    await client.authenticate(read_key(args.key_file))
+    await client.synchronise()
+    print(f"Panel {client.hello['panel_id']} runs Nesto {client.hello['fw']}")
+    if not client.hello.get("caps", {}).get("reboot"):
+        sys.exit("It can't reboot from here: Nesto 0.2.0 and older can't")
+    try:
+        await client.request({"t": "reboot"})
+    finally:
+        await client.close()
+    print("The panel is rebooting; it's back in about a minute.")
+
+
 async def _demo(args: argparse.Namespace) -> None:
     key = read_key(args.key_file)
     client = await NestoClient.connect(args.host, args.port)
@@ -563,6 +578,7 @@ def main() -> None:
     ota.add_argument("program", help="the program, as dev.sh dist strips it")
     ota.add_argument("version", help="its version, as signed")
     ota.add_argument("--signature", help="its signature's file (default: PROGRAM.sig)")
+    commands.add_parser("reboot", help="reboot the panel (PROTOCOL.md section 18)")
     demo = commands.add_parser("demo", help="serve a made-up room that answers the panel's intents")
     demo.add_argument(
         "--timeout",
@@ -623,7 +639,9 @@ def main() -> None:
         help="when to send it (default: 5)",
     )
     args = parser.parse_args()
-    run = {"pair": _pair, "connect": _connect, "demo": _demo, "ota": _ota}[args.command]
+    run = {"pair": _pair, "connect": _connect, "demo": _demo, "ota": _ota, "reboot": _reboot}[
+        args.command
+    ]
     try:
         asyncio.run(run(args))
     except asyncio.IncompleteReadError:

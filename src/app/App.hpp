@@ -54,6 +54,10 @@ struct AppOptions {
 constexpr int kHeldExit = 3;
 /// The exit code after a firmware update was put in place: start the new one.
 constexpr int kUpdatedExit = 4;
+/// What run() returns when Home Assistant asked for a reboot: main reboots
+/// the thermostat, once everything has stopped (the base handed back). The
+/// simulator exits with it.
+constexpr int kRebootExit = 5;
 
 /// Ties the hardware, LVGL, the screens and the connection to Home Assistant
 /// together, and runs the main loop.
@@ -136,9 +140,14 @@ class App : private protocol::SessionEvents {
   void ping(Millis now);
   /// Home Assistant's ota_* requests (PROTOCOL.md section 19).
   void handle_ota(protocol::PanelSession& session, const protocol::Message& m);
-  /// What the Updating screen shows, while an update arrives or applies.
+  /// What the Updating screen shows, while an update arrives or applies, or
+  /// the panel restarts.
   room::RoomView update_view() const;
   bool updating() const;
+  /// Home Assistant asked for a reboot, and its answer is on the way.
+  bool rebooting() const { return reboot_at_ != 0; }
+  /// Home Assistant's reboot request (PROTOCOL.md section 18).
+  void handle_reboot(protocol::PanelSession& session, const protocol::Message& m);
 
   // protocol::SessionEvents
   void on_pairing_code(const std::string& code) override;
@@ -173,6 +182,7 @@ class App : private protocol::SessionEvents {
   std::unique_ptr<protocol::OtaReceiver> ota_;
   std::string update_drawn_;  // what the Updating screen last showed
   Millis quit_at_ = 0;        // after an update applied: exit then, its answer sent
+  Millis reboot_at_ = 0;      // after a reboot request: stop then, its answer sent
   std::unique_ptr<net::WifiBackend> wifi_backend_;
   room::WifiSetup wifi_;
   unsigned wifi_seen_ = 0;      // wifi_backend_->version() last passed on

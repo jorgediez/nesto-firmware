@@ -124,10 +124,12 @@ Hold to go back from any of them.
 **Updates.** Home Assistant can install a new release: the panel takes only
 a program signed with the release key, shows its progress, and goes back to
 the one it had if the new one doesn't come back to Home Assistant within five
-minutes ([PROTOCOL.md](PROTOCOL.md) section 19).
+minutes ([PROTOCOL.md](PROTOCOL.md) section 19). Home Assistant can also
+reboot the thermostat, which hands its base back first, as the stock software
+would.
 
-Not in this release: a picture carousel while resting, languages other than
-English, and rebooting from Home Assistant.
+Not in this release: a picture carousel while resting, and languages other
+than English.
 
 ## Development
 
