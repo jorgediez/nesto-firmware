@@ -195,11 +195,18 @@ TEST_CASE("holding on the home screen locks, or asks before unlocking") {
   CHECK(f.sent[1].key == "k2");
   CHECK(f.sent[1].action == "lock");
 
-  f.select(0);
+  f.select(2);  // the garage door, jammed: asks too
   f.hold();
-  f.hold();  // asked again; holding leaves it, back home
+  CHECK(f.view().item_name == "Unlock Garage door?");
+  f.hold();  // holding leaves it, back home
   CHECK(f.view().screen == RoomView::Screen::Home);
   CHECK(f.sent.size() == 2);
+
+  f.select(0);  // the front door, unlocking since the press: locks at once
+  f.hold();
+  REQUIRE(f.sent.size() == 3);
+  CHECK(f.sent[2].key == "k1");
+  CHECK(f.sent[2].action == "lock");
 }
 
 TEST_CASE("the question goes with its lock, and does nothing offline") {
