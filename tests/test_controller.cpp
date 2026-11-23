@@ -456,9 +456,9 @@ TEST_CASE("tones follow what an item is doing") {
   CHECK(tone_for(climate, c) == Tone::Neutral);
 
   ItemState v;
-  v.cover_state = "closed";
+  v.state = "closed";
   CHECK(tone_for(cover, v) == Tone::Off);
-  v.cover_state = "opening";
+  v.state = "opening";
   CHECK(tone_for(cover, v) == Tone::Active);
 }
 

@@ -47,6 +47,7 @@ lv_color_t colour(Tone tone) {
     case Tone::Heat: return lv_color_hex(0xFF7A33);
     case Tone::Cool: return lv_color_hex(0x4AA8FF);
     case Tone::Active: return lv_color_hex(0x4CD18A);
+    case Tone::Alert: return lv_color_hex(0xFF4F4F);
   }
   return kText;
 }
