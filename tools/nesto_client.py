@@ -266,6 +266,18 @@ DEMO_ITEMS = [
     },
     {"key": "s1", "kind": "scene", "name": "Film night"},
     {"key": "w1", "kind": "switch", "name": "Fan"},
+    {
+        "key": "f1",
+        "kind": "fan",
+        "name": "Ceiling fan",
+        "features": {
+            "speed": True,
+            "speed_step": 25,
+            "presets": ["breeze"],
+            "oscillate": True,
+            "direction": True,
+        },
+    },
     {"key": "t1", "kind": "sensor", "name": "CO2", "features": {"unit": "ppm"}},
 ]
 
@@ -276,6 +288,7 @@ DEMO_STATES = {
     "v1": {"state": "open", "position": 40},
     "s1": {},
     "w1": {"on": False},
+    "f1": {"on": False, "percentage": 0, "oscillating": False, "direction": "forward"},
     "t1": {"value": "612"},
 }
 
@@ -305,7 +318,12 @@ class DemoRoom:
         args = intent.get("args", {})
         s = self.states[key]
         before = dict(s)
-        if action == "turn_on":
+        fan = "percentage" in s
+        if action == "turn_on" and fan:
+            s["on"] = True
+            if not s.get("percentage"):
+                s["percentage"] = 100
+        elif action == "turn_on":
             s["on"] = True
             s.update(args)
             if not s.get("brightness"):
@@ -322,6 +340,15 @@ class DemoRoom:
             s["hvac_mode"] = args["mode"]
         elif action == "set_preset":
             s["preset"] = args["preset"]
+            if fan:
+                s["on"] = True
+        elif action == "set_percentage":
+            s["percentage"] = args["percentage"]
+            s["on"] = args["percentage"] > 0
+        elif action == "oscillate":
+            s["oscillating"] = args["oscillating"]
+        elif action == "set_direction":
+            s["direction"] = args["direction"]
         elif action == "set_fan_mode":
             s["fan_mode"] = args["fan_mode"]
         elif action in ("open", "close"):

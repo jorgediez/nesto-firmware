@@ -29,6 +29,9 @@ enum class Control {
   Position,
   Tilt,
   CoverMove,
+  Speed,
+  Oscillate,
+  Direction,
 };
 
 /// The controls an item's screen offers, in the order a press steps through.
@@ -44,7 +47,7 @@ enum class Tone {
   Light,    // a light that's on
   Heat,     // climate heating, or set to heat
   Cool,     // climate cooling, or set to cool
-  Active,   // a switch that's on, an open cover
+  Active,   // a switch or fan that's on, an open cover
 };
 
 Tone tone_for(const Item& item, const ItemState& state);

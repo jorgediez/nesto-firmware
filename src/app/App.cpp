@@ -206,7 +206,8 @@ bool App::init() {
                 {"beeper", hal_.has_beeper()},
                 {"image_formats", protocol::Json::array()},
                 {"ota", ota_ != nullptr},
-                {"reboot", true}};
+                {"reboot", true},
+                {"kinds", room::kind_names()}};
 
   pairing_ = std::make_unique<protocol::PairingState>(
       std::make_unique<protocol::FileKeyStore>(options_.state_dir));

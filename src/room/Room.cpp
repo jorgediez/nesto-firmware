@@ -7,13 +7,16 @@
 namespace nesto::room {
 namespace {
 
+const std::pair<const char*, Kind> kKinds[] = {
+    {"light", Kind::Light},     {"switch", Kind::Switch}, {"scene", Kind::Scene},
+    {"climate", Kind::Climate}, {"cover", Kind::Cover},   {"sensor", Kind::Sensor},
+    {"fan", Kind::Fan},
+};
+
 std::optional<Kind> kind_from(const std::string& name) {
-  if (name == "light") return Kind::Light;
-  if (name == "switch") return Kind::Switch;
-  if (name == "scene") return Kind::Scene;
-  if (name == "climate") return Kind::Climate;
-  if (name == "cover") return Kind::Cover;
-  if (name == "sensor") return Kind::Sensor;
+  for (const auto& [text, kind] : kKinds) {
+    if (name == text) return kind;
+  }
   return std::nullopt;
 }
 
@@ -69,6 +72,12 @@ void optional_field(const Json& fields, const char* name, std::optional<T>& out)
 }
 
 }  // namespace
+
+std::vector<std::string> kind_names() {
+  std::vector<std::string> out;
+  for (const auto& entry : kKinds) out.emplace_back(entry.first);
+  return out;
+}
 
 std::optional<Layout> parse_layout(const Json& message, std::string& error) {
   Layout layout;
@@ -149,6 +158,16 @@ std::optional<Layout> parse_layout(const Json& message, std::string& error) {
       case Kind::Sensor:
         item.unit = text(features, "unit");
         break;
+      case Kind::Fan: {
+        auto& fan = item.fan;
+        fan.speed = flag(features, "speed");
+        fan.speed_step = number(features, "speed_step", 1);
+        if (fan.speed_step < 1 || fan.speed_step > 100) fan.speed_step = 1;
+        fan.oscillate = flag(features, "oscillate");
+        fan.direction = flag(features, "direction");
+        if (!strings(features, "presets", fan.presets, error)) return std::nullopt;
+        break;
+      }
       case Kind::Switch:
       case Kind::Scene:
         break;
@@ -197,6 +216,11 @@ void merge_state(ItemState& s, const Json& fields) {
   string("state", s.cover_state);
   optional_field(fields, "position", s.position);
   optional_field(fields, "tilt", s.tilt);
+
+  optional_field(fields, "percentage", s.percentage);
+  if (s.percentage) s.percentage = std::clamp(*s.percentage, 0, 100);
+  boolean("oscillating", s.oscillating);
+  string("direction", s.direction);
 
   string("value", s.value);
 }

@@ -43,8 +43,12 @@ std::optional<std::string> step_choice(const std::vector<std::string>& list,
   return list[static_cast<std::size_t>(to)];
 }
 
+/// A fan's speeds are steps of the ring's clicks when they're far apart (a
+/// fan with three speeds), and follow every tick when they're close.
+constexpr double kSmoothSpeedStep = 5;
+
 /// Controls that change with every tick of the ring, rather than per click.
-bool is_smooth(Control control) {
+bool is_smooth(const Item& item, Control control) {
   switch (control) {
     case Control::Brightness:
     case Control::ColorTemp:
@@ -52,9 +56,22 @@ bool is_smooth(Control control) {
     case Control::Position:
     case Control::Tilt:
       return true;
+    case Control::Speed:
+      return item.fan.speed_step <= kSmoothSpeedStep;
     default:
       return false;
   }
+}
+
+/// The presets the Preset control steps through.
+const std::vector<std::string>& presets_of(const Item& item) {
+  return item.kind == Kind::Fan ? item.fan.presets : item.climate.presets;
+}
+
+/// A fan's speed, in percent, on the nearest of its speeds.
+int snap_speed(double percentage, const FanFeatures& fan) {
+  const double snapped = std::round(percentage / fan.speed_step) * fan.speed_step;
+  return std::clamp(static_cast<int>(std::lround(snapped)), 0, 100);
 }
 
 /// Time since `since`, never negative (see PanelSession).
@@ -94,6 +111,9 @@ const char* label(Control control) {
     case Control::Position: return "Position";
     case Control::Tilt: return "Tilt";
     case Control::CoverMove: return "Open or close";
+    case Control::Speed: return "Speed";
+    case Control::Oscillate: return "Oscillate";
+    case Control::Direction: return "Direction";
   }
   return "";
 }
@@ -132,6 +152,12 @@ std::vector<Control> controls_for(const Item& item) {
       }
       if (item.cover.tilt) out.push_back(Control::Tilt);
       break;
+    case Kind::Fan:
+      out.push_back(item.fan.speed ? Control::Speed : Control::Power);
+      if (!item.fan.presets.empty()) out.push_back(Control::Preset);
+      if (item.fan.oscillate) out.push_back(Control::Oscillate);
+      if (item.fan.direction) out.push_back(Control::Direction);
+      break;
     case Kind::Scene:
     case Kind::Sensor:
       break;
@@ -169,6 +195,11 @@ std::string summary(const Item& item, const ItemState& s) {
     }
     case Kind::Sensor:
       return item.unit.empty() ? s.value : s.value + " " + item.unit;
+    case Kind::Fan:
+      if (!s.on) return "Off";
+      if (item.fan.speed && s.percentage) return "On - " + std::to_string(*s.percentage) + "%";
+      if (s.preset) return "On - " + capitalised(*s.preset);
+      return "On";
   }
   return "";
 }
@@ -179,6 +210,7 @@ Tone tone_for(const Item& item, const ItemState& s) {
     case Kind::Light:
       return s.on ? Tone::Light : Tone::Off;
     case Kind::Switch:
+    case Kind::Fan:
       return s.on ? Tone::Active : Tone::Off;
     case Kind::Climate: {
       const std::string action = s.hvac_action.value_or("");
@@ -206,6 +238,7 @@ const char* default_icon(Kind kind) {
     case Kind::Climate: return "thermostat";
     case Kind::Cover: return "blind";
     case Kind::Sensor: return "sensor";
+    case Kind::Fan: return "fan";
   }
   return "unknown";
 }
@@ -346,7 +379,7 @@ void Controller::rotate(int ticks, Millis now) {
     const auto controls = controls_for(*item);
     if (!can_act(*item) || controls.empty()) return;
     const Control control = controls[static_cast<std::size_t>(control_)];
-    if (is_smooth(control)) {
+    if (is_smooth(*item, control)) {
       adjust(*item, control, ticks, now);
     } else if (const int n = clicks(ticks, now)) {
       adjust(*item, control, n, now);
@@ -437,6 +470,7 @@ void Controller::press(Millis now) {
       case Kind::Light:
       case Kind::Climate:
       case Kind::Cover:
+      case Kind::Fan:
         if (controls_for(*item).empty()) return;
         screen_ = RoomView::Screen::Item;
         open_key_ = item->key;
@@ -490,7 +524,9 @@ void Controller::long_press(Millis now) {
   }
   const Item* item = selected_item();
   if (!item || screen_ != RoomView::Screen::Home || !can_act(*item)) return;
-  if (item->kind == Kind::Light || item->kind == Kind::Switch) toggle(*item, now);
+  if (item->kind == Kind::Light || item->kind == Kind::Switch || item->kind == Kind::Fan) {
+    toggle(*item, now);
+  }
   if (item->kind == Kind::Scene) act_now(*item, "activate", Json::object(), now);
 }
 
@@ -645,8 +681,9 @@ void Controller::adjust(const Item& item, Control control, int steps, Millis now
       return;
     }
     case Control::Preset: {
-      const auto next = step_choice(c.presets, s.preset.value_or(""), steps);
+      const auto next = step_choice(presets_of(item), s.preset.value_or(""), steps);
       if (!next) return;
+      if (item.kind == Kind::Fan) s.on = true;
       s.preset = *next;
       show(item.key, s, now);
       act_later(item, "preset", "set_preset", Json{{"preset", *next}}, true, now);
@@ -679,6 +716,36 @@ void Controller::adjust(const Item& item, Control control, int steps, Millis now
       s.cover_state = open ? "opening" : "closing";
       show(item.key, s, now);
       act_now(item, open ? "open" : "close", Json::object(), now);
+      return;
+    }
+    case Control::Speed: {
+      // A click moves 5% on a fan with close speeds, and one speed otherwise.
+      const auto& fan = item.fan;
+      const int current = s.on ? s.percentage.value_or(0) : 0;
+      const double by = is_smooth(item, control) ? steps : steps * fan.speed_step;
+      const int next = snap_speed(std::clamp(current + by, 0.0, 100.0), fan);
+      if (next == current) return;
+      s.on = next > 0;
+      if (s.on) s.percentage = next;
+      show(item.key, s, now);
+      act_later(item, "speed", s.on ? "set_percentage" : "turn_off",
+                s.on ? Json{{"percentage", next}} : Json::object(), false, now);
+      return;
+    }
+    case Control::Oscillate: {
+      const bool on = steps > 0;
+      if (s.oscillating == on) return;
+      s.oscillating = on;
+      show(item.key, s, now);
+      act_now(item, "oscillate", Json{{"oscillating", on}}, now);
+      return;
+    }
+    case Control::Direction: {
+      const std::string direction = steps > 0 ? "forward" : "reverse";
+      if (s.direction == direction) return;
+      s.direction = direction;
+      show(item.key, s, now);
+      act_now(item, "set_direction", Json{{"direction", direction}}, now);
       return;
     }
   }
@@ -824,6 +891,19 @@ RoomView Controller::view() const {
       break;
     case Control::CoverMove:
       v.value = s.cover_state.empty() ? "-" : capitalised(s.cover_state);
+      break;
+    case Control::Speed: {
+      const int speed = s.on ? s.percentage.value_or(0) : 0;
+      v.value = s.on ? std::to_string(speed) + "%" : "Off";
+      v.fraction = speed / 100.0;
+      break;
+    }
+    case Control::Oscillate:
+      v.value = s.oscillating ? "On" : "Off";
+      v.fraction = s.oscillating ? 1 : 0;
+      break;
+    case Control::Direction:
+      v.value = s.direction.empty() ? "-" : capitalised(s.direction);
       break;
   }
   return v;

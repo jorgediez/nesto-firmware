@@ -13,7 +13,10 @@ namespace nesto::room {
 using protocol::Json;
 
 /// Item kinds of PROTOCOL.md section 9.1.
-enum class Kind { Light, Switch, Scene, Climate, Cover, Sensor };
+enum class Kind { Light, Switch, Scene, Climate, Cover, Sensor, Fan };
+
+/// The names of every kind this panel draws, for hello's `caps.kinds`.
+std::vector<std::string> kind_names();
 
 struct LightFeatures {
   bool brightness = false;
@@ -42,6 +45,14 @@ struct CoverFeatures {
   bool tilt = false;
 };
 
+struct FanFeatures {
+  bool speed = false;
+  double speed_step = 1;  // percent between speeds: 33.3 for three
+  std::vector<std::string> presets;
+  bool oscillate = false;
+  bool direction = false;
+};
+
 /// One thing on the panel (section 9). Only the features for its kind are set.
 struct Item {
   std::string key;
@@ -51,6 +62,7 @@ struct Item {
   LightFeatures light;
   ClimateFeatures climate;
   CoverFeatures cover;
+  FanFeatures fan;
   std::string unit;  // sensors
 };
 
@@ -63,7 +75,7 @@ struct Layout {
 /// Section 10's fields, for every kind; each kind uses its own.
 struct ItemState {
   bool available = true;
-  // light, switch
+  // light, switch, fan
   bool on = false;
   int brightness = 0;
   std::optional<int> color_temp_k;
@@ -76,13 +88,17 @@ struct ItemState {
   std::optional<double> target;
   std::optional<double> target_low;
   std::optional<double> target_high;
-  std::optional<std::string> preset;
+  std::optional<std::string> preset;  // climate, fan
   std::optional<std::string> fan_mode;
   std::optional<double> current_humidity;
   // cover
   std::string cover_state;
   std::optional<int> position;
   std::optional<int> tilt;
+  // fan
+  std::optional<int> percentage;
+  bool oscillating = false;
+  std::string direction;
   // sensor
   std::string value;
 };
