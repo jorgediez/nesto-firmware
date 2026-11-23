@@ -49,7 +49,7 @@ TEST_CASE("the panel's own icons and every kind's default are in the icon font")
   }
   for (room::Kind kind : {room::Kind::Light, room::Kind::Switch, room::Kind::Scene,
                           room::Kind::Climate, room::Kind::Cover, room::Kind::Sensor,
-                          room::Kind::Fan, room::Kind::Lock}) {
+                          room::Kind::Fan, room::Kind::Lock, room::Kind::MediaPlayer}) {
     CHECK(is_icon(fonts::icon(room::default_icon(kind))));
   }
 }

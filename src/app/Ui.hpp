@@ -57,6 +57,8 @@ class Ui {
   void set_hand(lv_obj_t* line, Hand& points, int angle, int length);
 
   void render_list(const room::RoomView& view);
+  /// The item's value: in the huge font, or two lines of the large one.
+  void set_value(const std::string& text);
   void render_notice(const room::RoomView& view);
   void render_info(const room::RoomView& view);
   void render_keyboard(const room::RoomView& view);
