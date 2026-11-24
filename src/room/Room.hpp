@@ -85,6 +85,8 @@ struct Layout {
   long long rev = 0;
   std::string title;
   std::vector<Item> items;
+  /// The item to select on waking (section 9), or empty for the top.
+  std::string wake;
 };
 
 /// Section 10's fields, for every kind; each kind uses its own.

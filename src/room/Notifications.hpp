@@ -77,6 +77,9 @@ class Notifications {
   void display_rested();
   /// The display woke: a notification still waiting for an answer pops up.
   void display_woke(Millis now);
+  /// Home Assistant showed an item: the list, or one opened from it,
+  /// closes; a pop-up stays, as it's waiting to be seen.
+  void close_list();
   /// A timed pop-up is showing: it keeps the display from resting.
   bool holds_display() const;
 

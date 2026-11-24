@@ -10,7 +10,8 @@ end-to-end tests use it, and it is handy by hand against the simulator:
 `pair` asks for the code the panel shows and saves the key to a file
 (nesto.key by default); `connect` uses that key, synchronises, and prints what
 the panel sends until interrupted; `demo` serves a made-up room, carrying out
-the panel's intents the way Home Assistant would, so the screens can be tried.
+the panel's intents the way Home Assistant would, so the screens can be tried
+(`--wake KEY` picks the item the panel wakes on, `--show KEY` shows one).
 `ota PROGRAM VERSION` sends a signed program as a firmware update; `reboot`
 reboots the panel.
 """
@@ -207,9 +208,11 @@ class NestoClient:
         items: list[dict] | None = None,
         states: dict[str, dict] | None = None,
         config: dict | None = None,
+        wake: str | None = None,
     ) -> None:
         """Sends the four synchronisation messages (section 8) and waits for ready.
-        `config` is the body of the config message (section 12)."""
+        `config` is the body of the config message (section 12); `wake`, the
+        item the panel wakes on (section 9)."""
         now = datetime.now().astimezone()
         offset = now.utcoffset() or timedelta()
         await self.send(
@@ -220,7 +223,10 @@ class NestoClient:
             }
         )
         await self.send({"t": "config", **(config or {})})
-        await self.send({"t": "layout", "rev": 1, "title": title, "items": items or []})
+        layout = {"t": "layout", "rev": 1, "title": title, "items": items or []}
+        if wake:
+            layout["wake"] = wake
+        await self.send(layout)
         await self.send({"t": "states", "full": True, "items": states or {}})
         await self.wait_for("ready")
 
@@ -332,6 +338,7 @@ class DemoRoom:
         self.intents: list[dict] = []
         self.fail_actions: set[str] = set()  # actions to answer with an error, for tests
         self.config: dict | None = None  # the panel's settings (section 12)
+        self.wake: str | None = None  # the item the panel wakes on (section 9)
         self.display_states: list[dict] = []  # what the panel reported (section 13)
         self.sensors: list[dict] = []  # the base's readings (section 17)
         self.inputs: list[dict] = []  # press gestures (section 17)
@@ -412,7 +419,7 @@ class DemoRoom:
 
     async def serve(self, client: NestoClient, title: str = DEMO_TITLE) -> None:
         """Synchronises the room, then answers intents until the connection ends."""
-        await client.synchronise(title, DEMO_ITEMS, self.states, self.config)
+        await client.synchronise(title, DEMO_ITEMS, self.states, self.config, self.wake)
         # The versions Technical info shows (PROTOCOL.md section 18).
         await client.send(
             {"t": "ha_info", "ha_version": DEMO_HA_VERSION, "integration_version": DEMO_INTEGRATION}
@@ -634,6 +641,12 @@ async def _demo(args: argparse.Namespace) -> None:
         if args.icon:
             notice["icon"] = args.icon
         room.notices = [(args.notify_after, notice)]
+    room.wake = args.wake
+    if args.show:
+        if not client.hello.get("caps", {}).get("show"):
+            sys.exit("It can't show an item: Nesto 0.2.1 and older can't")
+        # Sent like a notification, after so many seconds.
+        room.notices.append((args.show_after, {"t": "show", "key": args.show, "open": args.open}))
     print(f"Serving the demo room '{DEMO_TITLE}' to panel {client.hello['panel_id']}")
     try:
         await room.serve(client)
@@ -692,6 +705,17 @@ def main() -> None:
         "--no-notification-sound",
         action="store_true",
         help="notifications don't beep, except critical ones",
+    )
+    demo.add_argument("--wake", metavar="KEY", help="the item the panel wakes on, such as c1")
+    show = demo.add_argument_group("an item to show, once while serving the room")
+    show.add_argument("--show", metavar="KEY", help="the item, such as l1")
+    show.add_argument("--open", action="store_true", help="open its controls too")
+    show.add_argument(
+        "--show-after",
+        type=float,
+        default=5,
+        metavar="SECONDS",
+        help="when to show it (default: 5)",
     )
     notify = demo.add_argument_group("a notification, sent once while serving the room")
     notify.add_argument("--notify", metavar="MESSAGE", help="its message")

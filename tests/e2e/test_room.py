@@ -19,12 +19,18 @@ from test_panel import pair
 SETTLE_MS = 4000
 
 
-def run(tmp_path: Path, steps: str, seconds: float, fail: set[str] | None = None):
-    """Runs `steps` on a fresh panel serving the demo room; returns the intents
-    and the panel's log."""
+def run(
+    tmp_path: Path,
+    steps: str,
+    seconds: float,
+    fail: set[str] | None = None,
+    room: DemoRoom | None = None,
+):
+    """Runs `steps` on a fresh panel serving the demo room, or `room`; returns
+    the intents and the panel's log."""
     panel = Panel(tmp_path / "state", ["--no-mdns", "--script", f"w{SETTLE_MS} {steps}"])
     panel.start()
-    room = DemoRoom()
+    room = room or DemoRoom()
     room.fail_actions = fail or set()
 
     async def session() -> None:
@@ -90,6 +96,33 @@ def test_a_media_player_turns_up_and_plays(tmp_path: Path) -> None:
         ("m1", "set_volume", {"volume": 35}),
         ("m1", "play", {}),
     ]
+
+
+def test_home_assistant_shows_an_item_open(tmp_path: Path) -> None:
+    # Shown open while the panel is on the first light: one click turns the
+    # speaker up. A key that isn't in the layout is refused.
+    room = DemoRoom()
+    room.notices = [
+        (0.5, {"t": "show", "key": "zz"}),
+        (0.5, {"t": "show", "key": "m1", "open": True}),
+    ]
+    intents, log = run(tmp_path, "w2500 r+1 w800", seconds=8, room=room)
+    assert actions(intents) == [("m1", "set_volume", {"volume": 35})]
+    assert [r["ok"] for r in room.notify_results] == [False, True]
+    assert room.notify_results[0]["error"]["code"] == "unknown_key"
+    assert any("Home Assistant shows m1, open" in line for line in log)
+
+
+def test_the_panel_wakes_on_the_wake_item(tmp_path: Path) -> None:
+    # Rested and woken by Home Assistant: on the radiator, which a press opens.
+    room = DemoRoom()
+    room.wake = "c1"
+    room.notices = [
+        (0.5, {"t": "display", "state": "standby"}),
+        (1.0, {"t": "display", "state": "active"}),
+    ]
+    intents, _ = run(tmp_path, "w2500 p r+1 w2000", seconds=9, room=room)
+    assert actions(intents) == [("c1", "set_target", {"value": 21.5})]
 
 
 def test_a_long_press_on_home_toggles_a_light(tmp_path: Path) -> None:

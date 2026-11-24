@@ -180,9 +180,15 @@ class Controller {
   /// How many notifications are kept, and how many unread: with any, the
   /// home screen starts with a Notifications entry.
   void set_notifications(int count, int unread);
-  /// The display woke from rest: back to the top of the home screen, so the
-  /// Notifications entry, when there is one, is what shows first.
+  /// The display woke from rest: back to the home screen, on the
+  /// Notifications entry while any are unread, else on the layout's `wake`
+  /// item, else at the top.
   void go_home();
+  /// Home Assistant's `show` (PROTOCOL.md section 13): the home screen with
+  /// this item selected and, with `open`, its controls open, if pressing it
+  /// would open them. False, changing nothing, when no item has the key.
+  bool show_item(const std::string& key, bool open);
+  bool has_item(const std::string& key) const { return room_.find(key) != nullptr; }
   bool apply_layout(const Json& message, std::string& error);
   void apply_states(const Json& message);
   /// Home Assistant couldn't carry out an intent: show its state again.
@@ -241,6 +247,8 @@ class Controller {
   void ask_lock(const Item& item, bool open);
   void lock(const Item& item, Millis now);
   int home_count() const;
+  /// Where an item is on the home screen, or -1 if no item has the key.
+  int home_index(const std::string& key) const;
   /// 1 while the home screen starts with the Notifications entry, else 0.
   int notices_entry() const { return notification_count_ > 0 ? 1 : 0; }
   const Item* open_item() const;

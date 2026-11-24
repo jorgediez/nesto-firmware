@@ -163,6 +163,7 @@ The direction of each message is marked **H→P** (HA to panel) or **P→H**
        "image_formats": ["jpeg", "png"],
        "ota": false,
        "reboot": true,
+       "show": true,
        "kinds": ["light", "switch", "scene", "climate", "cover", "sensor", "fan", "lock",
                  "media_player"]
      }
@@ -175,7 +176,7 @@ The direction of each message is marked **H→P** (HA to panel) or **P→H**
    | `paired` | The panel holds a pairing key. |
    | `pairing_open` | The panel will accept `pair_begin` (section 6.1). |
    | `nonce` | 16 random bytes, base64, fresh for every connection. |
-   | `caps` | What this panel can do. `sensors` lists only sensors that are actually working, so a panel off its base reports none. The Nest Gen 2 lists the base's sensors whenever it talks to its base, even before the base has answered; until it does, `sensors` messages leave those readings out (section 17). `ota`: the panel takes firmware updates (section 19). `reboot`: it reboots when asked (section 18); firmware 0.2.0 and older leave it out. `kinds`: the item kinds the panel draws (section 9.1); HA sends only those, and falls back for the rest as appendix A says. Firmware 0.2.1 and older leave it out: they draw the first six kinds. |
+   | `caps` | What this panel can do. `sensors` lists only sensors that are actually working, so a panel off its base reports none. The Nest Gen 2 lists the base's sensors whenever it talks to its base, even before the base has answered; until it does, `sensors` messages leave those readings out (section 17). `ota`: the panel takes firmware updates (section 19). `reboot`: it reboots when asked (section 18); firmware 0.2.0 and older leave it out. `show`: it takes `show` (section 13); firmware 0.2.1 and older leave it out. `kinds`: the item kinds the panel draws (section 9.1); HA sends only those, and falls back for the rest as appendix A says. Firmware 0.2.1 and older leave it out: they draw the first six kinds. |
    | `insecure` | Present and true only on development builds (section 7.4). |
 
 3. HA checks `proto` (section 22). Then:
@@ -401,7 +402,8 @@ change.
     {"key": "s1", "kind": "scene", "name": "Film night", "icon": "scene"},
     {"key": "w1", "kind": "switch", "name": "Fan", "icon": "fan"},
     {"key": "t1", "kind": "sensor", "name": "CO₂", "icon": "sensor", "features": {"unit": "ppm"}}
-  ]
+  ],
+  "wake": "c1"
 }
 ```
 
@@ -410,6 +412,7 @@ change.
 | `rev` | Increases with every layout HA sends for this panel. States always refer to the latest layout. |
 | `title` | Shown on the home screen: the area name in room mode, the config entry's title in manual mode. |
 | `items` | In display order. HA decides the order. |
+| `wake` | The key of the item the panel selects when it wakes (section 13). Optional: missing, null, or no item's key means the top of the list. Firmware 0.2.1 and older ignore it. |
 | `key` | Opaque, 1–8 ASCII characters, unique in the layout. HA maps keys to entity IDs; the panel never sees entity IDs. |
 | `kind` | One of the kinds below. The panel MUST skip items with a kind it doesn't know. |
 | `name` | Display name, UTF-8. |
@@ -598,9 +601,36 @@ Until a panel has a standby screen to show, its `standby` is dark: brightness
 16) reports `standby` at `standby.brightness` with cause `"ha"` once the
 first `time` message arrives. Motion is the base's proximity sensor, on the
 thermostat; a press wakes the panel once it's recognised as a single press or
-a hold, so a double press can stay a trigger for HA. Woken from `standby` or
-`off`, the panel shows the top of its home screen, which is the Notifications
-entry while there are any (section 14), whatever screen it rested on.
+a hold, so a double press can stay a trigger for HA.
+
+Woken from `standby` or `off`, whatever screen it rested on, the panel shows
+its home screen with one entry selected:
+
+- the Notifications entry while any notification is unread (section 14);
+- else the layout's `wake` item (section 9);
+- else the top, which is the Notifications entry while there are any kept,
+  else the first item.
+
+Firmware 0.2.1 and older always show the top.
+
+**H→P `show`** (request) shows an item: it wakes the display, or keeps it
+awake for another `timeout_s`, and selects the item on the home screen,
+closing the panel's menu, a question or the notification list. A
+notification popped up stays in front until it's answered or times out.
+
+```json
+{"t": "show", "id": 31, "key": "l1", "open": true}
+```
+
+| Field | Meaning |
+|---|---|
+| `key` | The item. `unknown_key` if it isn't in the layout. |
+| `open` | Optional, default false: open the item's controls, as a press on it would. Switches, scenes and sensors, which a press doesn't open, are only selected. |
+
+The panel answers once the item is on screen. A panel whose firmware is being
+updated or that is restarting answers `bad_request`. Only panels with
+`caps.show` (firmware 0.3.0 and later) take it; older ones answer
+`unknown_type`.
 
 ## 14. Notifications
 

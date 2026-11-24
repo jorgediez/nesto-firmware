@@ -88,6 +88,13 @@ std::optional<Layout> parse_layout(const Json& message, std::string& error) {
   }
   layout.rev = rev->get<long long>();
   layout.title = text(message, "title").substr(0, kMaxName);
+  if (const auto wake = message.find("wake"); wake != message.end() && !wake->is_null()) {
+    if (!wake->is_string()) {
+      error = "`wake` must be an item's key";
+      return std::nullopt;
+    }
+    layout.wake = wake->get<std::string>();  // one that's no item is ignored
+  }
 
   const auto items = message.find("items");
   if (items == message.end() || !items->is_array()) {

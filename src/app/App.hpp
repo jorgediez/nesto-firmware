@@ -147,6 +147,8 @@ class App : private protocol::SessionEvents {
   /// Home Assistant asked for a reboot, and its answer is on the way.
   bool rebooting() const { return reboot_at_ != 0; }
   /// Home Assistant's reboot request (PROTOCOL.md section 18).
+  /// `show` (PROTOCOL.md section 13): wakes the display on an item.
+  void handle_show(protocol::PanelSession& session, const protocol::Message& m);
   void handle_reboot(protocol::PanelSession& session, const protocol::Message& m);
 
   // protocol::SessionEvents

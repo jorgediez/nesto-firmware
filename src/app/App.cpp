@@ -207,6 +207,7 @@ bool App::init() {
                 {"image_formats", protocol::Json::array()},
                 {"ota", ota_ != nullptr},
                 {"reboot", true},
+                {"show", true},
                 {"kinds", room::kind_names()}};
 
   pairing_ = std::make_unique<protocol::PairingState>(
@@ -722,6 +723,35 @@ void App::handle_reboot(protocol::PanelSession& session, const protocol::Message
   reboot_at_ = hal_.now() + 1000;
 }
 
+void App::handle_show(protocol::PanelSession& session, const protocol::Message& m) {
+  const auto key = m.body.find("key");
+  const auto open = m.body.find("open");
+  if (key == m.body.end() || !key->is_string() || (open != m.body.end() && !open->is_boolean())) {
+    session.send(protocol::result_error(*m.id, protocol::ErrorCode::BadRequest,
+                                        "`key` must be an item's key, and `open` a bool"));
+    return;
+  }
+  if (updating() || rebooting()) {
+    session.send(protocol::result_error(*m.id, protocol::ErrorCode::BadRequest,
+                                        rebooting() ? "restarting" : "an update is in progress"));
+    return;
+  }
+  const std::string& k = key->get_ref<const std::string&>();
+  if (!controller_.has_item(k)) {
+    session.send(protocol::result_error(*m.id, protocol::ErrorCode::UnknownKey, "no item " + k));
+    return;
+  }
+  const bool opened = open != m.body.end() && open->get<bool>();
+  log::info("Home Assistant shows %s%s", k.c_str(), opened ? ", open" : "");
+  // Awake, or kept awake for another timeout; waking goes home first.
+  display_power_.set(room::DisplayState::Active, hal_.now());
+  apply_display();
+  notifications_.close_list();
+  if (!wifi_.joining()) wifi_.close();
+  controller_.show_item(k, opened);
+  session.send(protocol::result_ok(*m.id));
+}
+
 void App::handle_ota(protocol::PanelSession& session, const protocol::Message& m) {
   if (rebooting()) {
     session.send(protocol::result_error(*m.id, protocol::ErrorCode::BadRequest, "restarting"));
@@ -847,6 +877,10 @@ bool App::on_message(protocol::PanelSession& session, const protocol::Message& m
   }
   if (m.type == "reboot" && m.is_request()) {
     handle_reboot(session, m);
+    return true;
+  }
+  if (m.type == "show" && m.is_request()) {
+    handle_show(session, m);
     return true;
   }
   if (m.type == "layout") {
