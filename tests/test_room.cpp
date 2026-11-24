@@ -59,7 +59,7 @@ TEST_CASE("the example layout parses with every feature") {
 
 TEST_CASE("items of unknown kinds are skipped, as section 9 says") {
   Json m = example_layout();
-  m["items"].push_back({{"key", "m1"}, {"kind", "media_player"}, {"name", "TV"}});
+  m["items"].push_back({{"key", "v9"}, {"kind", "vacuum"}, {"name", "Robot"}});
   std::string error;
   const auto layout = parse_layout(m, error);
   REQUIRE(layout);

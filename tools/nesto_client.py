@@ -279,6 +279,19 @@ DEMO_ITEMS = [
         },
     },
     {"key": "k1", "kind": "lock", "name": "Front door", "features": {"open": True}},
+    {
+        "key": "m1",
+        "kind": "media_player",
+        "name": "Speaker",
+        "features": {
+            "volume": True,
+            "mute": True,
+            "play_pause": True,
+            "tracks": True,
+            "sources": ["Radio", "Turntable"],
+            "power": True,
+        },
+    },
     {"key": "t1", "kind": "sensor", "name": "CO2", "features": {"unit": "ppm"}},
 ]
 
@@ -291,12 +304,23 @@ DEMO_STATES = {
     "w1": {"on": False},
     "f1": {"on": False, "percentage": 0, "oscillating": False, "direction": "forward"},
     "k1": {"state": "locked"},
+    "m1": {
+        "state": "paused",
+        "volume": 30,
+        "muted": False,
+        "title": "Morning tide over the quiet harbour",
+        "artist": "The Lighthouse Keepers",
+        "source": "Radio",
+    },
     "t1": {"value": "612"},
 }
 
 
 # The demo's locks, and the state each of their actions leaves.
 LOCKS = {"k1": {"lock": "locked", "unlock": "unlocked", "open": "open"}}
+# The demo's media players, and the titles their tracks step through.
+MEDIA = {"m1": ["Morning tide over the quiet harbour", "Second song", "Third song"]}
+MEDIA_STATES = {"play": "playing", "pause": "paused", "turn_on": "idle", "turn_off": "off"}
 
 
 class DemoRoom:
@@ -328,6 +352,8 @@ class DemoRoom:
         lock = key in LOCKS
         if lock and action in LOCKS[key]:
             s["state"] = LOCKS[key][action]
+        elif key in MEDIA:
+            self.apply_media(key, action, args)
         elif action == "turn_on" and fan:
             s["on"] = True
             if not s.get("percentage"):
@@ -369,6 +395,20 @@ class DemoRoom:
         elif action == "set_tilt":
             s["tilt"] = args["tilt"]
         return {k: v for k, v in s.items() if before.get(k) != v}
+
+    def apply_media(self, key: str, action: str, args: dict) -> None:
+        s, titles = self.states[key], MEDIA[key]
+        if action in MEDIA_STATES:
+            s["state"] = MEDIA_STATES[action]
+        elif action in ("next", "previous"):
+            at = titles.index(s["title"]) if s["title"] in titles else 0
+            s["title"] = titles[(at + (1 if action == "next" else -1)) % len(titles)]
+        elif action == "set_volume":
+            s["volume"] = args["volume"]
+        elif action == "mute":
+            s["muted"] = args["muted"]
+        elif action == "select_source":
+            s["source"] = args["source"]
 
     async def serve(self, client: NestoClient, title: str = DEMO_TITLE) -> None:
         """Synchronises the room, then answers intents until the connection ends."""

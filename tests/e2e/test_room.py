@@ -83,6 +83,15 @@ def test_a_lock_unlocks_only_once_confirmed(tmp_path: Path) -> None:
     assert actions(intents) == [("k1", "unlock", {}), ("k1", "lock", {})]
 
 
+def test_a_media_player_turns_up_and_plays(tmp_path: Path) -> None:
+    # Select the speaker (paused, at 30%), open it, one click up, then play.
+    intents, _ = run(tmp_path, "r+8 p r+1 w800 p r+1 w500", seconds=9)
+    assert actions(intents) == [
+        ("m1", "set_volume", {"volume": 35}),
+        ("m1", "play", {}),
+    ]
+
+
 def test_a_long_press_on_home_toggles_a_light(tmp_path: Path) -> None:
     intents, _ = run(tmp_path, "h w500", seconds=7)
     assert actions(intents) == [("l1", "turn_off", {})]

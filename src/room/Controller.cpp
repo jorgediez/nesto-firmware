@@ -55,6 +55,7 @@ bool is_smooth(const Item& item, Control control) {
     case Control::Hue:
     case Control::Position:
     case Control::Tilt:
+    case Control::Volume:
       return true;
     case Control::Speed:
       return item.fan.speed_step <= kSmoothSpeedStep;
@@ -78,6 +79,15 @@ int snap_speed(double percentage, const FanFeatures& fan) {
 bool unlocked(const ItemState& s) {
   return s.state == "unlocked" || s.state == "unlocking" || s.state == "open" ||
          s.state == "opening";
+}
+
+/// A media player that's on: anything but off, standby or unknown.
+bool media_on(const ItemState& s) {
+  return !s.state.empty() && s.state != "off" && s.state != "standby";
+}
+
+bool media_playing(const ItemState& s) {
+  return s.state == "playing" || s.state == "buffering";
 }
 
 /// Time since `since`, never negative (see PanelSession).
@@ -122,6 +132,11 @@ const char* label(Control control) {
     case Control::Direction: return "Direction";
     case Control::Lock: return "Lock";
     case Control::Open: return "Open";
+    case Control::Volume: return "Volume";
+    case Control::Playback: return "Playback";
+    case Control::Track: return "Track";
+    case Control::Source: return "Source";
+    case Control::Mute: return "Mute";
   }
   return "";
 }
@@ -170,6 +185,16 @@ std::vector<Control> controls_for(const Item& item) {
       out.push_back(Control::Lock);
       if (item.lock.open) out.push_back(Control::Open);
       break;
+    case Kind::MediaPlayer: {
+      const auto& m = item.media;
+      if (m.volume) out.push_back(Control::Volume);
+      if (m.play_pause) out.push_back(Control::Playback);
+      if (m.tracks) out.push_back(Control::Track);
+      if (!m.sources.empty()) out.push_back(Control::Source);
+      if (m.mute) out.push_back(Control::Mute);
+      if (m.power) out.push_back(Control::Power);
+      break;
+    }
     case Kind::Scene:
     case Kind::Sensor:
       break;
@@ -214,6 +239,12 @@ std::string summary(const Item& item, const ItemState& s) {
       return "On";
     case Kind::Lock:
       return s.state.empty() ? "Unknown" : capitalised(s.state);
+    case Kind::MediaPlayer:
+      if (s.state.empty()) return "Unknown";
+      if ((s.state == "playing" || s.state == "paused") && s.title) {
+        return capitalised(s.state) + " - " + *s.title;
+      }
+      return capitalised(s.state);
   }
   return "";
 }
@@ -240,6 +271,9 @@ Tone tone_for(const Item& item, const ItemState& s) {
     case Kind::Lock:
       if (s.state == "jammed") return Tone::Alert;
       return unlocked(s) ? Tone::Active : Tone::Off;
+    case Kind::MediaPlayer:
+      if (media_playing(s)) return Tone::Active;
+      return media_on(s) ? Tone::Neutral : Tone::Off;
     case Kind::Scene:
     case Kind::Sensor:
       return Tone::Neutral;
@@ -257,6 +291,7 @@ const char* default_icon(Kind kind) {
     case Kind::Sensor: return "sensor";
     case Kind::Fan: return "fan";
     case Kind::Lock: return "lock";
+    case Kind::MediaPlayer: return "speaker";
   }
   return "unknown";
 }
@@ -533,6 +568,7 @@ void Controller::press(Millis now) {
       case Kind::Cover:
       case Kind::Fan:
       case Kind::Lock:
+      case Kind::MediaPlayer:
         if (controls_for(*item).empty()) return;
         screen_ = RoomView::Screen::Item;
         open_key_ = item->key;
@@ -593,6 +629,14 @@ void Controller::long_press(Millis now) {
     toggle(*item, now);
   }
   if (item->kind == Kind::Scene) act_now(*item, "activate", Json::object(), now);
+  if (item->kind == Kind::MediaPlayer) {
+    // Play or pause, or else switch it on or off.
+    if (item->media.play_pause) {
+      adjust(*item, Control::Playback, media_playing(shown(item->key)) ? -1 : 1, now);
+    } else if (item->media.power) {
+      adjust(*item, Control::Power, media_on(shown(item->key)) ? -1 : 1, now);
+    }
+  }
   if (item->kind == Kind::Lock) {
     // Locking needs no question; unlocking does.
     if (unlocked(shown(item->key))) {
@@ -674,8 +718,13 @@ void Controller::adjust(const Item& item, Control control, int steps, Millis now
   switch (control) {
     case Control::Power: {
       const bool on = steps > 0;
-      if (s.on == on) return;
-      s.on = on;
+      if (item.kind == Kind::MediaPlayer) {
+        if (media_on(s) == on) return;
+        s.state = on ? "on" : "off";
+      } else {
+        if (s.on == on) return;
+        s.on = on;
+      }
       show(item.key, s, now);
       act_now(item, on ? "turn_on" : "turn_off", Json::object(), now);
       return;
@@ -831,6 +880,45 @@ void Controller::adjust(const Item& item, Control control, int steps, Millis now
     case Control::Open:
       if (steps > 0 && s.state != "open" && s.state != "opening") ask_lock(item, true);
       return;
+    case Control::Volume: {
+      const int current = s.volume.value_or(0);
+      const int next = std::clamp(current + steps, 0, 100);
+      if (next == current && s.volume) return;
+      s.volume = next;
+      show(item.key, s, now);
+      act_later(item, "volume", "set_volume", Json{{"volume", next}}, false, now);
+      return;
+    }
+    case Control::Playback: {
+      const bool play = steps > 0;
+      if (play == media_playing(s)) return;
+      s.state = play ? "playing" : "paused";
+      show(item.key, s, now);
+      act_now(item, play ? "play" : "pause", Json::object(), now);
+      return;
+    }
+    case Control::Track:
+      // One track per click; the title follows from Home Assistant.
+      for (int i = 0; i < std::abs(steps); ++i) {
+        act_now(item, steps > 0 ? "next" : "previous", Json::object(), now);
+      }
+      return;
+    case Control::Source: {
+      const auto next = step_choice(item.media.sources, s.source.value_or(""), steps);
+      if (!next) return;
+      s.source = *next;
+      show(item.key, s, now);
+      act_later(item, "source", "select_source", Json{{"source", *next}}, true, now);
+      return;
+    }
+    case Control::Mute: {
+      const bool muted = steps > 0;
+      if (s.muted == muted) return;
+      s.muted = muted;
+      show(item.key, s, now);
+      act_now(item, "mute", Json{{"muted", muted}}, now);
+      return;
+    }
   }
 }
 
@@ -919,10 +1007,12 @@ RoomView Controller::view() const {
   const auto& c = item->climate;
   v.control = label(control);
   switch (control) {
-    case Control::Power:
-      v.value = s.on ? "On" : "Off";
-      v.fraction = s.on ? 1 : 0;
+    case Control::Power: {
+      const bool on = item->kind == Kind::MediaPlayer ? media_on(s) : s.on;
+      v.value = on ? "On" : "Off";
+      v.fraction = on ? 1 : 0;
       break;
+    }
     case Control::Brightness:
       v.value = s.on ? std::to_string(s.brightness) + "%" : "Off";
       v.fraction = s.on ? s.brightness / 100.0 : 0;
@@ -999,6 +1089,24 @@ RoomView Controller::view() const {
       v.fraction = open ? 1 : 0;
       break;
     }
+    case Control::Volume:
+      v.value = s.volume ? std::to_string(*s.volume) + "%" : "-";
+      v.fraction = s.volume ? *s.volume / 100.0 : -1;
+      break;
+    case Control::Playback:
+      v.value = s.state.empty() ? "-" : capitalised(s.state);
+      v.fraction = media_playing(s) ? 1 : 0;
+      break;
+    case Control::Track:
+      v.value = s.title.value_or("-");
+      break;
+    case Control::Source:
+      v.value = s.source.value_or("-");
+      break;
+    case Control::Mute:
+      v.value = s.muted ? "On" : "Off";
+      v.fraction = s.muted ? 1 : 0;
+      break;
   }
   return v;
 }

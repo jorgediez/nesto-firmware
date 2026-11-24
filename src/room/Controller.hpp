@@ -34,6 +34,11 @@ enum class Control {
   Direction,
   Lock,
   Open,
+  Volume,
+  Playback,
+  Track,
+  Source,
+  Mute,
 };
 
 /// The controls an item's screen offers, in the order a press steps through.
@@ -49,7 +54,7 @@ enum class Tone {
   Light,    // a light that's on
   Heat,     // climate heating, or set to heat
   Cool,     // climate cooling, or set to cool
-  Active,   // a switch or fan that's on, an open cover, an unlocked lock
+  Active,   // a switch or fan that's on, an open cover, an unlocked lock, playing
   Alert,    // a jammed lock
 };
 
@@ -142,9 +147,11 @@ struct SettingsActions {
 /// press do on it, and the intents that result, sent at the pace PROTOCOL.md
 /// section 23 sets:
 ///
-/// - lights and covers follow the ring live, at most one intent per 300 ms
-///   while it turns and the last value within 300 ms of it stopping;
-/// - climate sends once, 1.5 seconds after the ring stops;
+/// - lights, covers, fans' speed and volume follow the ring live, at most one
+///   intent per 300 ms while it turns and the last value within 300 ms of it
+///   stopping;
+/// - climate and a media player's source send once, 1.5 seconds after the
+///   ring stops;
 /// - switching on or off, scenes, opening or closing, and locking are sent
 ///   at once; unlocking or opening a lock only once a press confirms it.
 ///

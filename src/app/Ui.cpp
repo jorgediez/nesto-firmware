@@ -334,7 +334,7 @@ void Ui::render(const room::RoomView& view) {
   lv_obj_set_hidden(value_, !item);
   if (item) {
     set_text(control_, view.control);
-    set_text(value_, view.value.empty() ? "-" : view.value);
+    set_value(view.value.empty() ? "-" : view.value);
     const bool live = view.available && !view.offline && view.tone != Tone::Off;
     lv_obj_set_style_text_color(value_, live ? kText : kMuted, 0);
   }
@@ -556,6 +556,21 @@ void Ui::update_footer() {
       break;
   }
   set_text(footer_, text);
+}
+
+void Ui::set_value(const std::string& text) {
+  // Wrapped in the huge font first, to see if it fits on a line; a value
+  // that doesn't, like a track's title, takes up to two lines of the large one.
+  lv_obj_set_style_text_font(value_, fonts_.huge, 0);
+  lv_label_set_long_mode(value_, LV_LABEL_LONG_MODE_WRAP);
+  lv_obj_set_height(value_, LV_SIZE_CONTENT);
+  set_text(value_, text);
+  lv_obj_update_layout(value_);
+  const bool fits = lv_obj_get_height(value_) <= lv_font_get_line_height(fonts_.huge);
+  const lv_font_t* font = fits ? fonts_.huge : fonts_.large;
+  lv_obj_set_style_text_font(value_, font, 0);
+  lv_label_set_long_mode(value_, LV_LABEL_LONG_MODE_DOTS);
+  lv_obj_set_height(value_, lv_font_get_line_height(font) * (fits ? 1 : 2));
 }
 
 void Ui::set_status(const std::string& text) {

@@ -163,7 +163,8 @@ The direction of each message is marked **H→P** (HA to panel) or **P→H**
        "image_formats": ["jpeg", "png"],
        "ota": false,
        "reboot": true,
-       "kinds": ["light", "switch", "scene", "climate", "cover", "sensor", "fan", "lock"]
+       "kinds": ["light", "switch", "scene", "climate", "cover", "sensor", "fan", "lock",
+                 "media_player"]
      }
    }
    ```
@@ -427,10 +428,10 @@ change.
 | `sensor` | `unit`: string | Read-only. |
 | `fan` | `speed`: bool · `speed_step`: percent between speeds (`33.33` for three; default 1) · `presets`: list · `oscillate`: bool · `direction`: bool | Every fan can turn on and off. Since firmware 0.3.0. |
 | `lock` | `open`: bool (it can open the latch, not only unlock) | Every lock can lock and unlock. The panel asks before unlocking or opening. Since firmware 0.3.0. |
+| `media_player` | `volume`, `mute`, `play_pause`, `tracks` (next and previous), `power` (on and off): bools · `sources`: list | Since firmware 0.3.0. |
 
-Kinds planned for later versions: `media_player`. A new kind needs no
-protocol change: old panels skip it, and `caps.kinds` tells HA which kinds a
-panel draws.
+A new kind needs no protocol change: old panels skip it, and `caps.kinds`
+tells HA which kinds a panel draws.
 
 ## 10. State
 
@@ -466,6 +467,7 @@ Fields per kind:
 | `sensor` | `value`: string, already formatted by HA |
 | `fan` | `on`: bool · `percentage`: 0–100 or null · `preset`: string or null · `oscillating`: bool · `direction`: `"forward"`, `"reverse"` or null |
 | `lock` | `state`: `"locked"`, `"unlocked"`, `"locking"`, `"unlocking"`, `"jammed"`, `"open"`, `"opening"`, or null when unknown |
+| `media_player` | `state`: `"off"`, `"on"`, `"idle"`, `"playing"`, `"paused"`, `"standby"`, `"buffering"`, or null when unknown · `volume`: 0–100 or null · `muted`: bool · `title`, `artist`, `source`: string or null |
 
 Brightness is a percentage on the wire because that's what the panel shows; HA
 converts to and from Home Assistant's 0–255 scale.
@@ -504,6 +506,10 @@ restores the item's last known state.
 | | `oscillate` | `oscillating`: bool |
 | | `set_direction` | `direction`: `"forward"` or `"reverse"` |
 | `lock` | `lock`, `unlock`, `open` | none |
+| `media_player` | `play`, `pause`, `next`, `previous`, `turn_on`, `turn_off` | none |
+| | `set_volume` | `volume` 0–100 |
+| | `mute` | `muted`: bool |
+| | `select_source` | `source` |
 
 Errors specific to intents: `unknown_key` (stale layout), `unsupported` (the
 item lacks the feature), `unavailable`, `service_failed` (HA's call raised).
@@ -909,11 +915,11 @@ experience depend on them.
 
 - **Optimistic display.** When the user turns the ring, the panel changes the
   value on screen at once and sends intents as follows:
-  - lights, covers and fans' speed: at most one intent every 300 ms while
-    turning, and a final one 300 ms after the ring stops, so lights follow the
-    ring live;
-  - climate: one intent 1.5 seconds after the ring stops, so a thermostat isn't
-    sent every half-degree step;
+  - lights, covers, fans' speed and media players' volume: at most one intent
+    every 300 ms while turning, and a final one 300 ms after the ring stops,
+    so lights follow the ring live;
+  - climate and media players' source: one intent 1.5 seconds after the ring
+    stops, so a thermostat isn't sent every half-degree step;
   - locks: locking at once; unlocking and opening only after the user confirms
     on the panel, with a press.
 - **States win.** A `states` message for an item overrides the optimistic value,
@@ -957,6 +963,7 @@ user picked.
 | `scene`, `script` | `scene` | none |
 | `climate` | `climate` | `ClimateEntityFeature`: `TARGET_TEMPERATURE` gives `single`, `TARGET_TEMPERATURE_RANGE` gives `range`; `hvac_modes`, `preset_modes`, `fan_modes`; `min_temp`, `max_temp`, `target_temperature_step` (default 0.5); unit from Home Assistant's unit system |
 | `cover` | `cover` | `CoverEntityFeature` `OPEN`, `CLOSE`, `STOP`, `SET_POSITION`, `SET_TILT_POSITION` |
+| `media_player` | `media_player` | `MediaPlayerEntityFeature`: `VOLUME_SET` (4) gives `volume`; `VOLUME_MUTE` (8) `mute`; `PLAY` (16384) and `PAUSE` (1), both, `play_pause`; `NEXT_TRACK` (32) and `PREVIOUS_TRACK` (16), both, `tracks`; `SELECT_SOURCE` (2048) `sources` from `source_list`; `TURN_ON` (128) and `TURN_OFF` (256), both, `power`. State from `volume_level` (as a percentage), `is_volume_muted`, `media_title`, `media_artist` and `source`. On a panel without `media_player` in `caps.kinds`, left out. |
 | `lock` | `lock` | `LockEntityFeature` `OPEN` gives `open`. A lock with a `code_format` is left out unless it has a default code in Home Assistant, which then fills it in; the panel never asks for a code. On a panel without `lock` in `caps.kinds`, left out. |
 | `sensor` (picked by the user) | `sensor` | unit from the entity |
 
@@ -964,8 +971,9 @@ user picked.
 from whatever colour mode the light uses.
 
 **Order.** Kind by kind: lights, climate, covers, locks, switches (fans
-among them), scenes and sensors; within a kind, the user's order. With the user's "All lights"
-option and two or more lights, a synthetic "all lights" item comes first.
+among them), media players, scenes and sensors; within a kind, the user's
+order. With the user's "All lights" option and two or more lights, a
+synthetic "all lights" item comes first.
 
 ## Appendix B: example session
 

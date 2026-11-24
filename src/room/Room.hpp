@@ -13,7 +13,7 @@ namespace nesto::room {
 using protocol::Json;
 
 /// Item kinds of PROTOCOL.md section 9.1.
-enum class Kind { Light, Switch, Scene, Climate, Cover, Sensor, Fan, Lock };
+enum class Kind { Light, Switch, Scene, Climate, Cover, Sensor, Fan, Lock, MediaPlayer };
 
 /// The names of every kind this panel draws, for hello's `caps.kinds`.
 std::vector<std::string> kind_names();
@@ -57,6 +57,15 @@ struct LockFeatures {
   bool open = false;  // it can open the latch, not only unlock
 };
 
+struct MediaFeatures {
+  bool volume = false;
+  bool mute = false;
+  bool play_pause = false;
+  bool tracks = false;  // next and previous
+  std::vector<std::string> sources;
+  bool power = false;
+};
+
 /// One thing on the panel (section 9). Only the features for its kind are set.
 struct Item {
   std::string key;
@@ -68,6 +77,7 @@ struct Item {
   CoverFeatures cover;
   FanFeatures fan;
   LockFeatures lock;
+  MediaFeatures media;
   std::string unit;  // sensors
 };
 
@@ -97,7 +107,8 @@ struct ItemState {
   std::optional<std::string> fan_mode;
   std::optional<double> current_humidity;
   // cover: open, closed, opening, closing; lock: locked, unlocked, locking,
-  // unlocking, jammed, open, opening
+  // unlocking, jammed, open, opening; media player: off, on, idle, playing,
+  // paused, standby, buffering
   std::string state;
   std::optional<int> position;
   std::optional<int> tilt;
@@ -105,6 +116,12 @@ struct ItemState {
   std::optional<int> percentage;
   bool oscillating = false;
   std::string direction;
+  // media player
+  std::optional<int> volume;
+  bool muted = false;
+  std::optional<std::string> title;
+  std::optional<std::string> artist;
+  std::optional<std::string> source;
   // sensor
   std::string value;
 };

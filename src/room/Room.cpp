@@ -10,7 +10,7 @@ namespace {
 const std::pair<const char*, Kind> kKinds[] = {
     {"light", Kind::Light},     {"switch", Kind::Switch}, {"scene", Kind::Scene},
     {"climate", Kind::Climate}, {"cover", Kind::Cover},   {"sensor", Kind::Sensor},
-    {"fan", Kind::Fan},         {"lock", Kind::Lock},
+    {"fan", Kind::Fan},         {"lock", Kind::Lock},     {"media_player", Kind::MediaPlayer},
 };
 
 std::optional<Kind> kind_from(const std::string& name) {
@@ -171,6 +171,16 @@ std::optional<Layout> parse_layout(const Json& message, std::string& error) {
       case Kind::Lock:
         item.lock.open = flag(features, "open");
         break;
+      case Kind::MediaPlayer: {
+        auto& m = item.media;
+        m.volume = flag(features, "volume");
+        m.mute = flag(features, "mute");
+        m.play_pause = flag(features, "play_pause");
+        m.tracks = flag(features, "tracks");
+        m.power = flag(features, "power");
+        if (!strings(features, "sources", m.sources, error)) return std::nullopt;
+        break;
+      }
       case Kind::Switch:
       case Kind::Scene:
         break;
@@ -217,6 +227,7 @@ void merge_state(ItemState& s, const Json& fields) {
   optional_field(fields, "current_humidity", s.current_humidity);
 
   string("state", s.state);
+  if (const auto it = fields.find("state"); it != fields.end() && it->is_null()) s.state.clear();
   optional_field(fields, "position", s.position);
   optional_field(fields, "tilt", s.tilt);
 
@@ -224,6 +235,13 @@ void merge_state(ItemState& s, const Json& fields) {
   if (s.percentage) s.percentage = std::clamp(*s.percentage, 0, 100);
   boolean("oscillating", s.oscillating);
   string("direction", s.direction);
+
+  optional_field(fields, "volume", s.volume);
+  if (s.volume) s.volume = std::clamp(*s.volume, 0, 100);
+  boolean("muted", s.muted);
+  optional_field(fields, "title", s.title);
+  optional_field(fields, "artist", s.artist);
+  optional_field(fields, "source", s.source);
 
   string("value", s.value);
 }
