@@ -81,6 +81,22 @@ bool unlocked(const ItemState& s) {
          s.state == "opening";
 }
 
+/// Whether pressing an item on the home screen opens its controls: switches
+/// switch and scenes run instead, and sensors only show.
+bool opens(const Item& item) {
+  switch (item.kind) {
+    case Kind::Light:
+    case Kind::Climate:
+    case Kind::Cover:
+    case Kind::Fan:
+    case Kind::Lock:
+    case Kind::MediaPlayer:
+      return !controls_for(item).empty();
+    default:
+      return false;
+  }
+}
+
 /// A media player that's on: anything but off, standby or unknown.
 bool media_on(const ItemState& s) {
   return !s.state.empty() && s.state != "off" && s.state != "standby";
@@ -330,6 +346,11 @@ void Controller::set_notifications(int count, int unread) {
 void Controller::go_home() {
   click_ticks_ = 0;
   selected_ = 0;
+  // Unread notifications first, so they're seen; then the item Home
+  // Assistant chose.
+  if (notification_unread_ == 0) {
+    if (const int at = home_index(room_.layout().wake); at >= 0) selected_ = at;
+  }
   // Settings and its questions close too; without a room there's only the
   // waiting screen.
   screen_ = room_.has_layout() ? RoomView::Screen::Home : RoomView::Screen::Empty;
@@ -395,6 +416,30 @@ const Item* Controller::selected_item() const {
   const int at = selected_ - notices_entry();
   if (at < 0 || at >= static_cast<int>(items.size())) return nullptr;  // Notifications or Settings
   return &items[static_cast<std::size_t>(at)];
+}
+
+int Controller::home_index(const std::string& key) const {
+  const auto& items = room_.layout().items;
+  for (std::size_t i = 0; i < items.size(); ++i) {
+    if (items[i].key == key) return notices_entry() + static_cast<int>(i);
+  }
+  return -1;
+}
+
+bool Controller::show_item(const std::string& key, bool open) {
+  const int at = home_index(key);
+  if (at < 0) return false;
+  click_ticks_ = 0;
+  selected_ = at;
+  screen_ = RoomView::Screen::Home;  // Settings and questions close
+  const Item& item = *room_.find(key);
+  if (open && opens(item)) {
+    screen_ = RoomView::Screen::Item;
+    open_key_ = key;
+    control_ = 0;
+  }
+  changed();
+  return true;
 }
 
 int Controller::home_count() const {
@@ -569,7 +614,7 @@ void Controller::press(Millis now) {
       case Kind::Fan:
       case Kind::Lock:
       case Kind::MediaPlayer:
-        if (controls_for(*item).empty()) return;
+        if (!opens(*item)) return;
         screen_ = RoomView::Screen::Item;
         open_key_ = item->key;
         control_ = 0;

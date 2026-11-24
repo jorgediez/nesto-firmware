@@ -369,6 +369,13 @@ void Notifications::display_woke(Millis now) {
   after_popup(now);
 }
 
+void Notifications::close_list() {
+  if (mode_ != Mode::List && mode_ != Mode::Open) return;
+  close_current();
+  back_to_list_ = false;
+  back_to_open_.clear();
+}
+
 bool Notifications::holds_display() const {
   if (mode_ != Mode::Popup) return false;
   const auto it = std::find_if(kept_.begin(), kept_.end(), [&](const Kept& k) { return k.n.nid == current_; });

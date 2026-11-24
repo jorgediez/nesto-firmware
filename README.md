@@ -82,10 +82,11 @@ answered.
 **Resting.** After 30 seconds without input (or what Home Assistant sets),
 the display fades to a standby clock, analog or digital, or turns off. The
 ring, a press or someone coming near wakes it, and the input that wakes it
-does nothing else. It wakes to the top of the home screen: the Notifications
-entry while there are any, else the first item. The light sensor scales the
-brightness down to a quarter in the dark, slowly, so a hand or a shadow
-doesn't dim it.
+does nothing else. It wakes to the home screen: on the Notifications entry
+while any are unread, else on the item Home Assistant chose, else at the
+top. Home Assistant can also show an item, waking the panel on it, open or
+not. The light sensor scales the brightness down to a quarter in the dark,
+slowly, so a hand or a shadow doesn't dim it.
 
 **Sound.** The beeper clicks when a turn of the ring changes the screen
 (nothing at either end of a list) and, if Home Assistant turns it on, on a
